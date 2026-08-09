@@ -3,6 +3,7 @@ import { z } from 'zod';
 import {
   canvasSchema,
   colorDimensionSchema,
+  elementThresholdsSchema,
   textDimensionSchema,
   topoEdgeSchema,
   topoFlowOptionsSchema,
@@ -24,6 +25,8 @@ export type ColorDimension = z.infer<typeof colorDimensionSchema>;
 export type TextDimension = z.infer<typeof textDimensionSchema>;
 export type ValueDimension = z.infer<typeof valueDimensionSchema>;
 export type TriggerBinding = z.infer<typeof triggerBindingSchema>;
+export type ElementThresholds = z.infer<typeof elementThresholdsSchema>;
+export type ElementThresholdStep = ElementThresholds['steps'][number];
 
 export type TopoNode = z.infer<typeof topoNodeSchema>;
 export type TopoEdge = z.infer<typeof topoEdgeSchema>;

@@ -1,17 +1,19 @@
 import { DataFrame, Field, GrafanaTheme2, ThresholdsMode, getActiveThreshold } from '@grafana/data';
 
-import { ColorDimension, TriggerBinding } from '../model/types';
+import { ColorDimension, ElementThresholds, TriggerBinding } from '../model/types';
 import { getLastNotNullValue } from './dimensions';
 import { Severity } from './problems';
+import { hasOwnThresholds, resolveOwnThreshold } from './thresholds';
 import { resolveTriggerState } from './triggerState';
 
 /**
  * Cadeia de precedencia de cor (Anexo A do briefing do Bloco 1).
  *
- *   0. trigger do Zabbix alarmando               -> estado
- *   1. threshold do pipeline nativo do Grafana   -> estado
- *   2. `color.fixed`                             -> identidade visual
- *   3. neutro do tema                            -> fallback
+ *   0.  trigger do Zabbix alarmando              -> estado
+ *   1a. threshold proprio do elemento            -> estado
+ *   1b. threshold do pipeline nativo do Grafana  -> estado
+ *   2.  `color.fixed`                            -> identidade visual
+ *   3.  neutro do tema                           -> fallback
  *
  * Nao existe quinto nivel, e **branco nao e fallback de nada**. Antes deste
  * helper o fallback era `getColorByName('text')`, que resolve para
@@ -23,6 +25,10 @@ import { resolveTriggerState } from './triggerState';
  * significaria um elemento vermelho por CPU e verde por trigger ao mesmo tempo —
  * o operador nao teria como saber qual esta lendo. Nada e perdido: as duas
  * configuracoes continuam no JSON e voltam a valer ao desligar a flag.
+ *
+ * Entre 1a e 1b vale a mesma logica de exclusao: o elemento que define regra
+ * propria nao consulta mais o field. Sem isso, a cor viria de dois lugares e
+ * descobrir de onde exigiria abrir o painel de opcoes do field.
  *
  * Helper unico de proposito: cada elemento decide apenas em QUAL superficie a
  * cor pousa (A.2), nunca como ela e escolhida. Duplicar a decisao por
@@ -60,17 +66,25 @@ export function accentColor(accent: ElementColor): string | undefined {
 }
 
 /**
- * `trigger` entra como parametro proprio, e nao dentro de `ColorDimension`,
- * porque nao e uma forma de escolher cor — e uma segunda fonte de estado, com
- * vida e persistencia independentes do acento. Opcional para que todo elemento
- * sem vinculo de trigger (e todo teste ja escrito) siga chamando igual.
+ * As fontes de estado entram num objeto, e nao dentro de `ColorDimension`, nem
+ * como parametros posicionais: nenhuma delas e uma forma de escolher cor — sao
+ * regras com vida e persistencia proprias, e a lista tende a crescer. Opcional
+ * para que todo elemento sem regra (e todo teste ja escrito) siga chamando com
+ * tres argumentos.
  */
+export interface ElementStateSources {
+  trigger?: TriggerBinding;
+  thresholds?: ElementThresholds;
+}
+
 export function resolveElementColor(
   dim: ColorDimension,
   frames: DataFrame[],
   theme: GrafanaTheme2,
-  trigger?: TriggerBinding
+  sources: ElementStateSources = {}
 ): ElementColor {
+  const { trigger, thresholds } = sources;
+
   const alarm = resolveTriggerState(trigger, frames, theme);
   if (alarm) {
     return { state: 'trigger', ...alarm };
@@ -89,7 +103,19 @@ export function resolveElementColor(
       return { state: 'nodata' };
     }
 
-    if (hasCustomThresholds(hit.field)) {
+    if (hasOwnThresholds(thresholds)) {
+      // 1a. Regra do elemento. Nenhum step ativo significa "abaixo de tudo" —
+      // sem estado —, e nao "consulte o field": a regra propria e a autoridade.
+      const step = resolveOwnThreshold(thresholds, hit.value);
+      if (step) {
+        return {
+          state: 'threshold',
+          color: theme.visualization.getColorByName(step.color),
+          label: step.label || undefined,
+        };
+      }
+    } else if (hasCustomThresholds(hit.field)) {
+      // 1b. Pipeline nativo, para quem nao definiu regra propria.
       const display = hit.field.display(hit.value);
       if (display.color) {
         return { state: 'threshold', color: display.color, label: thresholdLabel(hit.field, hit.value) };

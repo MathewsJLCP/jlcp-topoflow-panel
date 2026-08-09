@@ -79,6 +79,39 @@ describe('parseTopoFlowOptions', () => {
   });
 });
 
+/**
+ * Decisão D6: thresholds por elemento entraram como campo opcional, então uma
+ * topologia salva antes deles carrega e continua sendo pintada pelo field.
+ */
+describe('parseTopoFlowOptions — thresholds do elemento', () => {
+  const [node] = defaultTopology.nodes;
+
+  it('nó salvo antes da feature carrega sem regra própria', () => {
+    const { options, issues } = parseTopoFlowOptions({ topology: { nodes: [node], edges: [] } });
+
+    expect(issues).toEqual([]);
+    expect(options.topology.nodes[0].thresholds).toBeUndefined();
+  });
+
+  it('preserva as regras salvas', () => {
+    const thresholds = { steps: [{ value: 90, color: 'red', label: 'crítico' }] };
+    const { options, issues } = parseTopoFlowOptions({
+      topology: { nodes: [{ ...node, thresholds }], edges: [] },
+    });
+
+    expect(issues).toEqual([]);
+    expect(options.topology.nodes[0].thresholds).toEqual(thresholds);
+  });
+
+  it('objeto sem `steps` vira lista vazia — que é o mesmo que não ter regra', () => {
+    const { options } = parseTopoFlowOptions({
+      topology: { nodes: [{ ...node, thresholds: {} }], edges: [] },
+    });
+
+    expect(options.topology.nodes[0].thresholds).toEqual({ steps: [] });
+  });
+});
+
 describe('parseTopoFlowOptions — ícone do nó', () => {
   /** Ate o Bloco 3 exibir o icone era o unico comportamento possivel. */
   it('nó salvo antes do toggle continua exibindo o ícone', () => {

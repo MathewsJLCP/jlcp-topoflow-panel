@@ -30,7 +30,7 @@ export function PointNode({ data, selected }: NodeProps<PointFlowNode>) {
    */
   const connecting = useConnection((connection) => connection.inProgress);
 
-  const accent = resolveElementColor(data.element.color, data.frames, theme, data.element.trigger);
+  const accent = resolveElementColor(data.element.color, data.frames, theme, { trigger: data.element.trigger });
   const color =
     accentColor(accent) ?? (accent.state === 'nodata' ? theme.colors.text.disabled : theme.colors.primary.main);
 

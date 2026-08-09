@@ -8,6 +8,7 @@ import { TOPO_ICONS, TopoIcon, TopoIconName, resolveTopoIcon } from '../canvas/i
 import { updateEdge, updateNode, updatePoint, updatePostit, updateText } from '../model/mutations';
 import { TopoEdge, TopoNode, TopoPoint, TopoPostit, TopoText, Topology } from '../model/types';
 import { ColorDimensionField, TextDimensionField } from './DimensionFields';
+import { ThresholdsField } from './ThresholdsField';
 import { TopoFieldPicker } from './TopoFieldPicker';
 import { TriggerBindingField } from './TriggerBindingFields';
 
@@ -83,12 +84,22 @@ export function NodeForm({ element, topology, frames, onChange }: FormProps<Topo
         <IconPicker value={presentation.icon} onChange={(icon) => patchPresentation({ icon })} />
       </ToggleField>
 
-      <ColorDimensionField
-        label="Cor"
-        frames={frames}
-        value={element.color}
-        onChange={(color) => patch({ color })}
-      />
+      {/*
+        Decisao D5: com a fonte em Trigger, o bloco de estado por metrica sai da
+        tela em vez de ficar desabilitado. A cor vem do mapa de severidade e
+        nenhum controle daqui teria efeito — e um bloco inteiro acinzentado
+        ocuparia mais espaco do que a informacao "nao se aplica" merece. A
+        descricao do radio "Fonte de estado" ja explica a troca.
+      */}
+      {!element.trigger?.enabled && (
+        <ThresholdsField
+          frames={frames}
+          color={element.color}
+          thresholds={element.thresholds}
+          onColorChange={(color) => patch({ color })}
+          onThresholdsChange={(thresholds) => patch({ thresholds })}
+        />
+      )}
 
       <Field label="Largura">
         <Input

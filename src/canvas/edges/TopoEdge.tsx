@@ -54,7 +54,7 @@ export function TopoEdge({ data, selected, ...props }: EdgeProps<TopoFlowEdge>) 
       ? getBezierPath({ sourceX, sourceY, sourcePosition, targetX, targetY, targetPosition })
       : getStraightPath({ sourceX, sourceY, targetX, targetY });
 
-  const accent = element ? resolveElementColor(element.color, frames, theme, element.trigger) : undefined;
+  const accent = element ? resolveElementColor(element.color, frames, theme, { trigger: element.trigger }) : undefined;
   const stateColor = accent
     ? (accentColor(accent) ?? (accent.state === 'nodata' ? theme.colors.text.disabled : undefined))
     : undefined;

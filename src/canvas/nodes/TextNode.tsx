@@ -20,7 +20,7 @@ export function TextNode({ data, selected }: NodeProps<TextFlowNode>) {
   const styles = useStyles2(getStyles);
   const { element, frames } = data;
 
-  const accent = resolveElementColor(element.color, frames, theme, element.trigger);
+  const accent = resolveElementColor(element.color, frames, theme, { trigger: element.trigger });
   const color =
     accentColor(accent) ?? (accent.state === 'nodata' ? theme.colors.text.disabled : theme.colors.text.primary);
 

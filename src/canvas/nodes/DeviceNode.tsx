@@ -37,7 +37,10 @@ export function DeviceNode({ data, selected }: NodeProps<DeviceFlowNode>) {
   const styles = useStyles2(getStyles);
   const { element, frames, editable } = data;
 
-  const accent = resolveElementColor(element.color, frames, theme, element.trigger);
+  const accent = resolveElementColor(element.color, frames, theme, {
+    trigger: element.trigger,
+    thresholds: element.thresholds,
+  });
   const primary = resolveText(element.presentation.primaryText, frames);
   const secondary = element.presentation.secondaryText && resolveText(element.presentation.secondaryText, frames);
 

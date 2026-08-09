@@ -41,6 +41,42 @@ export const valueDimensionSchema = z.object({
 });
 
 /**
+ * Regra de estado por elemento, sobre o valor do field em `color.field`.
+ *
+ * **Coexiste** com o pipeline nativo do Grafana (decisao D8): um elemento sem
+ * step proprio continua sendo pintado pelos thresholds do field, exatamente
+ * como antes. Quem define steps aqui passa a mandar, e o nativo sai de cena
+ * para aquele elemento — misturar os dois daria uma cor que ninguem consegue
+ * explicar olhando so para um lugar.
+ *
+ * Duas diferencas deliberadas em relacao ao `ThresholdsConfig` do core:
+ *
+ *   - **Nao existe step base.** No core o step base e o `-Infinity`, que pinta
+ *     tudo que esta abaixo da primeira regra — e a fonte do "verde por
+ *     omissao". Aqui, valor abaixo de todos os steps significa "sem estado", e
+ *     a cadeia de cor segue para `color.fixed` (a identidade do elemento) e
+ *     depois para o neutro.
+ *   - **So modo absoluto.** O modo percentual do core depende de min/max do
+ *     field, que nem sempre existe; um seletor de modo que so funciona as vezes
+ *     e pior do que nao ter seletor. `mode` pode entrar depois como campo
+ *     opcional, sem migracao.
+ */
+export const elementThresholdsSchema = z.object({
+  steps: z
+    .array(
+      z.object({
+        /** Piso do step: vale a partir deste valor, inclusive. */
+        value: z.number(),
+        /** Nome de cor do tema (ex.: 'red'), resolvido com `getColorByName`. */
+        color: z.string(),
+        /** Rotulo do badge. Sem ele, o badge mostra o valor da metrica. */
+        label: z.string().optional(),
+      })
+    )
+    .default([]),
+});
+
+/**
  * Vinculo a uma trigger do Zabbix, lida dos frames de uma query em Query Mode
  * *Problems*. O plugin nunca chama a API do Zabbix: os dados entram pelo Query
  * Editor nativo do painel e nos so lemos o `DataFrame`.
@@ -111,6 +147,8 @@ export const topoNodeSchema = z.object({
    */
   color: colorDimensionSchema,
   trigger: triggerBindingSchema.optional(),
+  /** Ausente = o elemento usa os thresholds do field (pipeline nativo). */
+  thresholds: elementThresholdsSchema.optional(),
   zIndex: z.number().int(),
 });
 

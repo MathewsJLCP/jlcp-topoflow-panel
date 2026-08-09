@@ -175,7 +175,7 @@ describe('resolveElementColor — nível 0 (trigger)', () => {
   it('trigger alarmando vence threshold e acento estático', () => {
     const frames = [...buildFrames('cpu', [92]), problemsFrame([ALARMANDO])];
 
-    expect(resolveElementColor({ fixed: 'blue', field: 'cpu' }, frames, theme, trigger)).toEqual({
+    expect(resolveElementColor({ fixed: 'blue', field: 'cpu' }, frames, theme, { trigger })).toEqual({
       state: 'trigger',
       color: theme.visualization.getColorByName('red'),
       severity: 4,
@@ -187,7 +187,7 @@ describe('resolveElementColor — nível 0 (trigger)', () => {
     // `cpu: 92` cruzaria o step `crítico` se o nível 1 estivesse ativo.
     const frames = [...buildFrames('cpu', [92]), problemsFrame([RESOLVIDA])];
 
-    expect(resolveElementColor({ fixed: 'blue', field: 'cpu' }, frames, theme, trigger)).toEqual({
+    expect(resolveElementColor({ fixed: 'blue', field: 'cpu' }, frames, theme, { trigger })).toEqual({
       state: 'fixed',
       color: theme.visualization.getColorByName('blue'),
     });
@@ -198,14 +198,14 @@ describe('resolveElementColor — nível 0 (trigger)', () => {
     // dado — o dado é justamente que está tudo bem.
     const frames = [problemsFrame([])];
 
-    expect(resolveElementColor({}, frames, theme, trigger)).toEqual({ state: 'neutral' });
+    expect(resolveElementColor({}, frames, theme, { trigger })).toEqual({ state: 'neutral' });
   });
 
   it('vínculo desligado devolve a cadeia inteira à métrica', () => {
     const frames = [...buildFrames('cpu', [92]), problemsFrame([ALARMANDO])];
     const desligado: TriggerBinding = { ...trigger, enabled: false };
 
-    expect(resolveElementColor({ field: 'cpu' }, frames, theme, desligado)).toEqual({
+    expect(resolveElementColor({ field: 'cpu' }, frames, theme, { trigger: desligado })).toEqual({
       state: 'threshold',
       color: theme.visualization.getColorByName('red'),
       label: 'crítico',
@@ -240,5 +240,82 @@ describe('accentColor', () => {
   it('devolve undefined nos estados sem cor própria', () => {
     expect(accentColor({ state: 'nodata' })).toBeUndefined();
     expect(accentColor({ state: 'neutral' })).toBeUndefined();
+  });
+});
+
+/**
+ * Nível 1a. A regra do elemento e o pipeline nativo **coexistem** (decisão D8),
+ * mas nunca no mesmo elemento: quem define regra própria não consulta mais o
+ * field. Misturar os dois daria uma cor cuja origem exige abrir o painel de
+ * opções do field para descobrir.
+ */
+describe('resolveElementColor — nível 1a (threshold do elemento)', () => {
+  const REGRAS = { steps: [{ value: 70, color: 'orange', label: 'atenção' }] };
+
+  it('a regra do elemento vence a do field', () => {
+    // O field diz `red`/`crítico` em 92; a regra do elemento diz `orange`.
+    const frames = buildFrames('cpu', [92]);
+
+    expect(resolveElementColor({ field: 'cpu' }, frames, theme, { thresholds: REGRAS })).toEqual({
+      state: 'threshold',
+      color: theme.visualization.getColorByName('orange'),
+      label: 'atenção',
+    });
+  });
+
+  it('sem regra própria, o field continua mandando', () => {
+    const frames = buildFrames('cpu', [92]);
+
+    expect(resolveElementColor({ field: 'cpu' }, frames, theme, { thresholds: { steps: [] } })).toEqual({
+      state: 'threshold',
+      color: theme.visualization.getColorByName('red'),
+      label: 'crítico',
+    });
+  });
+
+  /**
+   * O caso que a exclusão entre 1a e 1b existe para resolver: com regra própria
+   * e valor abaixo dela, o elemento está OK — não pode cair no `crítico` do
+   * field, que dispararia em 85.
+   */
+  it('abaixo da regra própria, o elemento fica em repouso — não volta ao field', () => {
+    const frames = buildFrames('cpu', [92]);
+    const acimaDoField = { steps: [{ value: 95, color: 'red' }] };
+
+    expect(resolveElementColor({ fixed: 'blue', field: 'cpu' }, frames, theme, { thresholds: acimaDoField })).toEqual({
+      state: 'fixed',
+      color: theme.visualization.getColorByName('blue'),
+    });
+  });
+
+  it('step sem rótulo deixa o badge livre para a métrica', () => {
+    const frames = buildFrames('cpu', [92]);
+    const semRotulo = { steps: [{ value: 70, color: 'orange' }] };
+
+    expect(resolveElementColor({ field: 'cpu' }, frames, theme, { thresholds: semRotulo })).toEqual({
+      state: 'threshold',
+      color: theme.visualization.getColorByName('orange'),
+      label: undefined,
+    });
+  });
+
+  it('regra própria não salva um field sem dado', () => {
+    const frames = buildFrames('cpu', [92]);
+
+    expect(resolveElementColor({ field: 'nao-existe' }, frames, theme, { thresholds: REGRAS })).toEqual({
+      state: 'nodata',
+    });
+  });
+
+  /** A trigger continua sendo o nível 0: regra própria não a destrona. */
+  it('a trigger alarmando vence a regra do elemento', () => {
+    const frames = [...buildFrames('cpu', [92]), problemsFrame([ALARMANDO])];
+
+    expect(resolveElementColor({ field: 'cpu' }, frames, theme, { trigger, thresholds: REGRAS })).toEqual({
+      state: 'trigger',
+      color: theme.visualization.getColorByName('red'),
+      severity: 4,
+      label: 'High',
+    });
   });
 });

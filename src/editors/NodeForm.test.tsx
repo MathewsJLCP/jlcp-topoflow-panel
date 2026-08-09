@@ -136,3 +136,77 @@ describe('NodeForm — ícone', () => {
     expect(screen.getByRole('button', { name: 'Switch' })).toHaveAttribute('aria-pressed', 'false');
   });
 });
+
+describe('NodeForm — thresholds do elemento', () => {
+  const addRule = () => screen.getByRole('button', { name: /Adicionar regra/ });
+
+  it('sem regra própria, avisa que o field continua mandando', () => {
+    setup({ thresholds: undefined });
+
+    expect(screen.getByText(/segue os thresholds configurados no field/)).toBeInTheDocument();
+  });
+
+  it('adicionar a primeira regra cria o step', () => {
+    const { result } = setup({ thresholds: undefined });
+
+    fireEvent.click(addRule());
+
+    expect(result()?.thresholds?.steps).toEqual([{ value: 80, color: 'yellow' }]);
+  });
+
+  it('as regras ficam ordenadas da maior para a menor', () => {
+    const { result } = setup({
+      thresholds: { steps: [{ value: 70, color: 'orange' }] },
+    });
+
+    fireEvent.click(addRule());
+
+    expect(result()?.thresholds?.steps.map((step) => step.value)).toEqual([80, 70]);
+  });
+
+  /** Voltar a zero regras devolve o elemento ao pipeline nativo (D8). */
+  it('remover a última regra apaga o objeto inteiro', () => {
+    const { result } = setup({ thresholds: { steps: [{ value: 90, color: 'red' }] } });
+
+    fireEvent.click(screen.getByRole('button', { name: 'Remover regra' }));
+
+    expect(result()?.thresholds).toBeUndefined();
+  });
+
+  it('editar o valor de uma regra reescreve só ela', () => {
+    const { result } = setup({
+      thresholds: { steps: [{ value: 90, color: 'red', label: 'crítico' }] },
+    });
+
+    fireEvent.change(screen.getByLabelText('Valor da regra 1'), { target: { value: '95' } });
+
+    expect(result()?.thresholds?.steps).toEqual([{ value: 95, color: 'red', label: 'crítico' }]);
+  });
+
+  it('o campo de estado escreve em `color.field`', () => {
+    setup();
+
+    expect(screen.getByText('Campo de estado')).toBeInTheDocument();
+    expect(screen.getByText('Cor de repouso')).toBeInTheDocument();
+  });
+});
+
+/**
+ * Decisão D5: em modo Trigger a cor vem do mapa de severidade e nenhum controle
+ * de threshold teria efeito. Esconder, e não desabilitar — um bloco inteiro
+ * acinzentado ocupa mais espaço do que a informação "não se aplica" merece.
+ */
+describe('NodeForm — thresholds com fonte em Trigger', () => {
+  it('o bloco de estado por métrica sai da tela', () => {
+    setup({ trigger: { enabled: true, host: 'AGLIN-FW-STARTI' } });
+
+    expect(screen.queryByText('Campo de estado')).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /Adicionar regra/ })).not.toBeInTheDocument();
+  });
+
+  it('com o vínculo desligado, o bloco volta', () => {
+    setup({ trigger: { enabled: false, host: 'AGLIN-FW-STARTI' } });
+
+    expect(screen.getByText('Campo de estado')).toBeInTheDocument();
+  });
+});
