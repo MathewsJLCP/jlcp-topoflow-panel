@@ -19,6 +19,7 @@ export const defaultTopology: Topology = {
       position: { x: 40, y: 140 },
       size: { width: 180, height: 60 },
       presentation: {
+        showIcon: true,
         primaryText: { mode: 'fixed', fixed: 'rtr-borda-01' },
         secondaryText: { mode: 'fixed', fixed: '10.0.0.1' },
       },
@@ -30,6 +31,7 @@ export const defaultTopology: Topology = {
       position: { x: 320, y: 60 },
       size: { width: 180, height: 60 },
       presentation: {
+        showIcon: true,
         primaryText: { mode: 'fixed', fixed: 'srv-app-01' },
         secondaryText: { mode: 'fixed', fixed: '10.0.1.10' },
       },
@@ -41,6 +43,7 @@ export const defaultTopology: Topology = {
       position: { x: 320, y: 220 },
       size: { width: 180, height: 60 },
       presentation: {
+        showIcon: true,
         primaryText: { mode: 'fixed', fixed: 'srv-db-01' },
         secondaryText: { mode: 'fixed', fixed: '10.0.1.20' },
       },

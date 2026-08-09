@@ -1,13 +1,13 @@
 import React from 'react';
 import { css, cx } from '@emotion/css';
 import { DisplayValue, GrafanaTheme2 } from '@grafana/data';
-import { Icon, useStyles2, useTheme2 } from '@grafana/ui';
+import { useStyles2, useTheme2 } from '@grafana/ui';
 import { Handle, HandleType, NodeProps, Position } from '@xyflow/react';
 
 import { formatDisplayValue, resolveDisplayValue, resolveText } from '../../data/dimensions';
 import { ElementColor, accentColor, resolveElementColor } from '../../data/elementColor';
 import { DeviceFlowNode } from '../flowTypes';
-import { resolveIconName } from '../presentation';
+import { TopoIcon, resolveTopoIcon } from '../icons';
 import { HANDLE_SIZE, ICON_BOX_SIZE, ICON_SIZE, TRANSITION_FAST, alpha } from '../tokens';
 
 /** Ganchos estaveis para os seletores: o nome do Emotion muda entre builds. */
@@ -60,16 +60,20 @@ export function DeviceNode({ data, selected }: NodeProps<DeviceFlowNode>) {
       <div
         className={cx(styles.card, CARD_CLASS, (selected || data.link === 'source') && styles.cardSelected)}
       >
-        <span
-          className={styles.iconBox}
-          style={
-            tint
-              ? { background: alpha(tint, 0.12), boxShadow: `inset 0 0 0 1px ${alpha(tint, 0.3)}` }
-              : undefined
-          }
-        >
-          <Icon name={resolveIconName(element.presentation.icon)} style={{ color: iconColor }} />
-        </span>
+        {/* Sem icone, a capsula tambem sai — uma caixa vazia no lugar dele
+            deixaria o texto desalinhado por um motivo invisivel. */}
+        {element.presentation.showIcon && (
+          <span
+            className={styles.iconBox}
+            style={
+              tint
+                ? { background: alpha(tint, 0.12), boxShadow: `inset 0 0 0 1px ${alpha(tint, 0.3)}` }
+                : undefined
+            }
+          >
+            <TopoIcon name={resolveTopoIcon(element.presentation.icon)} size={ICON_SIZE} style={{ color: iconColor }} />
+          </span>
+        )}
 
         <div className={styles.textBlock}>
           <div className={styles.primary}>{primary}</div>
@@ -221,12 +225,6 @@ const getStyles = (theme: GrafanaTheme2) => ({
     borderRadius: theme.shape.radius.default,
     background: theme.colors.background.primary,
     transition: `background ${TRANSITION_FAST}, box-shadow ${TRANSITION_FAST}`,
-
-    // A escala nomeada do `Icon` nao tem 20px (lg = 18, xl = 24).
-    '& svg': {
-      width: ICON_SIZE,
-      height: ICON_SIZE,
-    },
   }),
   textBlock: css({
     display: 'flex',

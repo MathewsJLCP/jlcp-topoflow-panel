@@ -1,5 +1,3 @@
-import { IconName, isIconName } from '@grafana/data';
-
 import { TextDimension } from '../model/types';
 
 /**
@@ -13,9 +11,9 @@ export function fixedText(dim: TextDimension): string {
   return dim.mode === 'fixed' ? (dim.fixed ?? '') : '';
 }
 
-const DEFAULT_ICON: IconName = 'sitemap';
-
-/** O modelo guarda a chave como string livre; a UI precisa de um `IconName`. */
-export function resolveIconName(icon: string | undefined): IconName {
-  return icon && isIconName(icon) ? icon : DEFAULT_ICON;
-}
+/**
+ * A resolucao do icone mudou de casa: vive em `canvas/icons` junto da
+ * biblioteca, porque quem conhece as chaves validas e ela. Ate o Bloco 3 os
+ * icones vinham do `@grafana/ui`, que nao tem nenhum ativo de rede.
+ */
+export { resolveTopoIcon } from './icons';

@@ -1,6 +1,9 @@
 import React from 'react';
-import { DataFrame, FieldType, SelectableValue } from '@grafana/data';
-import { ColorPicker, Combobox, Field, Input, RadioButtonGroup, Slider } from '@grafana/ui';
+import { css } from '@emotion/css';
+import { DataFrame, FieldType, GrafanaTheme2, SelectableValue } from '@grafana/data';
+import { ColorPicker, Combobox, Field, Input, RadioButtonGroup, Slider, Switch, useStyles2 } from '@grafana/ui';
+
+import { TOPO_ICONS, TopoIcon, TopoIconName, resolveTopoIcon } from '../canvas/icons';
 
 import { updateEdge, updateNode, updatePoint, updatePostit, updateText } from '../model/mutations';
 import { TopoEdge, TopoNode, TopoPoint, TopoPostit, TopoText, Topology } from '../model/types';
@@ -20,33 +23,65 @@ const numericOnly = (field: { type?: FieldType }) => field.type === FieldType.nu
 
 export function NodeForm({ element, topology, frames, onChange }: FormProps<TopoNode>) {
   const patch = (changes: Partial<TopoNode>) => onChange(updateNode(topology, element.id, changes));
+  const patchPresentation = (changes: Partial<TopoNode['presentation']>) =>
+    patch({ presentation: { ...element.presentation, ...changes } });
+
+  const { presentation } = element;
 
   return (
     <>
       <TextDimensionField
         label="Texto primário"
         frames={frames}
-        value={element.presentation.primaryText}
-        onChange={(primaryText) => patch({ presentation: { ...element.presentation, primaryText } })}
+        value={presentation.primaryText}
+        onChange={(primaryText) => patchPresentation({ primaryText })}
       />
-      <TextDimensionField
+
+      {/*
+        Os campos opcionais do no sao governados pela **presenca do valor**, nao
+        por uma flag separada: `secondaryText` e `value` ausentes ja significavam
+        "desligado" no schema. Desligar o toggle apaga o campo — e o preco de nao
+        ter um segundo estado para manter em sincronia. O que se perde e o texto
+        digitado antes, nao a configuracao do no.
+      */}
+      <ToggleField
         label="Texto secundário"
-        frames={frames}
-        value={element.presentation.secondaryText ?? { mode: 'fixed', fixed: '' }}
-        onChange={(secondaryText) => patch({ presentation: { ...element.presentation, secondaryText } })}
-      />
+        enabled={presentation.secondaryText !== undefined}
+        onToggle={(on) => patchPresentation({ secondaryText: on ? { mode: 'fixed', fixed: '' } : undefined })}
+      >
+        <TextDimensionField
+          label="Texto secundário"
+          frames={frames}
+          value={presentation.secondaryText ?? { mode: 'fixed', fixed: '' }}
+          onChange={(secondaryText) => patchPresentation({ secondaryText })}
+        />
+      </ToggleField>
 
       <TriggerBindingField frames={frames} value={element.trigger} onChange={(trigger) => patch({ trigger })} />
 
-      <Field label="Valor exibido" description="Field cujo último valor aparece dentro do nó.">
-        <TopoFieldPicker
-          frames={frames}
-          value={element.value?.field}
-          onChange={(field) => patch({ value: { field } })}
-          placeholder="Sem métrica"
-          filter={numericOnly}
-        />
-      </Field>
+      <ToggleField
+        label="Valor exibido"
+        enabled={element.value !== undefined}
+        onToggle={(on) => patch({ value: on ? {} : undefined })}
+      >
+        <Field label="Valor exibido" description="Field cujo último valor aparece dentro do nó.">
+          <TopoFieldPicker
+            frames={frames}
+            value={element.value?.field}
+            onChange={(field) => patch({ value: { field } })}
+            placeholder="Sem métrica"
+            filter={numericOnly}
+          />
+        </Field>
+      </ToggleField>
+
+      <ToggleField
+        label="Exibir ícone"
+        enabled={presentation.showIcon}
+        onToggle={(showIcon) => patchPresentation({ showIcon })}
+      >
+        <IconPicker value={presentation.icon} onChange={(icon) => patchPresentation({ icon })} />
+      </ToggleField>
 
       <ColorDimensionField
         label="Cor"
@@ -198,6 +233,135 @@ export function EdgeForm({ element, topology, frames, onChange }: FormProps<Topo
     </>
   );
 }
+
+interface ToggleFieldProps {
+  label: string;
+  enabled: boolean;
+  onToggle: (enabled: boolean) => void;
+  children: React.ReactNode;
+}
+
+/**
+ * Campo opcional: um `Switch` com rotulo e, quando ligado, o controle de fato.
+ *
+ * O formulario do no acumulou campos que nem todo no usa. Todos visiveis o tempo
+ * todo, o que e opcional fica indistinguivel do que e essencial — e o nome do no
+ * (o unico campo obrigatorio) some no meio da lista. Com o toggle, o formulario
+ * de um no simples ocupa quatro linhas.
+ */
+function ToggleField({ label, enabled, onToggle, children }: ToggleFieldProps) {
+  const styles = useStyles2(getFormStyles);
+  const id = React.useId();
+
+  return (
+    <div className={styles.toggleField}>
+      <div className={styles.toggleRow}>
+        <label className={styles.toggleLabel} htmlFor={id}>
+          {label}
+        </label>
+        <Switch id={id} value={enabled} onChange={(event) => onToggle(event.currentTarget.checked)} />
+      </div>
+
+      {/* O rotulo ja esta na linha do switch; o do controle interno seria uma
+          repeticao, entao ele e escondido do olho e mantido para o leitor de
+          tela, que precisa do vinculo entre rotulo e campo. */}
+      {enabled && <div className={styles.toggleBody}>{children}</div>}
+    </div>
+  );
+}
+
+interface IconPickerProps {
+  value: string | undefined;
+  onChange: (icon: TopoIconName) => void;
+}
+
+/**
+ * Grade de icones em vez de um `Select` com nomes: escolher icone e uma decisao
+ * visual, e ler "load-balancer" numa lista nao diz como o glifo se parece ao
+ * lado dos outros nos da topologia.
+ */
+function IconPicker({ value, onChange }: IconPickerProps) {
+  const styles = useStyles2(getFormStyles);
+  const selected = resolveTopoIcon(value);
+
+  return (
+    <Field label="Ícone">
+      <div className={styles.iconGrid}>
+        {TOPO_ICONS.map(({ name, label }) => (
+          <button
+            key={name}
+            type="button"
+            className={styles.iconButton}
+            data-selected={name === selected || undefined}
+            title={label}
+            aria-label={label}
+            aria-pressed={name === selected}
+            onClick={() => onChange(name)}
+          >
+            <TopoIcon name={name} size={20} />
+          </button>
+        ))}
+      </div>
+    </Field>
+  );
+}
+
+const getFormStyles = (theme: GrafanaTheme2) => ({
+  toggleField: css({
+    marginBottom: theme.spacing(2),
+  }),
+  toggleRow: css({
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: theme.spacing(1),
+  }),
+  toggleLabel: css({
+    color: theme.colors.text.primary,
+    fontSize: theme.typography.bodySmall.fontSize,
+    fontWeight: theme.typography.fontWeightMedium,
+    cursor: 'pointer',
+  }),
+  toggleBody: css({
+    marginTop: theme.spacing(1),
+    // O rotulo do controle interno repete o do switch: fica so para o leitor de
+    // tela. `label:first-of-type` nao serve — o `Field` do Grafana envolve o
+    // rotulo numa `div`, entao o alvo e o primeiro filho.
+    '& > div > label:first-of-type > div:first-of-type': {
+      display: 'none',
+    },
+  }),
+  iconGrid: css({
+    display: 'grid',
+    gridTemplateColumns: 'repeat(auto-fill, minmax(40px, 1fr))',
+    gap: theme.spacing(0.5),
+  }),
+  iconButton: css({
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    height: 36,
+    padding: 0,
+    background: theme.colors.background.primary,
+    border: `1px solid ${theme.colors.border.weak}`,
+    borderRadius: theme.shape.radius.default,
+    color: theme.colors.text.secondary,
+    cursor: 'pointer',
+
+    '&:hover': {
+      borderColor: theme.colors.border.medium,
+      color: theme.colors.text.primary,
+    },
+
+    // Mesma leitura da selecao no canvas: 2px de `primary.main` (§7 do doc de
+    // estilo). Aqui como borda, porque o botao ja tem uma para engrossar.
+    '&[data-selected]': {
+      borderColor: theme.colors.primary.main,
+      boxShadow: `inset 0 0 0 1px ${theme.colors.primary.main}`,
+      color: theme.colors.primary.main,
+    },
+  }),
+});
 
 /** Campos numericos vazios ou fora de faixa nao podem quebrar a validacao Zod. */
 function toSize(raw: string, fallback: number): number {

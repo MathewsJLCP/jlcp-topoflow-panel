@@ -91,9 +91,17 @@ export const topoNodeSchema = z.object({
     height: z.number().positive(),
   }),
   presentation: z.object({
-    /** Chave da biblioteca de icones. O PRD 1 usa um unico icone default. */
+    /**
+     * Chave da biblioteca em `canvas/icons`. String livre, e nao enum, para que
+     * remover ou renomear um icone nao invalide topologias salvas — quem nao for
+     * reconhecido cai no `generic`.
+     */
     icon: z.string().optional(),
+    // `.default(true)` e o que faz um no salvo antes deste campo continuar
+    // exibindo o icone, que era o unico comportamento possivel ate aqui.
+    showIcon: z.boolean().default(true),
     primaryText: textDimensionSchema,
+    /** Ausente significa desligado — nao ha flag separada. */
     secondaryText: textDimensionSchema.optional(),
   }),
   value: valueDimensionSchema.optional(),

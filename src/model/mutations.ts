@@ -58,7 +58,7 @@ export function addElement(topology: Topology, kind: ElementKind, position: XYPo
         id,
         position,
         size: NODE_SIZE,
-        presentation: { primaryText: { mode: 'fixed', fixed: id } },
+        presentation: { showIcon: true, primaryText: { mode: 'fixed', fixed: id } },
         color: NO_COLOR,
         zIndex,
       };

@@ -79,6 +79,43 @@ describe('parseTopoFlowOptions', () => {
   });
 });
 
+describe('parseTopoFlowOptions — ícone do nó', () => {
+  /** Ate o Bloco 3 exibir o icone era o unico comportamento possivel. */
+  it('nó salvo antes do toggle continua exibindo o ícone', () => {
+    const [node] = defaultTopology.nodes;
+    const { showIcon, ...semFlag } = node.presentation;
+    const { options, issues } = parseTopoFlowOptions({
+      topology: { nodes: [{ ...node, presentation: semFlag }], edges: [] },
+    });
+
+    expect(issues).toEqual([]);
+    expect(options.topology.nodes[0].presentation.showIcon).toBe(true);
+  });
+
+  it('respeita o toggle desligado', () => {
+    const [node] = defaultTopology.nodes;
+    const { options } = parseTopoFlowOptions({
+      topology: { nodes: [{ ...node, presentation: { ...node.presentation, showIcon: false } }], edges: [] },
+    });
+
+    expect(options.topology.nodes[0].presentation.showIcon).toBe(false);
+  });
+
+  /**
+   * A chave e string livre no schema: um icone que deixe de existir nao pode
+   * invalidar a topologia inteira. Quem resolve o fallback e `resolveTopoIcon`.
+   */
+  it('aceita chave de ícone desconhecida sem reclamar', () => {
+    const [node] = defaultTopology.nodes;
+    const { options, issues } = parseTopoFlowOptions({
+      topology: { nodes: [{ ...node, presentation: { ...node.presentation, icon: 'sitemap' } }], edges: [] },
+    });
+
+    expect(issues).toEqual([]);
+    expect(options.topology.nodes[0].presentation.icon).toBe('sitemap');
+  });
+});
+
 /**
  * O binding de trigger entrou como campo opcional justamente para nao precisar
  * de migrador. Estes testes sao o que prova isso — se um dia alguem trocar por
