@@ -27,61 +27,215 @@
         "type": "grafana-testdata-datasource",
         "uid": "trlxrdZVk"
       },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percent",
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "red",
+                "value": 85
+              }
+            ]
+          }
+        },
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Trigger status"
+            },
+            "properties": [
+              {
+                "id": "unit",
+                "value": "none"
+              },
+              {
+                "id": "mappings",
+                "value": [
+                  {
+                    "type": "value",
+                    "options": {
+                      "0": {
+                        "text": "DOWN",
+                        "color": "red",
+                        "index": 0
+                      },
+                      "1": {
+                        "text": "UP",
+                        "color": "green",
+                        "index": 1
+                      }
+                    }
+                  }
+                ]
+              }
+            ]
+          }
+        ]
+      },
       "gridPos": {
-        "h": 8,
-        "w": 12,
+        "h": 16,
+        "w": 14,
         "x": 0,
         "y": 0
       },
       "id": 1,
       "options": {
-        "seriesCountSize": "sm",
-        "showSeriesCount": false,
-        "text": "Default value of text input option"
+        "schemaVersion": 1,
+        "topology": {
+          "nodes": [
+            {
+              "id": "app",
+              "position": {
+                "x": 40,
+                "y": 40
+              },
+              "size": {
+                "width": 210,
+                "height": 66
+              },
+              "presentation": {
+                "primaryText": {
+                  "mode": "fixed",
+                  "fixed": "srv-app-01"
+                },
+                "secondaryText": {
+                  "mode": "fixed",
+                  "fixed": "vinculado"
+                }
+              },
+              "color": {
+                "fixed": "text",
+                "field": "CPU utilization srv-app-01"
+              },
+              "zIndex": 0,
+              "value": {
+                "field": "CPU utilization srv-app-01"
+              }
+            },
+            {
+              "id": "db",
+              "position": {
+                "x": 40,
+                "y": 150
+              },
+              "size": {
+                "width": 210,
+                "height": 66
+              },
+              "presentation": {
+                "primaryText": {
+                  "mode": "fixed",
+                  "fixed": "srv-db-01"
+                },
+                "secondaryText": {
+                  "mode": "fixed",
+                  "fixed": "vinculado"
+                }
+              },
+              "color": {
+                "fixed": "text",
+                "field": "CPU utilization srv-db-01"
+              },
+              "zIndex": 0,
+              "value": {
+                "field": "CPU utilization srv-db-01"
+              }
+            },
+            {
+              "id": "livre",
+              "position": {
+                "x": 40,
+                "y": 260
+              },
+              "size": {
+                "width": 210,
+                "height": 66
+              },
+              "presentation": {
+                "primaryText": {
+                  "mode": "fixed",
+                  "fixed": "sem-vinculo"
+                },
+                "secondaryText": {
+                  "mode": "fixed",
+                  "fixed": "cor fixa"
+                }
+              },
+              "color": {
+                "fixed": "blue"
+              },
+              "zIndex": 0
+            },
+            {
+              "id": "trg",
+              "position": {
+                "x": 40,
+                "y": 370
+              },
+              "size": {
+                "width": 210,
+                "height": 66
+              },
+              "presentation": {
+                "primaryText": {
+                  "mode": "fixed",
+                  "fixed": "trigger-01"
+                },
+                "secondaryText": {
+                  "mode": "fixed",
+                  "fixed": "value mapping"
+                }
+              },
+              "color": {
+                "fixed": "text",
+                "field": "Trigger status"
+              },
+              "zIndex": 0,
+              "value": {
+                "field": "Trigger status"
+              }
+            }
+          ],
+          "edges": [],
+          "points": [],
+          "postits": [],
+          "texts": []
+        },
+        "canvas": {
+          "showGrid": true,
+          "snapToGrid": true,
+          "gridSize": 16,
+          "inlineEditing": false
+        }
       },
       "targets": [
         {
-          "datasource": {
-            "type": "grafana-testdata-datasource",
-            "uid": "db84e60d-b92a-4089-82cb-34842fb1754b"
-          },
           "refId": "A",
           "scenarioId": "raw_frame",
-          "rawFrameContent": "[\n  {\n    \"columns\": [\n      {\n        \"text\": \"Time\",\n        \"type\": \"time\"\n      },\n      {\n        \"text\": \"Label\",\n        \"type\": \"string\"\n      },\n      {\n        \"text\": \"Value\",\n        \"type\": \"number\"\n      }\n    ],\n    \"rows\": [\n      [1609459200000, \"A\", 10],\n      [1609462800000, \"B\", 20],\n      [1609466400000, \"C\", 15],\n      [1609470000000, \"D\", 25],\n      [1609473600000, \"E\", 30]\n    ]\n  },\n{\n    \"columns\": [\n      {\n        \"text\": \"Time\",\n        \"type\": \"time\"\n      },\n      {\n        \"text\": \"Label\",\n        \"type\": \"string\"\n      },\n      {\n        \"text\": \"Value\",\n        \"type\": \"number\"\n      }\n    ],\n    \"rows\": [\n      [1609459200000, \"A\", 40],\n      [1609462800000, \"B\", 50],\n      [1609466400000, \"C\", 45],\n      [1609470000000, \"D\", 55],\n      [1609473600000, \"E\", 60]\n    ]\n  }\n]"
-        }
-      ],
-      "title": "Sample Panel Title",
-      "type": "jlcp-topoflow-panel"
-    },
-    {
-      "datasource": {
-        "type": "grafana-testdata-datasource",
-        "uid": "trlxrdZVk"
-      },
-      "gridPos": {
-        "h": 8,
-        "w": 12,
-        "x": 12,
-        "y": 0
-      },
-      "id": 2,
-      "options": {
-        "seriesCountSize": "sm",
-        "showSeriesCount": false,
-        "text": "Default value of text input option"
-      },
-      "targets": [
-        {
-          "alias": "",
+          "rawFrameContent": "[{\"schema\": {\"fields\": [{\"name\": \"Time\", \"type\": \"time\"}, {\"name\": \"CPU utilization\", \"type\": \"number\", \"labels\": {\"host\": \"srv-app-01\"}}]}, \"data\": {\"values\": [[1735689600000, 1735693200000], [80, 92]]}}, {\"schema\": {\"fields\": [{\"name\": \"Time\", \"type\": \"time\"}, {\"name\": \"CPU utilization\", \"type\": \"number\", \"labels\": {\"host\": \"srv-db-01\"}}]}, \"data\": {\"values\": [[1735689600000, 1735693200000], [30, 40]]}}]",
           "datasource": {
             "type": "grafana-testdata-datasource",
-            "uid": "db84e60d-b92a-4089-82cb-34842fb1754b"
-          },
-          "refId": "A",
-          "scenarioId": "no_data_points"
+            "uid": "trlxrdZVk"
+          }
+        },
+        {
+          "refId": "B",
+          "scenarioId": "raw_frame",
+          "rawFrameContent": "[{\"schema\": {\"fields\": [{\"name\": \"Time\", \"type\": \"time\"}, {\"name\": \"Trigger status\", \"type\": \"number\"}]}, \"data\": {\"values\": [[1735689600000, 1735693200000], [0, 1]]}}]",
+          "datasource": {
+            "type": "grafana-testdata-datasource",
+            "uid": "trlxrdZVk"
+          }
         }
       ],
-      "title": "Sample Panel Title",
+      "title": "TopoFlow \u2014 v\u00ednculo de dados",
       "type": "jlcp-topoflow-panel"
     }
   ],

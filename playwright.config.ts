@@ -19,10 +19,15 @@ export default defineConfig<PluginOptions>({
   fullyParallel: true,
   /* Fail the build on CI if you accidentally left test.only in the source code. */
   forbidOnly: !!process.env.CI,
-  /* Retry on CI only */
-  retries: process.env.CI ? 2 : 0,
+  /* Uma retry local tambem: o Grafana faz roteamento client-side logo apos o
+   * domcontentloaded e ocasionalmente aborta o goto ("frame was detached"). */
+  retries: process.env.CI ? 2 : 1,
   /* Reporter to use. See https://playwright.dev/docs/test-reporters */
   reporter: 'html',
+  /* O painel so monta depois que a query resolve. Os 5s default do expect nao
+   * cobrem isso em maquinas lentas, e o sintoma e um falso negativo. */
+  expect: { timeout: 30_000 },
+  timeout: 120_000,
   /* Shared settings for all the projects below. See https://playwright.dev/docs/api/class-testoptions. */
   use: {
     /* Base URL to use in actions like `await page.goto('/')`. */

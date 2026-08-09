@@ -1,40 +1,13 @@
 import { PanelPlugin } from '@grafana/data';
-import { SimpleOptions } from './types';
-import { SimplePanel } from './components/SimplePanel';
 
-export const plugin = new PanelPlugin<SimpleOptions>(SimplePanel).setPanelOptions((builder) => {
-  return builder
-    .addTextInput({
-      path: 'text',
-      name: 'Simple text option',
-      description: 'Description of panel option',
-      defaultValue: 'Default value of text input option',
-    })
-    .addBooleanSwitch({
-      path: 'showSeriesCount',
-      name: 'Show series counter',
-      defaultValue: false,
-    })
-    .addRadio({
-      path: 'seriesCountSize',
-      defaultValue: 'sm',
-      name: 'Series counter size',
-      settings: {
-        options: [
-          {
-            value: 'sm',
-            label: 'Small',
-          },
-          {
-            value: 'md',
-            label: 'Medium',
-          },
-          {
-            value: 'lg',
-            label: 'Large',
-          },
-        ],
-      },
-      showIf: (config) => config.showSeriesCount,
-    });
-});
+import { TopoFlowOptions } from './model/types';
+import { TopoFlowPanel } from './panel/TopoFlowPanel';
+import { addTopoFlowOptions } from './panel/options';
+
+export const plugin = new PanelPlugin<TopoFlowOptions>(TopoFlowPanel)
+  // OBRIGATORIO (ADR-P03). Habilita unit, decimals, min/max, thresholds, value
+  // mappings e overrides na aba padrao de opcoes, e — o que importa de verdade —
+  // faz o Grafana rodar `applyFieldOverrides` antes de entregar `data.series`,
+  // que e o que popula `field.display`. Sem isso o vinculo de dados nao existe.
+  .useFieldConfig()
+  .setPanelOptions(addTopoFlowOptions);

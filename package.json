@@ -71,10 +71,12 @@
     "@grafana/data": "13.1.0",
     "@grafana/i18n": "13.1.0",
     "@grafana/runtime": "13.1.0",
-    "@grafana/ui": "13.1.0",
     "@grafana/schema": "13.1.0",
+    "@grafana/ui": "13.1.0",
+    "@xyflow/react": "^12.11.2",
     "react": "^18.3.0",
-    "react-dom": "^18.3.0"
+    "react-dom": "^18.3.0",
+    "zod": "^4.4.3"
   },
   "packageManager": "npm@10.8.2"
 }
