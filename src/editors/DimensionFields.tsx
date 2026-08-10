@@ -16,7 +16,12 @@ const MODE_OPTIONS = [
 ];
 
 interface TextDimensionFieldProps {
-  label: string;
+  /**
+   * Omitido quando quem envolve o campo ja o rotulou — o `ToggleField`, por
+   * exemplo, poe o nome na linha do switch. Repetir ali embaixo so ocupava
+   * espaco dizendo a mesma coisa duas vezes.
+   */
+  label?: string;
   frames: DataFrame[];
   value: TextDimension;
   onChange: (next: TextDimension) => void;

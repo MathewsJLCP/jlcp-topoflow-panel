@@ -26,7 +26,10 @@ export type TextDimension = z.infer<typeof textDimensionSchema>;
 export type ValueDimension = z.infer<typeof valueDimensionSchema>;
 export type TriggerBinding = z.infer<typeof triggerBindingSchema>;
 export type ElementThresholds = z.infer<typeof elementThresholdsSchema>;
-export type ElementThresholdStep = ElementThresholds['steps'][number];
+/** Uma regra do bloco Thresholds: threshold, valor, faixa, regex ou especial. */
+export type ElementRule = ElementThresholds['steps'][number];
+export type ElementRuleType = ElementRule['type'];
+export type SpecialMatch = Extract<ElementRule, { type: 'special' }>['match'];
 
 export type TopoNode = z.infer<typeof topoNodeSchema>;
 export type TopoEdge = z.infer<typeof topoEdgeSchema>;

@@ -54,7 +54,9 @@ export function DeviceNode({ data, selected }: NodeProps<DeviceFlowNode>) {
     tint ?? (accent.state === 'nodata' ? theme.colors.text.disabled : theme.colors.text.secondary);
 
   const display = resolveDisplayValue(frames, element.value?.field);
-  const badge = resolveBadge(accent, theme, element.value?.field, display);
+  // A presenca de `value` e o toggle "Valor exibido"; `value.field` e so a
+  // metrica escolhida dentro dele. Quem decide se ha texto no badge e o toggle.
+  const badge = resolveBadge(accent, theme, element.value !== undefined, display);
 
   return (
     <div className={styles.root} data-editable={editable || undefined} data-link={data.link}>
@@ -120,23 +122,30 @@ export function DeviceNode({ data, selected }: NodeProps<DeviceFlowNode>) {
 /**
  * Conteudo do badge, em ordem de precedencia:
  *
- *   1. trigger alarmando          -> o nome da severidade (`HIGH`, `DISASTER`)
- *   2. binding de cor sem dado    -> `NO DATA` em `text.disabled`
- *   3. step de threshold nomeado  -> o nome do step
- *   4. metrica em `value.field`   -> o valor formatado
- *   5. threshold sem nome nem metrica -> so o dot
+ *   1. trigger alarmando        -> o nome da severidade (`HIGH`, `DISASTER`)
+ *   2. binding de cor sem dado  -> `NO DATA` em `text.disabled`
+ *   3. estado com valor exibido -> o texto da regra, ou o valor formatado
+ *   4. estado sem valor exibido -> so o dot
+ *   5. valor exibido sem estado -> o valor formatado
  *
- * O item 4 preserva a pilula de metrica anterior ao Bloco 1: ela mudou de lugar
- * e de peso visual, mas o no nao perdeu a capacidade de exibir um numero.
+ * **`showValue` governa os itens 3 e 5.** O texto de uma regra e o texto do
+ * valor: e o que o Value mappings do Grafana chama de *display text*, e serve
+ * para substituir o numero por uma palavra (`200` -> `UP`). Com o valor
+ * desligado nao ha o que substituir, entao a regra continua pintando o no mas
+ * nao escreve nada — quem sinaliza o estado ali e a cor.
  *
- * A trigger vem primeiro porque e o nivel 0 da cadeia. Ela tambem **substitui**
- * a metrica no badge em vez de disputar espaco: com a trigger no comando, o
- * numero da CPU ao lado da severidade sugeriria que os dois pintam o no.
+ * Trigger e `no data` ficam fora dessa regra de proposito: nenhum dos dois e o
+ * valor da metrica. Sao avisos sobre o proprio vinculo, e some-los junto com o
+ * numero esconderia justamente o que o operador precisa ver.
+ *
+ * A trigger tambem **substitui** a metrica em vez de disputar espaco com ela:
+ * com a trigger no comando, o numero da CPU ao lado da severidade sugeriria que
+ * os dois pintam o no.
  */
 export function resolveBadge(
   accent: ElementColor,
   theme: GrafanaTheme2,
-  valueField: string | undefined,
+  showValue: boolean,
   display: DisplayValue | undefined
 ): { color: string; label: string } | undefined {
   if (accent.state === 'trigger') {
@@ -148,10 +157,12 @@ export function resolveBadge(
   }
 
   if (accent.state === 'threshold') {
-    return { color: accent.color, label: accent.label ?? (valueField ? formatDisplayValue(display) : '') };
+    // Sem `showValue` o label fica vazio e o badge vira um dot: a cor ja esta
+    // no icone e na capsula, e a pilula so repetiria o que eles dizem.
+    return { color: accent.color, label: showValue ? (accent.label ?? formatDisplayValue(display)) : '' };
   }
 
-  if (valueField) {
+  if (showValue) {
     return { color: display?.color ?? theme.colors.text.secondary, label: formatDisplayValue(display) };
   }
 

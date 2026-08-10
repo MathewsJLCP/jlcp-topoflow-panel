@@ -51,7 +51,6 @@ export function NodeForm({ element, topology, frames, onChange }: FormProps<Topo
         onToggle={(on) => patchPresentation({ secondaryText: on ? { mode: 'fixed', fixed: '' } : undefined })}
       >
         <TextDimensionField
-          label="Texto secundário"
           frames={frames}
           value={presentation.secondaryText ?? { mode: 'fixed', fixed: '' }}
           onChange={(secondaryText) => patchPresentation({ secondaryText })}
@@ -65,7 +64,7 @@ export function NodeForm({ element, topology, frames, onChange }: FormProps<Topo
         enabled={element.value !== undefined}
         onToggle={(on) => patch({ value: on ? {} : undefined })}
       >
-        <Field label="Valor exibido" description="Field cujo último valor aparece dentro do nó.">
+        <Field description="Field cujo último valor aparece dentro do nó.">
           <TopoFieldPicker
             frames={frames}
             value={element.value?.field}
@@ -273,9 +272,8 @@ function ToggleField({ label, enabled, onToggle, children }: ToggleFieldProps) {
         <Switch id={id} value={enabled} onChange={(event) => onToggle(event.currentTarget.checked)} />
       </div>
 
-      {/* O rotulo ja esta na linha do switch; o do controle interno seria uma
-          repeticao, entao ele e escondido do olho e mantido para o leitor de
-          tela, que precisa do vinculo entre rotulo e campo. */}
+      {/* Os controles internos nao repetem o rotulo: quem esta dentro de um
+          `ToggleField` ja foi nomeado na linha do switch. */}
       {enabled && <div className={styles.toggleBody}>{children}</div>}
     </div>
   );
@@ -335,12 +333,6 @@ const getFormStyles = (theme: GrafanaTheme2) => ({
   }),
   toggleBody: css({
     marginTop: theme.spacing(1),
-    // O rotulo do controle interno repete o do switch: fica so para o leitor de
-    // tela. `label:first-of-type` nao serve — o `Field` do Grafana envolve o
-    // rotulo numa `div`, entao o alvo e o primeiro filho.
-    '& > div > label:first-of-type > div:first-of-type': {
-      display: 'none',
-    },
   }),
   iconGrid: css({
     display: 'grid',

@@ -94,13 +94,48 @@ describe('parseTopoFlowOptions — thresholds do elemento', () => {
   });
 
   it('preserva as regras salvas', () => {
-    const thresholds = { steps: [{ value: 90, color: 'red', label: 'crítico' }] };
+    const thresholds = { steps: [{ type: 'threshold', value: 90, color: 'red', label: 'crítico' }] };
     const { options, issues } = parseTopoFlowOptions({
       topology: { nodes: [{ ...node, thresholds }], edges: [] },
     });
 
     expect(issues).toEqual([]);
     expect(options.topology.nodes[0].thresholds).toEqual(thresholds);
+  });
+
+  /**
+   * Regras salvas antes dos tipos novos não têm `type` e são todas threshold.
+   * É o `z.preprocess` de `elementRuleSchema` que as resgata — um `.default()`
+   * no discriminador não funcionaria, pelo mesmo motivo já documentado no
+   * binding de trigger.
+   */
+  it('regra salva sem `type` carrega como threshold', () => {
+    const { options, issues } = parseTopoFlowOptions({
+      topology: {
+        nodes: [{ ...node, thresholds: { steps: [{ value: 80, color: 'red', label: 'alto' }] } }],
+        edges: [],
+      },
+    });
+
+    expect(issues).toEqual([]);
+    expect(options.topology.nodes[0].thresholds?.steps).toEqual([
+      { type: 'threshold', value: 80, color: 'red', label: 'alto' },
+    ]);
+  });
+
+  it('aceita os tipos vindos do Value mappings', () => {
+    const steps = [
+      { type: 'value', match: '200', color: 'green', label: 'UP' },
+      { type: 'range', from: 1, to: 5, color: 'blue' },
+      { type: 'regex', pattern: '^ERR', color: 'red' },
+      { type: 'special', match: 'null', color: 'orange' },
+    ];
+    const { options, issues } = parseTopoFlowOptions({
+      topology: { nodes: [{ ...node, thresholds: { steps } }], edges: [] },
+    });
+
+    expect(issues).toEqual([]);
+    expect(options.topology.nodes[0].thresholds?.steps).toEqual(steps);
   });
 
   it('objeto sem `steps` vira lista vazia — que é o mesmo que não ter regra', () => {

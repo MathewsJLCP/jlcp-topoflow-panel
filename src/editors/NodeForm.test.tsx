@@ -38,6 +38,13 @@ describe('NodeForm — texto secundário', () => {
     expect(screen.getAllByPlaceholderText('Texto')).toHaveLength(1);
   });
 
+  /** O `ToggleField` já nomeia o campo na linha do switch. */
+  it('o rótulo não aparece duas vezes quando o campo está ligado', () => {
+    setup({ presentation: { ...node.presentation, secondaryText: { mode: 'fixed', fixed: '' } } });
+
+    expect(screen.getAllByText('Texto secundário')).toHaveLength(1);
+  });
+
   it('ligado, o campo aparece ao lado do primário', () => {
     setup({ presentation: { ...node.presentation, secondaryText: { mode: 'fixed', fixed: '10.0.0.1' } } });
 
@@ -74,6 +81,12 @@ describe('NodeForm — valor exibido', () => {
     setup({ value: undefined });
 
     expect(toggle('Valor exibido')).not.toBeChecked();
+  });
+
+  it('o rótulo não aparece duas vezes quando o campo está ligado', () => {
+    setup({ value: { field: 'cpu' } });
+
+    expect(screen.getAllByText('Valor exibido')).toHaveLength(1);
   });
 
   it('ligar cria o vínculo ainda sem field', () => {
@@ -138,7 +151,11 @@ describe('NodeForm — ícone', () => {
 });
 
 describe('NodeForm — thresholds do elemento', () => {
-  const addRule = () => screen.getByRole('button', { name: /Adicionar regra/ });
+  /** O botão abre um menu de tipos; a regra só nasce ao escolher um deles. */
+  const addRule = (tipo: string) => {
+    fireEvent.click(screen.getByRole('button', { name: /Adicionar regra/ }));
+    fireEvent.click(screen.getByRole('menuitem', { name: new RegExp(tipo) }));
+  };
 
   it('sem regra própria, avisa que o field continua mandando', () => {
     setup({ thresholds: undefined });
@@ -146,27 +163,41 @@ describe('NodeForm — thresholds do elemento', () => {
     expect(screen.getByText(/segue os thresholds configurados no field/)).toBeInTheDocument();
   });
 
-  it('adicionar a primeira regra cria o step', () => {
-    const { result } = setup({ thresholds: undefined });
+  it('a cor de repouso aparece como a linha Base, ao pé da lista', () => {
+    setup();
 
-    fireEvent.click(addRule());
-
-    expect(result()?.thresholds?.steps).toEqual([{ value: 80, color: 'yellow' }]);
+    expect(screen.getByText('Base')).toBeInTheDocument();
+    // O rótulo antigo saiu: a Base ocupa o lugar dele.
+    expect(screen.queryByText('Cor de repouso')).not.toBeInTheDocument();
   });
 
-  it('as regras ficam ordenadas da maior para a menor', () => {
+  it('adicionar o primeiro threshold cria a regra', () => {
+    const { result } = setup({ thresholds: undefined });
+
+    addRule('Threshold');
+
+    expect(result()?.thresholds?.steps).toEqual([{ type: 'threshold', value: 80, color: 'yellow' }]);
+  });
+
+  it('os thresholds ficam ordenados do maior para o menor', () => {
     const { result } = setup({
-      thresholds: { steps: [{ value: 70, color: 'orange' }] },
+      thresholds: { steps: [{ type: 'threshold' as const, value: 70, color: 'orange' }] },
     });
 
-    fireEvent.click(addRule());
+    addRule('Threshold');
 
-    expect(result()?.thresholds?.steps.map((step) => step.value)).toEqual([80, 70]);
+    // `flatMap` em vez de `map`: a lista é uma união de tipos de regra, e só a
+    // de threshold tem `value`.
+    const valores = result()?.thresholds?.steps.flatMap((rule) => (rule.type === 'threshold' ? [rule.value] : []));
+
+    expect(valores).toEqual([80, 70]);
   });
 
   /** Voltar a zero regras devolve o elemento ao pipeline nativo (D8). */
   it('remover a última regra apaga o objeto inteiro', () => {
-    const { result } = setup({ thresholds: { steps: [{ value: 90, color: 'red' }] } });
+    const { result } = setup({
+      thresholds: { steps: [{ type: 'threshold' as const, value: 90, color: 'red' }] },
+    });
 
     fireEvent.click(screen.getByRole('button', { name: 'Remover regra' }));
 
@@ -175,19 +206,90 @@ describe('NodeForm — thresholds do elemento', () => {
 
   it('editar o valor de uma regra reescreve só ela', () => {
     const { result } = setup({
-      thresholds: { steps: [{ value: 90, color: 'red', label: 'crítico' }] },
+      thresholds: { steps: [{ type: 'threshold' as const, value: 90, color: 'red', label: 'crítico' }] },
     });
 
     fireEvent.change(screen.getByLabelText('Valor da regra 1'), { target: { value: '95' } });
 
-    expect(result()?.thresholds?.steps).toEqual([{ value: 95, color: 'red', label: 'crítico' }]);
+    expect(result()?.thresholds?.steps).toEqual([
+      { type: 'threshold', value: 95, color: 'red', label: 'crítico' },
+    ]);
   });
 
-  it('o campo de estado escreve em `color.field`', () => {
+  it('o campo de estado continua acima das regras', () => {
     setup();
 
     expect(screen.getByText('Campo de estado')).toBeInTheDocument();
-    expect(screen.getByText('Cor de repouso')).toBeInTheDocument();
+  });
+});
+
+/**
+ * A fusão pedida na rodada de correções: os tipos que no Grafana vivem no
+ * Value mappings entram na mesma lista dos thresholds.
+ */
+describe('NodeForm — tipos de regra vindos do Value mappings', () => {
+  const addRule = (tipo: string) => {
+    fireEvent.click(screen.getByRole('button', { name: /Adicionar regra/ }));
+    fireEvent.click(screen.getByRole('menuitem', { name: new RegExp(tipo) }));
+  };
+
+  it('valor exato', () => {
+    const { result } = setup({ thresholds: undefined });
+
+    addRule('Valor');
+
+    expect(result()?.thresholds?.steps).toEqual([{ type: 'value', match: '', color: 'blue' }]);
+  });
+
+  it('faixa', () => {
+    const { result } = setup({ thresholds: undefined });
+
+    addRule('Faixa');
+
+    expect(result()?.thresholds?.steps).toEqual([{ type: 'range', from: 0, to: 10, color: 'blue' }]);
+  });
+
+  it('regex', () => {
+    const { result } = setup({ thresholds: undefined });
+
+    addRule('Regex');
+
+    expect(result()?.thresholds?.steps).toEqual([{ type: 'regex', pattern: '', color: 'blue' }]);
+  });
+
+  it('especial', () => {
+    const { result } = setup({ thresholds: undefined });
+
+    addRule('Especial');
+
+    expect(result()?.thresholds?.steps).toEqual([{ type: 'special', match: 'null', color: 'blue' }]);
+  });
+
+  it('cada tipo mostra a condição que lhe cabe', () => {
+    setup({
+      thresholds: {
+        steps: [
+          { type: 'range' as const, from: 1, to: 5, color: 'blue' },
+          { type: 'threshold' as const, value: 90, color: 'red' },
+        ],
+      },
+    });
+
+    expect(screen.getByLabelText('Início da faixa da regra 1')).toBeInTheDocument();
+    expect(screen.getByLabelText('Fim da faixa da regra 1')).toBeInTheDocument();
+    expect(screen.getByLabelText('Valor da regra 2')).toBeInTheDocument();
+  });
+
+  it('o texto exibido é o mesmo campo para todos os tipos', () => {
+    const { result } = setup({
+      thresholds: { steps: [{ type: 'value' as const, match: '200', color: 'green' }] },
+    });
+
+    fireEvent.change(screen.getByLabelText('Texto exibido da regra 1'), { target: { value: 'UP' } });
+
+    expect(result()?.thresholds?.steps).toEqual([
+      { type: 'value', match: '200', color: 'green', label: 'UP' },
+    ]);
   });
 });
 

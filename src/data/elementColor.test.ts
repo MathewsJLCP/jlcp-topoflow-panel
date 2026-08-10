@@ -250,7 +250,7 @@ describe('accentColor', () => {
  * opções do field para descobrir.
  */
 describe('resolveElementColor — nível 1a (threshold do elemento)', () => {
-  const REGRAS = { steps: [{ value: 70, color: 'orange', label: 'atenção' }] };
+  const REGRAS = { steps: [{ type: 'threshold' as const, value: 70, color: 'orange', label: 'atenção' }] };
 
   it('a regra do elemento vence a do field', () => {
     // O field diz `red`/`crítico` em 92; a regra do elemento diz `orange`.
@@ -280,7 +280,7 @@ describe('resolveElementColor — nível 1a (threshold do elemento)', () => {
    */
   it('abaixo da regra própria, o elemento fica em repouso — não volta ao field', () => {
     const frames = buildFrames('cpu', [92]);
-    const acimaDoField = { steps: [{ value: 95, color: 'red' }] };
+    const acimaDoField = { steps: [{ type: 'threshold' as const, value: 95, color: 'red' }] };
 
     expect(resolveElementColor({ fixed: 'blue', field: 'cpu' }, frames, theme, { thresholds: acimaDoField })).toEqual({
       state: 'fixed',
@@ -290,7 +290,7 @@ describe('resolveElementColor — nível 1a (threshold do elemento)', () => {
 
   it('step sem rótulo deixa o badge livre para a métrica', () => {
     const frames = buildFrames('cpu', [92]);
-    const semRotulo = { steps: [{ value: 70, color: 'orange' }] };
+    const semRotulo = { steps: [{ type: 'threshold' as const, value: 70, color: 'orange' }] };
 
     expect(resolveElementColor({ field: 'cpu' }, frames, theme, { thresholds: semRotulo })).toEqual({
       state: 'threshold',

@@ -3,7 +3,7 @@ import { DataFrame, Field, GrafanaTheme2, ThresholdsMode, getActiveThreshold } f
 import { ColorDimension, ElementThresholds, TriggerBinding } from '../model/types';
 import { getLastNotNullValue } from './dimensions';
 import { Severity } from './problems';
-import { hasOwnThresholds, resolveOwnThreshold } from './thresholds';
+import { hasOwnThresholds, hasSpecialRule, resolveOwnThreshold } from './thresholds';
 import { resolveTriggerState } from './triggerState';
 
 /**
@@ -96,26 +96,43 @@ export function resolveElementColor(
   if (dim.field && !trigger?.enabled) {
     const hit = getLastNotNullValue(frames, dim.field);
 
-    // Field ausente das series, ou presente e sem nenhum valor util. Nao cai
-    // para `fixed` nem para verde: sem dado precisa ser visivelmente diferente
-    // de saudavel, senao um painel mudo passa por painel saudavel.
-    if (!hit || hit.value == null || !hit.field.display) {
+    // Field ausente das series: nao ha valor nenhum a avaliar. Nao cai para
+    // `fixed` nem para verde — sem dado precisa ser visivelmente diferente de
+    // saudavel, senao um painel mudo passa por painel saudavel.
+    if (!hit) {
+      return { state: 'nodata' };
+    }
+
+    // Field presente, sem valor util. A excecao e a regra `special`: quem
+    // configurou um mapeamento para nulo ou NaN pediu explicitamente para
+    // tratar a ausencia de dado, e o `nodata` generico atropelaria a escolha.
+    const semDado = hit.value == null || !hit.field.display;
+    if (semDado && !hasSpecialRule(thresholds)) {
       return { state: 'nodata' };
     }
 
     if (hasOwnThresholds(thresholds)) {
-      // 1a. Regra do elemento. Nenhum step ativo significa "abaixo de tudo" —
-      // sem estado —, e nao "consulte o field": a regra propria e a autoridade.
-      const step = resolveOwnThreshold(thresholds, hit.value);
-      if (step) {
+      // 1a. Regra do elemento. Nenhuma regra ativa significa "nao casou com
+      // nada" — sem estado —, e nao "consulte o field": a regra propria e a
+      // autoridade sobre aquele elemento.
+      const rule = resolveOwnThreshold(thresholds, hit.value);
+      if (rule) {
         return {
           state: 'threshold',
-          color: theme.visualization.getColorByName(step.color),
-          label: step.label || undefined,
+          color: theme.visualization.getColorByName(rule.color),
+          label: rule.label || undefined,
         };
       }
-    } else if (hasCustomThresholds(hit.field)) {
-      // 1b. Pipeline nativo, para quem nao definiu regra propria.
+
+      // Nenhuma regra casou e nao ha dado: o estado volta a ser ausencia.
+      if (semDado) {
+        return { state: 'nodata' };
+      }
+    } else if (hit.field.display && hasCustomThresholds(hit.field)) {
+      // 1b. Pipeline nativo, para quem nao definiu regra propria. O guard em
+      // `display` e o que prova ao compilador que o caminho de "sem dado" ja
+      // saiu daqui — so uma regra `special` chega ate aqui sem valor util, e
+      // ela implica regra propria, tratada no ramo acima.
       const display = hit.field.display(hit.value);
       if (display.color) {
         return { state: 'threshold', color: display.color, label: thresholdLabel(hit.field, hit.value) };

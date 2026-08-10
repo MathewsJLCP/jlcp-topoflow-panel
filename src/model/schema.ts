@@ -41,39 +41,93 @@ export const valueDimensionSchema = z.object({
 });
 
 /**
- * Regra de estado por elemento, sobre o valor do field em `color.field`.
+ * Regras de estado por elemento, sobre o valor do field em `color.field`.
  *
  * **Coexiste** com o pipeline nativo do Grafana (decisao D8): um elemento sem
- * step proprio continua sendo pintado pelos thresholds do field, exatamente
- * como antes. Quem define steps aqui passa a mandar, e o nativo sai de cena
+ * regra propria continua sendo pintado pelos thresholds do field, exatamente
+ * como antes. Quem define regra aqui passa a mandar, e o nativo sai de cena
  * para aquele elemento — misturar os dois daria uma cor que ninguem consegue
  * explicar olhando so para um lugar.
  *
  * Duas diferencas deliberadas em relacao ao `ThresholdsConfig` do core:
  *
- *   - **Nao existe step base.** No core o step base e o `-Infinity`, que pinta
- *     tudo que esta abaixo da primeira regra — e a fonte do "verde por
- *     omissao". Aqui, valor abaixo de todos os steps significa "sem estado", e
- *     a cadeia de cor segue para `color.fixed` (a identidade do elemento) e
- *     depois para o neutro.
+ *   - **Nao existe step base dentro da lista.** No core o base e o `-Infinity`,
+ *     que pinta tudo abaixo da primeira regra — e a fonte do "verde por
+ *     omissao". Aqui, valor abaixo de todas as regras significa "sem estado", e
+ *     a cadeia de cor segue para `color.fixed`, que o editor apresenta como a
+ *     linha **Base** ao pe da lista. E o mesmo dado de sempre, no lugar onde o
+ *     usuario do Grafana espera encontra-lo.
  *   - **So modo absoluto.** O modo percentual do core depende de min/max do
  *     field, que nem sempre existe; um seletor de modo que so funciona as vezes
  *     e pior do que nao ter seletor. `mode` pode entrar depois como campo
  *     opcional, sem migracao.
  */
+/** Casos que o valor sozinho nao expressa — os "Special" do Value mappings. */
+export const specialMatchSchema = z.enum(['null', 'nan', 'null+nan', 'true', 'false', 'empty']);
+
+/**
+ * Uma regra do bloco Thresholds.
+ *
+ * Junta num modelo so os dois mecanismos que o Grafana mantem separados: o
+ * **Thresholds** (faixa aberta, "a partir de X") e o **Value mappings** (valor
+ * exato, faixa fechada, regex e casos especiais). Separados, configurar um
+ * elemento exigia visitar dois lugares que produzem a mesma coisa — uma cor e
+ * um texto — com precedencias que so quem conhece o core sabe prever.
+ *
+ * **Cor e obrigatoria em toda regra**, e e o desvio deliberado em relacao ao
+ * Value mappings do core, onde ela e opcional. Uma regra sem cor so produziria
+ * texto, e num elemento de topologia o texto e o acessorio: quem carrega o
+ * estado e a cor. Deixar a cor opcional obrigaria a cadeia de cor a devolver
+ * "sem estado, mas com texto", um quarto caso que nenhum consumidor sabe pintar.
+ */
+export const elementRuleSchema = z.preprocess(
+  // Regras salvas antes dos tipos novos nao tem `type` e sao todas threshold.
+  // Um `.default()` no discriminador nao resolveria: o zod 4 aplica o default
+  // *depois* de rotear, entao o objeto legado falharia antes de chegar la — a
+  // mesma armadilha ja documentada em `triggerBindingSchema`.
+  (raw) => (typeof raw === 'object' && raw !== null && !('type' in raw) ? { ...raw, type: 'threshold' } : raw),
+  z.discriminatedUnion('type', [
+    /** A partir deste valor, inclusive. */
+    z.object({
+      type: z.literal('threshold'),
+      value: z.number(),
+      color: z.string(),
+      label: z.string().optional(),
+    }),
+    /** Valor exato, comparado como texto. */
+    z.object({
+      type: z.literal('value'),
+      match: z.string(),
+      color: z.string(),
+      label: z.string().optional(),
+    }),
+    /** Faixa fechada: `from <= valor <= to`. */
+    z.object({
+      type: z.literal('range'),
+      from: z.number(),
+      to: z.number(),
+      color: z.string(),
+      label: z.string().optional(),
+    }),
+    z.object({
+      type: z.literal('regex'),
+      pattern: z.string(),
+      color: z.string(),
+      label: z.string().optional(),
+    }),
+    z.object({
+      type: z.literal('special'),
+      match: specialMatchSchema,
+      color: z.string(),
+      label: z.string().optional(),
+    }),
+  ])
+);
+
 export const elementThresholdsSchema = z.object({
-  steps: z
-    .array(
-      z.object({
-        /** Piso do step: vale a partir deste valor, inclusive. */
-        value: z.number(),
-        /** Nome de cor do tema (ex.: 'red'), resolvido com `getColorByName`. */
-        color: z.string(),
-        /** Rotulo do badge. Sem ele, o badge mostra o valor da metrica. */
-        label: z.string().optional(),
-      })
-    )
-    .default([]),
+  // O nome `steps` fica por retrocompatibilidade: renomear exigiria migrador
+  // para ganhar nada — a lista sempre foi a lista de regras.
+  steps: z.array(elementRuleSchema).default([]),
 });
 
 /**
