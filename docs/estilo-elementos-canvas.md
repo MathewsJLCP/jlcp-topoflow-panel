@@ -44,8 +44,9 @@ export const POSTIT_DEFAULT = { width: 250, height: 170, minWidth: 160, minHeigh
 
 ### Regras que valem para todos os elementos
 
-1. **Zero cor literal no componente.** Só token de tema ou `data.defaultColor` (acento escolhido
-   pelo usuário). Quando há acento, ele pinta **só o ponto de acento** — nunca o card inteiro.
+1. **Zero cor literal no componente.** Só token de tema ou a cor resolvida pela cadeia de estado
+   (`src/data/elementColor.ts`). Em **qual superfície** essa cor pousa é assunto do §8 — e a
+   resposta mudou: hoje ela pinta o elemento inteiro.
 2. **Handles invisíveis em repouso** (`opacity: 0`), revelados no `:hover` do elemento.
 3. **Transições de 150 ms** em `border-color`, `box-shadow`, `transform`, `opacity`. Nada mais.
 4. Geometria vive em `node.position` / `node.width|height`; `data` guarda só apresentação.
@@ -71,8 +72,8 @@ Card horizontal **180×60**: cápsula de ícone à esquerda, bloco de texto à d
 - **Selecionado**: borda → `primary.main` + `box-shadow: 0 0 0 1px primary.main`.
   O hover **não** sobrescreve a borda de seleção.
 - **Cápsula de ícone**: `32×32`, `flex: 0 0 32px`, raio `6px`, fundo `background.primary`,
-  ícone lucide `size={20} strokeWidth={1.6}`, cor `text.secondary` — **trocada por `defaultColor`
-  quando houver acento**.
+  ícone `size={20} strokeWidth={1.6}`, cor `text.secondary`. **Com estado**, os dois derivam do
+  token de contraste — ver §8.
 - **Texto multilinha**: `primaryText.split('\n')` → linha 1 é o título; as demais viram sublinhas
   mono. `white-space: pre-wrap`, `word-break: break-word`.
 - **Handles**: 4 (Top target, Right source, Bottom target, Left source), `8×8`, círculo,
@@ -363,3 +364,77 @@ elemento só daria um salto de zoom desconcertante.
 A API é `@alpha` e documentada como suportada apenas em contexto de dashboard, então todo acesso é
 opcional dos dois lados: sem o canal, cada lado funciona isolado. O que se perde é a sincronia,
 nunca a edição.
+
+---
+
+## 8. Cor de estado
+
+> ⚠️ **Esta seção reverte a regra A.2 original**, que dizia: *"a cor de estado incide apenas em
+> ícone, cápsula e badge — nunca no fill do card"*. A justificativa de então era o excesso de
+> saturação: num NOC com 30 alarmes simultâneos, 30 retângulos vermelhos viram letreiro. A reversão
+> vem do PRD de UX (item 6.2) e tem justificativa oposta e igualmente concreta: numa topologia de
+> parede, lida a metros de distância, um ícone de 20px não carrega o sinal — a área carrega.
+> O custo continua existindo; foi aceito conscientemente.
+
+**Regra:** o elemento com estado assume a cor de estado no **fundo inteiro**, e todo conteúdo sobre
+ele (texto, ícone, cápsula, badge) passa a derivar do token de contraste.
+
+### Quais elementos preenchem
+
+| Tipo | Superfície de estado |
+|---|---|
+| **Nó** | O card inteiro. É o elemento a que a regra se refere. |
+| **Point** | Já preenchido: com 14px, borda de 2px mais halo, o estado ocupa o elemento inteiro por construção. |
+| **Text** | Nunca. Não tem superfície própria — a cor pousa no glifo. Preenchê-lo o transformaria num card, exatamente como acontece na seleção (§7). |
+| **Conexão** | Nunca. Um traço não tem fundo; o estado é o próprio `stroke`. |
+| **Postit** | Fora do modelo de estado: sua cor é escolha estática do usuário, com opacidade própria. |
+
+### Estados que **não** preenchem
+
+`nodata` e `neutral` não são cor clara nem escura — são **ausência de estado**, e o elemento fica
+com o fundo neutro do tema. É o que preserva A.4: um painel mudo tem que continuar visivelmente
+distinto de um painel saudável, e preenchê-lo com qualquer cor apagaria a diferença.
+
+`fixed` (a linha **Base** do editor de Thresholds) **preenche**. Depois que a cor de repouso passou
+a ser a Base da lista de regras, ela é o estado "nenhuma regra casou" — e não mais um acento de
+identidade. Consequência a conhecer: um nó com cor Base definida e nenhuma regra vira um card
+inteiramente daquela cor.
+
+### Contraste (WCAG AA)
+
+O par fundo + texto sai junto de `stateFill()` (`src/canvas/stateFill.ts`). Sair junto é o ponto:
+foi a separação dos dois — card preenchido, texto preso a `text.primary` — que tornou a regra A.2
+necessária em primeiro lugar.
+
+**`theme.colors.getContrastText(bg)` sozinho não serve.** Ele usa o `contrastThreshold` do tema,
+que vale `3` — o critério AA para *texto grande* (24px, ou 18.66px em negrito). O texto do nó é
+14px e 12px, então o critério aplicável é **4.5**. A diferença é real e cai justo nas duas cores
+mais frequentes de um NOC:
+
+| Fundo | `getContrastText` | Razão | Melhor candidato | Razão |
+|---|---|---|---|---|
+| `red` `#F2495C` | claro | **3.57** ✗ | escuro | 5.88 ✓ |
+| `blue` `#5794F2` | claro | **3.03** ✗ | escuro | 6.92 ✓ |
+| `yellow` `#FADE2A` | escuro | 15.54 ✓ | escuro | 15.54 ✓ |
+| `dark-red` `#C4162A` | claro | 6.00 ✓ | claro | 6.00 ✓ |
+
+Então o helper mede **os dois** candidatos e fica com o de maior contraste. Os candidatos vêm do
+próprio tema, forçados por limiar (`getContrastText(bg, 1)` → claro, `getContrastText(bg, 22)` →
+escuro), e não de `#fff`/`#000` literais — a regra 1 do §1 vale aqui também.
+
+A alternativa seria escurecer o fundo até o texto claro alcançar 4.5, mas aí a cor do card deixaria
+de ser a cor que o usuário escolheu e que o swatch do editor mostra. Preferir o texto escuro mantém
+a cor de estado intacta. `src/canvas/stateFill.test.ts` prova AA para o mapa de severidade e a
+paleta do editor, nos dois temas.
+
+### Hierarquia sobre o fundo preenchido
+
+- **Texto secundário**: `alpha(fill.text, 0.8)` — mesma cor de contraste, não `text.secondary`,
+  que só tem contraste garantido sobre o fundo neutro.
+- **Cápsula de ícone**: `alpha(fill.text, 0.15)` de fundo, `inset 0 0 0 1px alpha(fill.text, 0.25)`.
+- **Badge**: sempre o token de contraste, **inclusive quando teria cor própria** — a cor própria do
+  badge é justamente a do fundo nos estados de trigger e threshold.
+- **Badge sem rótulo**: com o card preenchido, some. O dot existia para dizer "há estado aqui", e
+  180×60 de cor já dizem isso.
+- **Borda**: o fill não a toca. É dela que saem o hover e o anel de seleção (§7), e um estilo inline
+  venceria as duas classes.

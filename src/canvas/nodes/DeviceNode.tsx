@@ -5,9 +5,10 @@ import { useStyles2, useTheme2 } from '@grafana/ui';
 import { Handle, HandleType, NodeProps, Position } from '@xyflow/react';
 
 import { formatDisplayValue, resolveDisplayValue, resolveText } from '../../data/dimensions';
-import { ElementColor, accentColor, resolveElementColor } from '../../data/elementColor';
+import { ElementColor, resolveElementColor } from '../../data/elementColor';
 import { DeviceFlowNode } from '../flowTypes';
 import { TopoIcon, resolveTopoIcon } from '../icons';
+import { stateFill } from '../stateFill';
 import { HANDLE_SIZE, ICON_BOX_SIZE, ICON_SIZE, TRANSITION_FAST, alpha } from '../tokens';
 
 /** Ganchos estaveis para os seletores: o nome do Emotion muda entre builds. */
@@ -26,11 +27,20 @@ const NO_DATA_LABEL = 'no data';
 /**
  * No de dispositivo: capsula de icone + bloco de texto + badge de estado.
  *
- * A cor resolvida pinta **so o icone, a capsula e o badge** (Anexo A.2). Card,
- * borda e texto ficam sempre neutros: um no DOWN continua sendo um card cinza
- * `background.secondary`, e o que fica vermelho e o icone. E isso que mantem
- * uma topologia de 200 nos legivel quando 30 estao em alerta — preencher o card
- * inteiro transformaria a cena em letreiro.
+ * **O card inteiro assume a cor de estado** (doc de estilo §8). Um no com
+ * severidade High e um retangulo vermelho de 180x60, nao um card cinza com um
+ * icone vermelho.
+ *
+ * Isto reverte a regra A.2 original, que restringia a cor a icone, capsula e
+ * badge para nao transformar um NOC com 30 alarmes em letreiro. A reversao e
+ * deliberada e vem do PRD 6.2: numa topologia de parede, lida a metros de
+ * distancia, um icone de 20px nao carrega o sinal — a area carrega. O custo
+ * conhecido e o excesso de saturacao com muitos alarmes simultaneos.
+ *
+ * O que impede o preenchimento de virar ilegibilidade e o `stateFill`: ele
+ * devolve o fundo **e** a cor de texto que o tema garante legivel sobre ele. Com
+ * o card preenchido, texto, icone, capsula e badge derivam todos de `fill.text`
+ * — nenhum deles pode mais assumir que o fundo e escuro.
  */
 export function DeviceNode({ data, selected }: NodeProps<DeviceFlowNode>) {
   const theme = useTheme2();
@@ -44,19 +54,22 @@ export function DeviceNode({ data, selected }: NodeProps<DeviceFlowNode>) {
   const primary = resolveText(element.presentation.primaryText, frames);
   const secondary = element.presentation.secondaryText && resolveText(element.presentation.secondaryText, frames);
 
-  // `tint` so existe nos niveis 0, 1 e 2 da cadeia. Sem ele a capsula fica
-  // `background.primary` e o icone `text.secondary` — o estado neutro de A.3.
-  // Uma trigger alarmando pousa exatamente onde o threshold pousa: icone,
-  // capsula e badge. O card continua `background.secondary` — encher o card
-  // inteiro de vermelho e o que transforma um NOC com 30 alarmes em letreiro.
-  const tint = accentColor(accent);
+  // `fill` so existe nos niveis 0, 1 e 2 da cadeia. Sem ele o card fica
+  // `background.secondary`, a capsula `background.primary` e o icone
+  // `text.secondary` — o estado neutro de A.3, que continua valendo para
+  // `nodata` e `neutral`.
+  const fill = stateFill(accent, theme);
   const iconColor =
-    tint ?? (accent.state === 'nodata' ? theme.colors.text.disabled : theme.colors.text.secondary);
+    fill?.text ?? (accent.state === 'nodata' ? theme.colors.text.disabled : theme.colors.text.secondary);
 
   const display = resolveDisplayValue(frames, element.value?.field);
   // A presenca de `value` e o toggle "Valor exibido"; `value.field` e so a
   // metrica escolhida dentro dele. Quem decide se ha texto no badge e o toggle.
   const badge = resolveBadge(accent, theme, element.value !== undefined, display);
+  // Sobre um card preenchido, qualquer cor propria do badge disputa com o fundo
+  // — inclusive a dele mesmo, que **e** o fundo nos estados de trigger e
+  // threshold. O token de contraste e o unico legivel ali por construcao.
+  const badgeColor = fill ? fill.text : badge?.color;
 
   return (
     <div className={styles.root} data-editable={editable || undefined} data-link={data.link}>
@@ -64,6 +77,10 @@ export function DeviceNode({ data, selected }: NodeProps<DeviceFlowNode>) {
           linkagem ela e, de fato, o elemento em foco. */}
       <div
         className={cx(styles.card, CARD_CLASS, (selected || data.link === 'source') && styles.cardSelected)}
+        // Inline e nao classe porque a cor vem do dado. Nao toca em `border` de
+        // proposito: e da borda que saem o hover e o anel de selecao, e um
+        // estilo inline venceria as duas classes.
+        style={fill ? { background: fill.background } : undefined}
       >
         {/* Sem icone, a capsula tambem sai — uma caixa vazia no lugar dele
             deixaria o texto desalinhado por um motivo invisivel. */}
@@ -71,8 +88,8 @@ export function DeviceNode({ data, selected }: NodeProps<DeviceFlowNode>) {
           <span
             className={styles.iconBox}
             style={
-              tint
-                ? { background: alpha(tint, 0.12), boxShadow: `inset 0 0 0 1px ${alpha(tint, 0.3)}` }
+              fill
+                ? { background: alpha(fill.text, 0.15), boxShadow: `inset 0 0 0 1px ${alpha(fill.text, 0.25)}` }
                 : undefined
             }
           >
@@ -81,27 +98,39 @@ export function DeviceNode({ data, selected }: NodeProps<DeviceFlowNode>) {
         )}
 
         <div className={styles.textBlock}>
-          <div className={styles.primary}>{primary}</div>
-          {secondary && <div className={styles.secondary}>{secondary}</div>}
+          <div className={styles.primary} style={fill ? { color: fill.text } : undefined}>
+            {primary}
+          </div>
+          {/* A hierarquia entre primario e secundario e mantida por opacidade
+              sobre a mesma cor de contraste, e nao por `text.secondary`, que so
+              tem contraste garantido sobre o fundo neutro do tema. */}
+          {secondary && (
+            <div className={styles.secondary} style={fill ? { color: alpha(fill.text, 0.8) } : undefined}>
+              {secondary}
+            </div>
+          )}
         </div>
 
-        {badge &&
-          (badge.label ? (
-            <span
-              className={styles.badge}
-              style={{
-                color: badge.color,
-                background: alpha(badge.color, 0.15),
-                borderColor: alpha(badge.color, 0.35),
-              }}
-            >
-              {badge.label}
-            </span>
-          ) : (
-            // Step colorido mas sem nome e sem metrica: um dot basta, e uma
-            // pilula vazia so ocuparia o canto sem dizer nada.
-            <span className={styles.badgeDot} style={{ background: badge.color }} />
-          ))}
+        {badge && badgeColor && badge.label && (
+          <span
+            className={styles.badge}
+            style={{
+              color: badgeColor,
+              background: alpha(badgeColor, 0.15),
+              borderColor: alpha(badgeColor, 0.35),
+            }}
+          >
+            {badge.label}
+          </span>
+        )}
+
+        {/* Estado colorido sem texto: um dot basta, e uma pilula vazia so
+            ocuparia o canto sem dizer nada. Com o card preenchido nem o dot se
+            justifica — ele existia para dizer "ha estado aqui", e o card
+            inteiro ja diz isso em 180x60. */}
+        {badge && badgeColor && !badge.label && !fill && (
+          <span className={styles.badgeDot} style={{ background: badgeColor }} />
+        )}
       </div>
 
       {/* Fora do card de proposito: o card sobe 1px no hover, e handles ali
@@ -125,8 +154,13 @@ export function DeviceNode({ data, selected }: NodeProps<DeviceFlowNode>) {
  *   1. trigger alarmando        -> o nome da severidade (`HIGH`, `DISASTER`)
  *   2. binding de cor sem dado  -> `NO DATA` em `text.disabled`
  *   3. estado com valor exibido -> o texto da regra, ou o valor formatado
- *   4. estado sem valor exibido -> so o dot
+ *   4. estado sem valor exibido -> rotulo vazio
  *   5. valor exibido sem estado -> o valor formatado
+ *
+ * Quem decide como um rotulo vazio aparece e o `DeviceNode`: com o card neutro
+ * vira um dot, com o card preenchido nao vira nada. A cor devolvida aqui e a do
+ * estado, tambem sujeita a troca pelo token de contraste quando ha fill — este
+ * helper responde pelo **conteudo** do badge, nao pela superficie onde ele pousa.
  *
  * **`showValue` governa os itens 3 e 5.** O texto de uma regra e o texto do
  * valor: e o que o Value mappings do Grafana chama de *display text*, e serve
