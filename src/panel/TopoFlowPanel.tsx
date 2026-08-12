@@ -1,14 +1,13 @@
 import React, { useCallback, useMemo } from 'react';
-import { CoreApp, PanelProps, cacheFieldDisplayNames } from '@grafana/data';
-import { Alert, usePanelContext } from '@grafana/ui';
+import { PanelProps, cacheFieldDisplayNames } from '@grafana/data';
+import { locationService } from '@grafana/runtime';
+import { Alert } from '@grafana/ui';
 
 import { TopologyCanvas } from '../canvas/TopologyCanvas';
 import { parseTopoFlowOptions } from '../model/parse';
 import { TopoFlowOptions, Topology } from '../model/types';
 
 export function TopoFlowPanel({ options, data, width, height, onOptionsChange }: PanelProps<TopoFlowOptions>) {
-  const { app } = usePanelContext();
-
   const { options: parsed, issues } = useMemo(() => parseTopoFlowOptions(options), [options]);
 
   /**
@@ -27,14 +26,34 @@ export function TopoFlowPanel({ options, data, width, height, onOptionsChange }:
     [onOptionsChange, parsed]
   );
 
-  // No editor de painel a edicao vem ligada; no dashboard depende do toggle.
-  // Assim quem so visualiza nao arrasta a topologia por acidente.
-  const editable = app === CoreApp.PanelEditor || parsed.canvas.inlineEditing;
+  /**
+   * No editor de painel a edicao vem ligada; no dashboard depende do toggle.
+   * Assim quem so visualiza nao arrasta a topologia por acidente.
+   *
+   * A URL, e nao `usePanelContext().app`, porque no Grafana 13 esse campo nao e
+   * confiavel: o `VizPanel` do `@grafana/scenes` constroi o panel context uma
+   * unica vez com `app: CoreApp.Unknown`, e o `setDashboardPanelContext` do core
+   * **muta** `context.app` dentro de um `subscribeToState` — mutacao de objeto,
+   * sem re-render e sem propagacao garantida ate aqui.
+   *
+   * O efeito era o canvas inteiro nascer inerte quando se chegava ao editor
+   * navegando (dashboard -> Edit -> menu do painel -> Edit): sem menu de
+   * contexto, sem selecao e sem arraste, enquanto o mesmo editor alcancado por
+   * URL direta (F5, deep link) funcionava. Uma so entrada errada desligava as
+   * sete props de interacao do `<ReactFlow>` de uma vez.
+   *
+   * E o que o canvas nativo do Grafana faz, pelo mesmo motivo:
+   * `public/app/plugins/panel/canvas/CanvasPanel.tsx` le `editPanel` do
+   * `locationService`. Ler a cada render (e nao uma vez, como o core) e de
+   * graca e dispensa qualquer sincronia: entrar e sair do editor sempre
+   * re-renderiza o painel.
+   */
+  const editable = locationService.getSearchObject().editPanel !== undefined || parsed.canvas.inlineEditing;
 
   return (
     <>
       {issues.length > 0 && (
-        <Alert severity="warning" title="Opções inválidas — usando defaults">
+        <Alert severity="warning" title="Opções inválidas, usando defaults">
           <ul>
             {issues.map((issue) => (
               <li key={issue}>{issue}</li>

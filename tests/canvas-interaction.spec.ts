@@ -163,6 +163,44 @@ test('elemento sob os controles de zoom nao recebe clique (problema conhecido)',
 });
 
 /**
+ * O mesmo editor, alcancado **pela UI** em vez de por URL direta.
+ *
+ * Os testes acima usam `gotoPanelEditPage`, que navega direto para
+ * `?editPanel=1`. Esse atalho escondeu um bug que derrubava o canvas inteiro:
+ * quando se chegava ao editor navegando (dashboard -> Edit -> menu do painel ->
+ * Edit), `usePanelContext().app` nao valia `PanelEditor`, `editable` nascia
+ * `false` e as sete props de interacao do `<ReactFlow>` desligavam de uma vez —
+ * sem menu de contexto, sem selecao, sem arraste. Recarregar a pagina
+ * "consertava", porque o F5 cai justamente no caminho da URL direta.
+ *
+ * O modo passou a sair da URL (`TopoFlowPanel`), e este teste guarda o caminho
+ * que a suite nao cobria. Ele nao repete as tres interacoes: cobra a **entrada**
+ * — se `editable` estiver certo, o resto ja tem teste.
+ */
+test('o editor alcancado pela UI tambem edita', async ({ readProvisionedDashboard, page }) => {
+  const dashboard = await readProvisionedDashboard({ fileName: 'dashboard.json' });
+  await page.goto(`/d/${dashboard.uid}`, nav);
+  await expect(page.locator(NODE).first()).toBeVisible();
+
+  await page.getByTestId('data-testid Edit dashboard button').click();
+
+  // O botao de menu do painel so aparece sob o ponteiro.
+  await page.getByText(dashboard.panels[0].title).first().hover();
+  await page.locator('[data-testid^="data-testid Panel menu"]').first().click({ force: true });
+  await page.getByRole('menuitem', { name: /^Edit/i }).first().click();
+
+  await expect(page).toHaveURL(/editPanel=/);
+
+  const no = page.locator(NODE).first();
+  await expect(no).toHaveClass(/draggable/);
+  await expect(no).toHaveClass(/selectable/);
+
+  const pane = (await page.locator('.react-flow__pane').boundingBox())!;
+  await page.mouse.click(pane.x + pane.width - 80, pane.y + 40, { button: 'right' });
+  await expect(page.getByRole('menuitem', { name: 'Adicionar nó aqui' })).toBeVisible();
+});
+
+/**
  * O outro lado da mesma regra, e a origem provavel do relato: fora do editor de
  * painel, com "Edicao inline" desligada, o canvas e **inerte de proposito** —
  * quem so visualiza nao arrasta a topologia por acidente. O que falta ali nao e
