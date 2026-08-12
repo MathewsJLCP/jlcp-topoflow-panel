@@ -74,5 +74,5 @@ function parseSection<T>(
 }
 
 function summarize(error: z.ZodError): string {
-  return error.issues.map((issue) => `${issue.path.join('.') || '(raiz)'} — ${issue.message}`).join('; ');
+  return error.issues.map((issue) => `${issue.path.join('.') || '(raiz)'}: ${issue.message}`).join('; ');
 }

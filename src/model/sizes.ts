@@ -25,8 +25,11 @@ export const POSTIT_DEFAULT = { width: 250, height: 170, minWidth: 160, minHeigh
 /**
  * Espessura do traco da aresta. Selecionada desenha com `+ 0.5`.
  *
- * 1.5 e nao 2: com dezenas de conexoes na cena, meio pixel a mais em cada uma
- * transforma a topologia num emaranhado. A espessura continua configuravel por
- * aresta — este e so o ponto de partida.
+ * Era 1.5, para que dezenas de conexoes na cena nao virassem um emaranhado. Na
+ * pratica o traco sumia sobre o fundo do canvas antes de a densidade virar
+ * problema, entao 2 passou a ser o padrao. Continua configuravel por aresta:
+ * este e so o ponto de partida.
+ *
+ * Arestas ja salvas guardam a propria espessura e nao mudam sozinhas.
  */
-export const DEFAULT_EDGE_WIDTH = 1.5;
+export const DEFAULT_EDGE_WIDTH = 2;

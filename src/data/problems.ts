@@ -1,5 +1,7 @@
 import { DataFrame, FieldType } from '@grafana/data';
 
+import { Severity } from '../model/types';
+
 /**
  * Leitura dos frames de uma query Zabbix em Query Mode *Problems*.
  *
@@ -91,7 +93,13 @@ export function extractProblems(frames: DataFrame[]): ZabbixProblem[] {
 }
 
 /** Escala de severidade do Zabbix. */
-export type Severity = 0 | 1 | 2 | 3 | 4 | 5;
+/**
+ * Reexportado do modelo, e nao declarado aqui: severidade virou dado persistido
+ * (regra de severidade em `panel.options`), entao o Zod passou a ser a fonte.
+ * Enquanto eram duas listas escritas a mao, nada impedia uma ganhar um nivel e a
+ * outra nao.
+ */
+export type { Severity };
 
 export const SEVERITY_LABEL: Record<Severity, string> = {
   0: 'Not classified',

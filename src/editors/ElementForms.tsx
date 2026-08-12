@@ -1,16 +1,29 @@
 import React from 'react';
 import { css } from '@emotion/css';
 import { DataFrame, FieldType, GrafanaTheme2, SelectableValue } from '@grafana/data';
-import { ColorPicker, Combobox, Field, Input, RadioButtonGroup, Slider, Switch, useStyles2 } from '@grafana/ui';
+import {
+  ColorPicker,
+  Combobox,
+  Field,
+  Input,
+  RadioButtonGroup,
+  Select,
+  Slider,
+  Stack,
+  useStyles2,
+} from '@grafana/ui';
 
 import { TOPO_ICONS, TopoIcon, TopoIconName, resolveTopoIcon } from '../canvas/icons';
 
 import { updateEdge, updateNode, updatePoint, updatePostit, updateText } from '../model/mutations';
-import { TopoEdge, TopoNode, TopoPoint, TopoPostit, TopoText, Topology } from '../model/types';
-import { ColorDimensionField, TextDimensionField } from './DimensionFields';
-import { ThresholdsField } from './ThresholdsField';
+import { TextBackground, TopoEdge, TopoNode, TopoPoint, TopoPostit, TopoText, Topology } from '../model/types';
+import { TextDimensionField } from './DimensionFields';
+import { FieldLabel } from './FieldLabel';
+import { FixedColorField } from './FixedColorField';
+import { NumberField } from './NumberField';
+import { StateSection } from './StateSection';
+import { ToggleField } from './ToggleField';
 import { TopoFieldPicker } from './TopoFieldPicker';
-import { TriggerBindingField } from './TriggerBindingFields';
 
 interface FormProps<T> {
   element: T;
@@ -23,6 +36,7 @@ interface FormProps<T> {
 const numericOnly = (field: { type?: FieldType }) => field.type === FieldType.number;
 
 export function NodeForm({ element, topology, frames, onChange }: FormProps<TopoNode>) {
+  const styles = useStyles2(getFormStyles);
   const patch = (changes: Partial<TopoNode>) => onChange(updateNode(topology, element.id, changes));
   const patchPresentation = (changes: Partial<TopoNode['presentation']>) =>
     patch({ presentation: { ...element.presentation, ...changes } });
@@ -57,22 +71,34 @@ export function NodeForm({ element, topology, frames, onChange }: FormProps<Topo
         />
       </ToggleField>
 
-      <TriggerBindingField frames={frames} value={element.trigger} onChange={(trigger) => patch({ trigger })} />
+      {/* As regras de estado sobem para junto do radio que as governa: com o
+          bloco unico, "Estado" deixou de ficar numa ponta do formulario e os
+          thresholds na outra, separados por campos que nao tem relacao com cor. */}
+      <StateSection
+        frames={frames}
+        trigger={element.trigger}
+        color={element.color}
+        thresholds={element.thresholds}
+        alert={element.alert}
+        onTriggerChange={(trigger) => patch({ trigger })}
+        onColorChange={(color) => patch({ color })}
+        onThresholdsChange={(thresholds) => patch({ thresholds })}
+        onAlertChange={(alert) => patch({ alert })}
+      />
 
       <ToggleField
         label="Valor exibido"
+        info="O último valor da métrica aparece dentro do nó."
         enabled={element.value !== undefined}
         onToggle={(on) => patch({ value: on ? {} : undefined })}
       >
-        <Field description="Field cujo último valor aparece dentro do nó.">
-          <TopoFieldPicker
-            frames={frames}
-            value={element.value?.field}
-            onChange={(field) => patch({ value: { field } })}
-            placeholder="Sem métrica"
-            filter={numericOnly}
-          />
-        </Field>
+        <TopoFieldPicker
+          frames={frames}
+          value={element.value?.field}
+          onChange={(field) => patch({ value: { field } })}
+          placeholder="Sem métrica"
+          filter={numericOnly}
+        />
       </ToggleField>
 
       <ToggleField
@@ -83,37 +109,28 @@ export function NodeForm({ element, topology, frames, onChange }: FormProps<Topo
         <IconPicker value={presentation.icon} onChange={(icon) => patchPresentation({ icon })} />
       </ToggleField>
 
-      {/*
-        Decisao D5: com a fonte em Trigger, o bloco de estado por metrica sai da
-        tela em vez de ficar desabilitado. A cor vem do mapa de severidade e
-        nenhum controle daqui teria efeito — e um bloco inteiro acinzentado
-        ocuparia mais espaco do que a informacao "nao se aplica" merece. A
-        descricao do radio "Fonte de estado" ja explica a troca.
-      */}
-      {!element.trigger?.enabled && (
-        <ThresholdsField
-          frames={frames}
-          color={element.color}
-          thresholds={element.thresholds}
-          onColorChange={(color) => patch({ color })}
-          onThresholdsChange={(thresholds) => patch({ thresholds })}
-        />
-      )}
-
-      <Field label="Largura">
-        <Input
-          type="number"
-          value={element.size.width}
-          onChange={(event) => patch({ size: { ...element.size, width: toSize(event.currentTarget.value, element.size.width) } })}
-        />
-      </Field>
-      <Field label="Altura">
-        <Input
-          type="number"
-          value={element.size.height}
-          onChange={(event) => patch({ size: { ...element.size, height: toSize(event.currentTarget.value, element.size.height) } })}
-        />
-      </Field>
+      {/* Largura e altura sao um par: lidas juntas, editadas juntas. Em linhas
+          separadas gastavam duas alturas de campo para dizer o tamanho de uma
+          caixa. `flex: 1` nos dois mantem as larguras iguais em qualquer painel,
+          e `minWidth: 0` impede que o `Input` numerico se recuse a encolher. */}
+      <Stack direction="row" gap={1}>
+        <div className={styles.halfField}>
+          <NumberField
+            label="Largura"
+            value={element.size.width}
+            min={1}
+            onChange={(width) => patch({ size: { ...element.size, width } })}
+          />
+        </div>
+        <div className={styles.halfField}>
+          <NumberField
+            label="Altura"
+            value={element.size.height}
+            min={1}
+            onChange={(height) => patch({ size: { ...element.size, height } })}
+          />
+        </div>
+      </Stack>
     </>
   );
 }
@@ -122,10 +139,17 @@ export function PointForm({ element, topology, frames, onChange }: FormProps<Top
   const patch = (changes: Partial<TopoPoint>) => onChange(updatePoint(topology, element.id, changes));
 
   return (
-    <>
-      <TriggerBindingField frames={frames} value={element.trigger} onChange={(trigger) => patch({ trigger })} />
-      <ColorDimensionField label="Cor" frames={frames} value={element.color} onChange={(color) => patch({ color })} />
-    </>
+    <StateSection
+      frames={frames}
+      trigger={element.trigger}
+      color={element.color}
+      thresholds={element.thresholds}
+      alert={element.alert}
+      onTriggerChange={(trigger) => patch({ trigger })}
+      onColorChange={(color) => patch({ color })}
+      onThresholdsChange={(thresholds) => patch({ thresholds })}
+      onAlertChange={(alert) => patch({ alert })}
+    />
   );
 }
 
@@ -137,6 +161,19 @@ export function PostitForm({ element, topology, onChange }: FormProps<TopoPostit
       <Field label="Título">
         <Input value={element.title ?? ''} onChange={(event) => patch({ title: event.currentTarget.value })} />
       </Field>
+
+      {/* Sem título não há tag para posicionar, e o campo só ocuparia espaço. */}
+      {element.title && (
+        <Field label="Posição do título">
+          <RadioButtonGroup
+            options={TITLE_POSITION_OPTIONS}
+            value={element.titlePosition}
+            onChange={(titlePosition) => patch({ titlePosition })}
+            size="sm"
+            fullWidth
+          />
+        </Field>
+      )}
 
       {/* Sem seletor de field: postit e estatico por decisao do PRD, e o schema
           guarda a cor como string simples justamente para impedir o contrario. */}
@@ -155,8 +192,18 @@ export function PostitForm({ element, topology, onChange }: FormProps<TopoPostit
           options={BORDER_STYLE_OPTIONS}
           value={element.borderStyle}
           onChange={(borderStyle) => patch({ borderStyle })}
+          fullWidth
         />
       </Field>
+
+      <NumberField
+        label="Espessura da borda"
+        value={element.borderWidth}
+        min={0}
+        max={10}
+        suffix="px"
+        onChange={(borderWidth) => patch({ borderWidth })}
+      />
     </>
   );
 }
@@ -167,8 +214,28 @@ const BORDER_STYLE_OPTIONS: Array<SelectableValue<TopoPostit['borderStyle']>> = 
   { value: 'dotted', label: 'Pontilhada' },
 ];
 
+/**
+ * Rotulos curtos porque sao quatro num painel estreito: o `RadioButtonGroup`
+ * truncaria "Superior esquerdo" antes de a segunda opcao caber.
+ */
+const TITLE_POSITION_OPTIONS: Array<SelectableValue<TopoPostit['titlePosition']>> = [
+  { value: 'top-left', label: '↖', description: 'Superior esquerdo' },
+  { value: 'top-right', label: '↗', description: 'Superior direito' },
+  { value: 'bottom-left', label: '↙', description: 'Inferior esquerdo' },
+  { value: 'bottom-right', label: '↘', description: 'Inferior direito' },
+];
+
+/**
+ * Placa nova ja nasce visivel, mas discreta: `'text'` e nome de cor do tema, e
+ * nao um hex, entao a placa acompanha claro/escuro em vez de congelar o tema em
+ * que foi criada. Em 12% ela separa o texto do fundo sem virar caixa.
+ */
+const NEW_TEXT_BACKGROUND: TextBackground = { color: 'text', opacity: 0.12 };
+
 export function TextForm({ element, topology, frames, onChange }: FormProps<TopoText>) {
   const patch = (changes: Partial<TopoText>) => onChange(updateText(topology, element.id, changes));
+  const patchBackground = (changes: Partial<TextBackground>) =>
+    patch({ background: { ...(element.background ?? NEW_TEXT_BACKGROUND), ...changes } });
 
   return (
     <>
@@ -178,15 +245,43 @@ export function TextForm({ element, topology, frames, onChange }: FormProps<Topo
         value={element.content}
         onChange={(content) => patch({ content })}
       />
-      <TriggerBindingField frames={frames} value={element.trigger} onChange={(trigger) => patch({ trigger })} />
-      <ColorDimensionField label="Cor" frames={frames} value={element.color} onChange={(color) => patch({ color })} />
-      <Field label="Tamanho da fonte">
-        <Input
-          type="number"
-          value={element.fontSize}
-          onChange={(event) => patch({ fontSize: toFontSize(event.currentTarget.value, element.fontSize) })}
-        />
-      </Field>
+
+      {/* Sem seletor de field: o Texto e decorativo por decisao, e nao tem
+          fonte de estado nenhuma — ver `topoTextSchema`. */}
+      <FixedColorField value={element.color} onChange={(color) => patch({ color })} />
+
+      {/* Ausencia do valor e o desligado, como nos campos opcionais do no. */}
+      <ToggleField
+        label="Background"
+        info="Placa atrás do texto, para separá-lo de um canvas carregado."
+        enabled={element.background !== undefined}
+        onToggle={(on) => patch({ background: on ? NEW_TEXT_BACKGROUND : undefined })}
+      >
+        <Stack direction="column" gap={1}>
+          <div>
+            <ColorPicker
+              color={element.background?.color ?? NEW_TEXT_BACKGROUND.color}
+              onChange={(color) => patchBackground({ color })}
+            />
+          </div>
+          <Slider
+            min={0}
+            max={1}
+            step={0.05}
+            value={element.background?.opacity ?? NEW_TEXT_BACKGROUND.opacity}
+            onChange={(opacity) => patchBackground({ opacity })}
+          />
+        </Stack>
+      </ToggleField>
+
+      <NumberField
+        label="Tamanho da fonte"
+        value={element.fontSize}
+        min={8}
+        max={72}
+        suffix="px"
+        onChange={(fontSize) => patch({ fontSize })}
+      />
     </>
   );
 }
@@ -224,7 +319,7 @@ export function EdgeForm({ element, topology, frames, onChange }: FormProps<Topo
       <Field label="Espessura">
         <Slider min={1} max={10} step={0.5} value={element.width} onChange={(width) => patch({ width })} />
       </Field>
-      <Field label="Rótulo" description="Texto fixo exibido sobre a conexão.">
+      <Field label={<FieldLabel info="Texto fixo sobre a conexão. Não interpola valor de métrica.">Rótulo</FieldLabel>}>
         <Input
           value={element.label ?? ''}
           placeholder="Sem rótulo"
@@ -238,44 +333,22 @@ export function EdgeForm({ element, topology, frames, onChange }: FormProps<Topo
           onChange={(selected) => patch({ animation: selected?.value ?? 'none' })}
         />
       </Field>
-      <TriggerBindingField frames={frames} value={element.trigger} onChange={(trigger) => patch({ trigger })} />
-      <ColorDimensionField label="Cor" frames={frames} value={element.color} onChange={(color) => patch({ color })} />
+      <StateSection
+        frames={frames}
+        trigger={element.trigger}
+        color={element.color}
+        thresholds={element.thresholds}
+        alert={element.alert}
+        // A aresta e um traco: nao ha superficie de onde emitir onda, e o radar
+        // cairia na mesma respiracao do `pulse`. Melhor nao oferecer do que
+        // oferecer e entregar outra coisa.
+        allowRadar={false}
+        onTriggerChange={(trigger) => patch({ trigger })}
+        onColorChange={(color) => patch({ color })}
+        onThresholdsChange={(thresholds) => patch({ thresholds })}
+        onAlertChange={(alert) => patch({ alert })}
+      />
     </>
-  );
-}
-
-interface ToggleFieldProps {
-  label: string;
-  enabled: boolean;
-  onToggle: (enabled: boolean) => void;
-  children: React.ReactNode;
-}
-
-/**
- * Campo opcional: um `Switch` com rotulo e, quando ligado, o controle de fato.
- *
- * O formulario do no acumulou campos que nem todo no usa. Todos visiveis o tempo
- * todo, o que e opcional fica indistinguivel do que e essencial — e o nome do no
- * (o unico campo obrigatorio) some no meio da lista. Com o toggle, o formulario
- * de um no simples ocupa quatro linhas.
- */
-function ToggleField({ label, enabled, onToggle, children }: ToggleFieldProps) {
-  const styles = useStyles2(getFormStyles);
-  const id = React.useId();
-
-  return (
-    <div className={styles.toggleField}>
-      <div className={styles.toggleRow}>
-        <label className={styles.toggleLabel} htmlFor={id}>
-          {label}
-        </label>
-        <Switch id={id} value={enabled} onChange={(event) => onToggle(event.currentTarget.checked)} />
-      </div>
-
-      {/* Os controles internos nao repetem o rotulo: quem esta dentro de um
-          `ToggleField` ja foi nomeado na linha do switch. */}
-      {enabled && <div className={styles.toggleBody}>{children}</div>}
-    </div>
   );
 }
 
@@ -284,95 +357,62 @@ interface IconPickerProps {
   onChange: (icon: TopoIconName) => void;
 }
 
+/** Uma opcao por icone da biblioteca, na ordem de exibicao de `TOPO_ICONS`. */
+const ICON_OPTIONS: Array<SelectableValue<TopoIconName>> = TOPO_ICONS.map(({ name, label }) => ({
+  value: name,
+  label,
+}));
+
 /**
- * Grade de icones em vez de um `Select` com nomes: escolher icone e uma decisao
- * visual, e ler "load-balancer" numa lista nao diz como o glifo se parece ao
- * lado dos outros nos da topologia.
+ * Dropdown com o glifo desenhado na opcao e no valor escolhido.
+ *
+ * A grade de botoes que existia aqui defendia que escolher icone e uma decisao
+ * visual — e e. Mas dez botoes de 36px ocupavam quatro linhas do painel para um
+ * campo que se mexe uma vez na vida do elemento, e o `Select` nao abre mao do
+ * glifo: `formatOptionLabel` desenha icone e nome nos dois lugares, entao a
+ * comparacao visual continua possivel, so que sob demanda.
+ *
+ * A busca e a do proprio `Select`, que filtra por `label` — dai as opcoes
+ * guardarem o nome em portugues em `label` e a chave em `value`. O que se
+ * persiste continua sendo a chave (`presentation.icon`), inalterada.
+ *
+ * **Sobre o `Select` estar deprecado.** O substituto indicado e o `Combobox`,
+ * usado em todo o resto deste painel — mas ele nao serve aqui: `ComboboxOption`
+ * so aceita `icon?: IconName`, a lista fechada de icones do Grafana, e os nossos
+ * sao SVGs proprios que existem exatamente porque aquela lista nao tem switch,
+ * roteador nem firewall (ver `canvas/icons`). Com `Combobox` o dropdown perderia
+ * o glifo e viraria uma lista de nomes — que era o argumento contra o dropdown
+ * desde o inicio. Enquanto `formatOptionLabel` nao tiver equivalente no
+ * `Combobox`, e `Select` ou nenhum icone.
  */
 function IconPicker({ value, onChange }: IconPickerProps) {
-  const styles = useStyles2(getFormStyles);
+  const inputId = React.useId();
   const selected = resolveTopoIcon(value);
 
   return (
-    <Field label="Ícone">
-      <div className={styles.iconGrid}>
-        {TOPO_ICONS.map(({ name, label }) => (
-          <button
-            key={name}
-            type="button"
-            className={styles.iconButton}
-            data-selected={name === selected || undefined}
-            title={label}
-            aria-label={label}
-            aria-pressed={name === selected}
-            onClick={() => onChange(name)}
-          >
-            <TopoIcon name={name} size={20} />
-          </button>
-        ))}
-      </div>
+    <Field label="Ícone" htmlFor={inputId}>
+      {/* eslint-disable-next-line @typescript-eslint/no-deprecated -- ver o bloco acima */}
+      <Select
+        inputId={inputId}
+        options={ICON_OPTIONS}
+        value={ICON_OPTIONS.find((option) => option.value === selected)}
+        onChange={(option) => onChange(resolveTopoIcon(option.value))}
+        formatOptionLabel={(option) => (
+          <Stack direction="row" alignItems="center" gap={1}>
+            <TopoIcon name={resolveTopoIcon(option.value)} size={16} />
+            <span>{option.label}</span>
+          </Stack>
+        )}
+      />
     </Field>
   );
 }
 
 const getFormStyles = (theme: GrafanaTheme2) => ({
-  toggleField: css({
-    marginBottom: theme.spacing(2),
-  }),
-  toggleRow: css({
-    display: 'flex',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    gap: theme.spacing(1),
-  }),
-  toggleLabel: css({
-    color: theme.colors.text.primary,
-    fontSize: theme.typography.bodySmall.fontSize,
-    fontWeight: theme.typography.fontWeightMedium,
-    cursor: 'pointer',
-  }),
-  toggleBody: css({
-    marginTop: theme.spacing(1),
-  }),
-  iconGrid: css({
-    display: 'grid',
-    gridTemplateColumns: 'repeat(auto-fill, minmax(40px, 1fr))',
-    gap: theme.spacing(0.5),
-  }),
-  iconButton: css({
-    display: 'flex',
-    alignItems: 'center',
-    justifyContent: 'center',
-    height: 36,
-    padding: 0,
-    background: theme.colors.background.primary,
-    border: `1px solid ${theme.colors.border.weak}`,
-    borderRadius: theme.shape.radius.default,
-    color: theme.colors.text.secondary,
-    cursor: 'pointer',
-
-    '&:hover': {
-      borderColor: theme.colors.border.medium,
-      color: theme.colors.text.primary,
-    },
-
-    // Mesma leitura da selecao no canvas: 2px de `primary.main` (§7 do doc de
-    // estilo). Aqui como borda, porque o botao ja tem uma para engrossar.
-    '&[data-selected]': {
-      borderColor: theme.colors.primary.main,
-      boxShadow: `inset 0 0 0 1px ${theme.colors.primary.main}`,
-      color: theme.colors.primary.main,
-    },
+  /** Metade de uma linha de dois campos, em qualquer largura de painel. */
+  halfField: css({
+    flex: 1,
+    minWidth: 0,
   }),
 });
 
-/** Campos numericos vazios ou fora de faixa nao podem quebrar a validacao Zod. */
-function toSize(raw: string, fallback: number): number {
-  const parsed = Number(raw);
-  return Number.isFinite(parsed) && parsed > 0 ? parsed : fallback;
-}
-
-function toFontSize(raw: string, fallback: number): number {
-  const parsed = Number(raw);
-  return Number.isFinite(parsed) && parsed >= 8 && parsed <= 72 ? parsed : fallback;
-}

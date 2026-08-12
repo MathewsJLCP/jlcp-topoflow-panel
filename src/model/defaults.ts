@@ -80,6 +80,7 @@ export const defaultTopology: Topology = {
       position: { x: 290, y: 20 },
       size: { width: 240, height: 280 },
       title: 'Datacenter',
+      titlePosition: 'top-left',
       // Unico elemento do exemplo com cor explicita, de proposito: ao lado dos
       // nos neutros ele mostra os dois lados da cadeia lado a lado, e serve de
       // regressao visual — se um no do exemplo voltar a nascer colorido, o
@@ -87,6 +88,7 @@ export const defaultTopology: Topology = {
       color: 'blue',
       opacity: 0.12,
       borderStyle: 'solid',
+      borderWidth: 2,
       zIndex: 0,
     },
   ],

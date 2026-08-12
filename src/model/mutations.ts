@@ -76,9 +76,11 @@ export function addElement(topology: Topology, kind: ElementKind, position: XYPo
         position,
         size: POSTIT_SIZE,
         title: 'Grupo',
+        titlePosition: 'top-left',
         color: 'blue',
         opacity: 0.12,
         borderStyle: 'solid',
+        borderWidth: 2,
         zIndex,
       };
       return { ...topology, postits: [...topology.postits, postit] };

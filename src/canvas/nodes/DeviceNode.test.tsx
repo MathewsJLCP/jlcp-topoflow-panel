@@ -24,7 +24,7 @@ describe('resolveBadge', () => {
 
   /**
    * Com a trigger no comando, o numero da metrica sairia ao lado da severidade
-   * e sugeriria que as duas pintam o no. So uma fonte de estado por vez.
+   * e sugeriria que as duas pintam o no. O estado vem de uma fonte so.
    */
   it('a trigger substitui a métrica no badge, não divide espaço', () => {
     const display = { text: '92', numeric: 92, color: '#0f0' };

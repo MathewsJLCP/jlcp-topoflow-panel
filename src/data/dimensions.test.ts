@@ -128,6 +128,16 @@ describe('resolveText', () => {
     expect(resolveText({ mode: 'field', field: 'cpu' }, frames)).toContain('92');
   });
 
+  /**
+   * A unidade vive no `suffix` do `DisplayValue`, nunca no `text`. Lendo so
+   * `.text`, um texto vinculado a uma metrica em porcentagem saia como `92` —
+   * o numero certo, sem o `%` que o torna legivel, e sem sinal de que faltava
+   * algo. Era o bug relatado no elemento Texto.
+   */
+  it('modo field aplica a unidade configurada no field', () => {
+    expect(resolveText({ mode: 'field', field: 'cpu' }, frames)).toBe('92%');
+  });
+
   it('modo field com field ausente devolve vazio', () => {
     expect(resolveText({ mode: 'field', field: 'nao-existe' }, frames)).toBe('');
   });

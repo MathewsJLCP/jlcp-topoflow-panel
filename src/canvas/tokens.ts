@@ -1,3 +1,5 @@
+import { css } from '@emotion/css';
+
 /**
  * Constantes visuais do canvas (docs/estilo-elementos-canvas.md §1).
  *
@@ -54,4 +56,20 @@ export const accentVar = `var(${ACCENT_VAR})`;
  */
 export function alpha(color: string, amount: number): string {
   return `color-mix(in srgb, ${color} ${Math.round(amount * 100)}%, transparent)`;
+}
+
+/**
+ * Toda animacao da cena passa por aqui.
+ *
+ * `prefers-reduced-motion` nao e enfeite de acessibilidade: quem pediu menos
+ * movimento costuma ter um motivo clinico, e um painel de NOC fica aberto o dia
+ * inteiro. Envolver no media query em vez de confiar em cada componente lembrar
+ * e o que garante que nenhuma animacao nova escape — o custo de esquecer seria
+ * pago pela pessoa errada.
+ *
+ * Vivia em `edges/TopoEdge.tsx` enquanto so a aresta animava; virou token quando
+ * no, point e aresta passaram a compartilhar as animacoes de alerta.
+ */
+export function motionOnly(animation: string): string {
+  return css({ '@media (prefers-reduced-motion: no-preference)': { animation } });
 }

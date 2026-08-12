@@ -8,6 +8,7 @@ import { formatDisplayValue, resolveDisplayValue, resolveText } from '../../data
 import { ElementColor, resolveElementColor } from '../../data/elementColor';
 import { DeviceFlowNode } from '../flowTypes';
 import { TopoIcon, resolveTopoIcon } from '../icons';
+import { alertClass } from '../alertAnimation';
 import { stateFill } from '../stateFill';
 import { HANDLE_SIZE, ICON_BOX_SIZE, ICON_SIZE, TRANSITION_FAST, alpha } from '../tokens';
 
@@ -76,11 +77,19 @@ export function DeviceNode({ data, selected }: NodeProps<DeviceFlowNode>) {
       {/* A origem do gesto usa o mesmo tratamento de selecionado: durante a
           linkagem ela e, de fato, o elemento em foco. */}
       <div
-        className={cx(styles.card, CARD_CLASS, (selected || data.link === 'source') && styles.cardSelected)}
+        className={cx(
+          styles.card,
+          CARD_CLASS,
+          (selected || data.link === 'source') && styles.cardSelected,
+          alertClass(accent, element.alert)
+        )}
         // Inline e nao classe porque a cor vem do dado. Nao toca em `border` de
         // proposito: e da borda que saem o hover e o anel de selecao, e um
         // estilo inline venceria as duas classes.
-        style={fill ? { background: fill.background } : undefined}
+        //
+        // `color` alimenta o `currentColor` dos aneis do radar: eles saem na cor
+        // do estado que estao anunciando, e nao na cor de texto herdada.
+        style={fill ? { background: fill.background, color: fill.background } : undefined}
       >
         {/* Sem icone, a capsula tambem sai — uma caixa vazia no lugar dele
             deixaria o texto desalinhado por um motivo invisivel. */}

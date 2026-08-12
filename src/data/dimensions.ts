@@ -77,9 +77,23 @@ export const NO_VALUE = '—';
  * de todo elemento novo nascer branco.
  */
 
+/**
+ * Texto de uma `TextDimension`, com unidade.
+ *
+ * No modo field passa por `formatDisplayValue`, e nao por `display.text` cru: e
+ * o prefixo e o sufixo que carregam a unidade configurada no field (o `%` de um
+ * "Percent (0-100)", o `ms`, o `B/s`). Lendo so `.text`, um texto vinculado a
+ * uma metrica em porcentagem aparecia como `92` — o numero certo sem a unidade
+ * que o torna legivel, e sem nenhum sinal de que faltava algo.
+ *
+ * Field ausente continua devolvendo string vazia, e nao o `NO_VALUE` que
+ * `formatDisplayValue` usa: aqui o texto **e** o elemento, e um travessao
+ * solto no canvas se le como sujeira, nao como ausencia de dado.
+ */
 export function resolveText(dim: TextDimension, frames: DataFrame[]): string {
   if (dim.mode === 'field') {
-    return resolveDisplayValue(frames, dim.field)?.text ?? '';
+    const display = resolveDisplayValue(frames, dim.field);
+    return display ? formatDisplayValue(display) : '';
   }
 
   return dim.fixed ?? '';

@@ -1,9 +1,9 @@
 import { DataFrame, Field, GrafanaTheme2, ThresholdsMode, getActiveThreshold } from '@grafana/data';
 
-import { ColorDimension, ElementThresholds, TriggerBinding } from '../model/types';
+import { AlertAnimation, ColorDimension, ElementThresholds, TriggerBinding } from '../model/types';
 import { getLastNotNullValue } from './dimensions';
 import { Severity } from './problems';
-import { hasOwnThresholds, hasSpecialRule, resolveOwnThreshold } from './thresholds';
+import { hasOwnThresholds, hasSpecialRule, resolveOwnThreshold, resolveSeverityRule } from './thresholds';
 import { resolveTriggerState } from './triggerState';
 
 /**
@@ -37,8 +37,12 @@ import { resolveTriggerState } from './triggerState';
 export type ElementColor =
   /** Trigger do Zabbix em PROBLEM. `label` e o nome da severidade. */
   | { state: 'trigger'; color: string; severity: Severity; label: string }
-  /** Threshold resolveu. `label` so existe quando o step foi nomeado. */
-  | { state: 'threshold'; color: string; label?: string }
+  /**
+   * Threshold resolveu. `label` so existe quando o step foi nomeado, e
+   * `animation` so quando a regra do elemento pediu movimento — o pipeline
+   * nativo do Grafana nao tem esse campo, entao a cor vinda dele nunca anima.
+   */
+  | { state: 'threshold'; color: string; label?: string; animation?: AlertAnimation }
   /** Binding configurado, sem dado que sirva. Distinto de saudavel (A.4). */
   | { state: 'nodata' }
   /** Acento estatico escolhido no editor. */
@@ -87,6 +91,25 @@ export function resolveElementColor(
 
   const alarm = resolveTriggerState(trigger, frames, theme);
   if (alarm) {
+    /**
+     * Regra propria de severidade vence o mapa do Zabbix — mesma logica do
+     * nivel 1a em relacao ao 1b: quem escreveu regra para aquele elemento tem
+     * autoridade sobre ele.
+     *
+     * O rotulo da regra e opcional; sem ele fica o nome da severidade, que e o
+     * que o badge sempre mostrou. Trocar a cor nao deveria custar o nome do
+     * estado.
+     */
+    const rule = resolveSeverityRule(thresholds, alarm.severity);
+    if (rule) {
+      return {
+        state: 'trigger',
+        color: theme.visualization.getColorByName(rule.color),
+        severity: alarm.severity,
+        label: rule.label || alarm.label,
+      };
+    }
+
     return { state: 'trigger', ...alarm };
   }
 
@@ -121,6 +144,9 @@ export function resolveElementColor(
           state: 'threshold',
           color: theme.visualization.getColorByName(rule.color),
           label: rule.label || undefined,
+          // `severity` nao chega aqui — este ramo so ve regras de metrica —,
+          // entao o acesso e seguro para todos os tipos que restam.
+          animation: 'animation' in rule ? rule.animation : undefined,
         };
       }
 

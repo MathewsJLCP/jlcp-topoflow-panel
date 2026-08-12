@@ -4,6 +4,7 @@ import { Alert, Combobox, ComboboxOption, Field, RadioButtonGroup } from '@grafa
 
 import { extractProblems, hasProblemsFrame, listHosts, listTriggers, matchesHost } from '../data/problems';
 import { TriggerBinding } from '../model/types';
+import { FieldLabel } from './FieldLabel';
 
 /**
  * Vinculo do elemento a uma trigger do Zabbix.
@@ -67,8 +68,11 @@ export function TriggerBindingField({ frames, value, onChange }: TriggerBindingF
   return (
     <>
       <Field
-        label="Fonte de estado"
-        description="No modo Trigger a cor vem do Zabbix e o vínculo por métrica fica inativo. A cor fixa continua valendo como identidade."
+        label={
+          <FieldLabel info="Em Trigger, a cor vem do Zabbix e o vínculo por métrica fica inativo. A cor fixa segue valendo como identidade.">
+            Estado
+          </FieldLabel>
+        }
       >
         <RadioButtonGroup options={MODE_OPTIONS} value={mode} onChange={handleMode} size="sm" fullWidth />
       </Field>
@@ -82,7 +86,10 @@ export function TriggerBindingField({ frames, value, onChange }: TriggerBindingF
             </Alert>
           )}
 
-          <Field label="Host" description="Nome do host no Zabbix. Aceita valor digitado." htmlFor={hostId}>
+          <Field
+            label={<FieldLabel info="Nome do host no Zabbix. Aceita valor digitado.">Host</FieldLabel>}
+            htmlFor={hostId}
+          >
             <Combobox
               id={hostId}
               options={hostOptions}
@@ -99,13 +106,14 @@ export function TriggerBindingField({ frames, value, onChange }: TriggerBindingF
           {hostUnknown && (
             <Alert
               severity="warning"
-              title="Host sem correspondência nos dados. Confira o nome — ou ele simplesmente não tem problema ativo agora."
+              title="Host sem correspondência nos dados. Confira o nome, ou ele simplesmente não tem problema ativo agora."
             />
           )}
 
           <Field
-            label="Trigger"
-            description="Deixe em “qualquer” para acender com qualquer problema do host."
+            label={
+              <FieldLabel info="Deixe em “qualquer” para acender com qualquer problema do host.">Trigger</FieldLabel>
+            }
             htmlFor={triggerId}
           >
             <Combobox

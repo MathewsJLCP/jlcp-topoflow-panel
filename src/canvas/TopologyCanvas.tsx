@@ -29,6 +29,7 @@ import {
   findElement,
   moveElements,
   removeElements,
+  resizeElement,
   reorderElement,
   reverseEdge,
 } from '../model/mutations';
@@ -157,16 +158,59 @@ function CanvasInner({ topology, frames, canvas, editable, width, height, onChan
     }, POSITION_COMMIT_DELAY_MS);
   }, [onChange]);
 
+  /**
+   * Redimensionamento do postit. Mesmo debounce do arraste, e pelo mesmo motivo:
+   * a alca emite dezenas de mudancas por gesto e cada uma reescreveria `options`.
+   *
+   * Grava posicao junto porque arrastar a alca da esquerda ou do topo **move** o
+   * no: so o tamanho deixaria o retangulo saltando de volta ao soltar.
+   */
+  const scheduleSizeCommit = useCallback(() => {
+    clearTimeout(commitTimer.current);
+    commitTimer.current = setTimeout(() => {
+      let next = topologyRef.current;
+
+      for (const node of nodesRef.current) {
+        if (node.type !== 'postitNode' || !node.width || !node.height) {
+          continue;
+        }
+        next = resizeElement(next, node.id, { width: node.width, height: node.height });
+      }
+
+      next = moveElements(
+        next,
+        nodesRef.current.map((node) => ({ id: node.id, position: node.position }))
+      );
+
+      appliedRevision.current = JSON.stringify(next);
+      onChange(next);
+    }, POSITION_COMMIT_DELAY_MS);
+  }, [onChange]);
+
   const onNodesChange = useCallback(
     (changes: Array<NodeChange<TopoFlowNode>>) => {
       setNodes((current) => applyNodeChanges(changes, current));
 
-      // Selecao e dimensao medida nao vao para `options`: sao estado de UI.
+      // Selecao nao vai para `options`: e estado de UI.
       if (changes.some((change) => change.type === 'position')) {
         schedulePositionCommit();
       }
+
+      /**
+       * Dimensao chega por dois caminhos e so um deve ser salvo.
+       *
+       * O `ResizeObserver` do React Flow emite `dimensions` a cada medicao — a
+       * cada render, a cada mudanca de zoom — e persistir isso escreveria em
+       * `options` o tamanho que o navegador mediu, num laco de gravacao que o
+       * usuario nunca pediu. O arraste da alca do `NodeResizer` emite a mesma
+       * mudanca **com `setAttributes`**, que e o pedido explicito de tornar
+       * aquela dimensao um atributo do no. So esse vira topologia.
+       */
+      if (changes.some((change) => change.type === 'dimensions' && change.setAttributes)) {
+        scheduleSizeCommit();
+      }
     },
-    [schedulePositionCommit]
+    [schedulePositionCommit, scheduleSizeCommit]
   );
 
   /**
@@ -550,6 +594,12 @@ function withNodeData(
         return { ...node, data: { ...node.data, frames, editable, link: roleOf(node.id) } };
       case 'textNode':
         return { ...node, data: { ...node.data, frames } };
+      // Postit nao recebe `frames`, mas recebe `editable`: e o que faz a alca de
+      // redimensionamento aparecer e sumir ao alternar o modo de edicao. Vindo
+      // so de `toFlowNodes`, a flag ficaria congelada — aquele efeito nao roda
+      // quando muda apenas `editable`, porque a revisao da topologia e a mesma.
+      case 'postitNode':
+        return { ...node, data: { ...node.data, editable } };
       default:
         return node;
     }

@@ -66,6 +66,57 @@ export const valueDimensionSchema = z.object({
 export const specialMatchSchema = z.enum(['null', 'nan', 'null+nan', 'true', 'false', 'empty']);
 
 /**
+ * Severidade de trigger do Zabbix, de *Not classified* (0) a *Disaster* (5).
+ *
+ * Vive aqui, e nao em `data/problems.ts`, desde que virou dado **persistido**:
+ * uma regra de severidade fica salva em `panel.options`, e a regra do projeto e
+ * que todo tipo do modelo nasce do Zod. O `problems.ts` importa este tipo em vez
+ * de manter a sua propria copia — enquanto eram duas listas escritas a mao, nada
+ * impedia uma ganhar um nivel e a outra nao.
+ *
+ * Uniao de literais, e nao `z.number().min(0).max(5)`, porque so a primeira
+ * forma faz o `z.infer` devolver `0 | 1 | 2 | 3 | 4 | 5` — o que permite ao
+ * compilador cobrar os seis casos de todo `Record<Severity, ...>`.
+ */
+export const severitySchema = z.union([
+  z.literal(0),
+  z.literal(1),
+  z.literal(2),
+  z.literal(3),
+  z.literal(4),
+  z.literal(5),
+]);
+
+/**
+ * Movimento que o elemento ganha enquanto esta em alerta.
+ *
+ * Cor sozinha nao chama atencao num telao: um elemento vermelho parado ao lado
+ * de outro vermelho parado nao diz qual acabou de cair. O movimento e o que
+ * separa "esta ruim" de "acabou de ficar ruim".
+ *
+ * Onde a animacao e configurada difere entre os dois eixos, e a diferenca tem
+ * motivo:
+ *
+ *   - **Metrica**: campo opcional de cada regra. Quem usa metrica ja escreve as
+ *     regras, entao a animacao e so mais uma coluna da linha — e assim cada
+ *     faixa anima do seu jeito (`>= 75` pulsa, `> 90` faz radar).
+ *   - **Trigger**: campo do elemento (`elementAlertSchema`). Ali existe um
+ *     default que vale a pena preservar — o mapa de cores de severidade do
+ *     Zabbix —, e amarrar a animacao a uma regra obrigaria a definir uma cor
+ *     para poder animar, sobrescrevendo aquele mapa sem querer.
+ */
+export const alertAnimationSchema = z.enum(['pulse', 'blink', 'radar']);
+
+export const elementAlertSchema = z.object({
+  animation: alertAnimationSchema,
+  /**
+   * A partir desta severidade, inclusive. `0` (*Not classified*) faz qualquer
+   * alarme animar, que e o default de quem so quer ver o elemento se mexer.
+   */
+  fromSeverity: severitySchema.default(0),
+});
+
+/**
  * Uma regra do bloco Thresholds.
  *
  * Junta num modelo so os dois mecanismos que o Grafana mantem separados: o
@@ -93,6 +144,7 @@ export const elementRuleSchema = z.preprocess(
       value: z.number(),
       color: z.string(),
       label: z.string().optional(),
+      animation: alertAnimationSchema.optional(),
     }),
     /** Valor exato, comparado como texto. */
     z.object({
@@ -100,6 +152,7 @@ export const elementRuleSchema = z.preprocess(
       match: z.string(),
       color: z.string(),
       label: z.string().optional(),
+      animation: alertAnimationSchema.optional(),
     }),
     /** Faixa fechada: `from <= valor <= to`. */
     z.object({
@@ -108,16 +161,39 @@ export const elementRuleSchema = z.preprocess(
       to: z.number(),
       color: z.string(),
       label: z.string().optional(),
+      animation: alertAnimationSchema.optional(),
     }),
     z.object({
       type: z.literal('regex'),
       pattern: z.string(),
       color: z.string(),
       label: z.string().optional(),
+      animation: alertAnimationSchema.optional(),
     }),
     z.object({
       type: z.literal('special'),
       match: specialMatchSchema,
+      color: z.string(),
+      label: z.string().optional(),
+      animation: alertAnimationSchema.optional(),
+    }),
+    /**
+     * A partir desta severidade de trigger, inclusive.
+     *
+     * E a unica regra que **nao** olha para o valor de um field: ela e avaliada
+     * contra a severidade do alarme, no nivel 0 da cadeia de cor. Sem nenhuma
+     * regra deste tipo, o alarme continua pintado pelo mapa de severidade do
+     * Zabbix — que e o comportamento de sempre e o default de quem nao configura
+     * nada.
+     *
+     * Convive na mesma lista com as regras de metrica de proposito: alternar
+     * Metrica <-> Trigger no editor nunca descartou configuracao, e nao seria
+     * agora que passaria a descartar. Quem separa as duas e a resolucao, em
+     * `data/thresholds.ts`.
+     */
+    z.object({
+      type: z.literal('severity'),
+      atLeast: severitySchema,
       color: z.string(),
       label: z.string().optional(),
     }),
@@ -203,6 +279,8 @@ export const topoNodeSchema = z.object({
   trigger: triggerBindingSchema.optional(),
   /** Ausente = o elemento usa os thresholds do field (pipeline nativo). */
   thresholds: elementThresholdsSchema.optional(),
+  /** Ausente = o elemento nao se move em alerta. */
+  alert: elementAlertSchema.optional(),
   zIndex: z.number().int(),
 });
 
@@ -214,6 +292,10 @@ export const topoEdgeSchema = z.object({
   shape: z.enum(['curved', 'straight']),
   color: colorDimensionSchema,
   trigger: triggerBindingSchema.optional(),
+  /** Ausente = a aresta usa os thresholds do field (pipeline nativo). */
+  thresholds: elementThresholdsSchema.optional(),
+  /** Ausente = a aresta nao se move em alerta. */
+  alert: elementAlertSchema.optional(),
   width: z.number().min(1).max(10),
   /**
    * Rotulo estatico. Texto interpolado com valor de metrica e um recurso de
@@ -235,6 +317,10 @@ export const topoPointSchema = z.object({
   }),
   color: colorDimensionSchema,
   trigger: triggerBindingSchema.optional(),
+  /** Ausente = o point usa os thresholds do field (pipeline nativo). */
+  thresholds: elementThresholdsSchema.optional(),
+  /** Ausente = o point nao se move em alerta. */
+  alert: elementAlertSchema.optional(),
   zIndex: z.number().int(),
 });
 
@@ -256,16 +342,59 @@ export const topoPostitSchema = z.object({
     height: z.number().positive(),
   }),
   title: z.string().optional(),
+  /**
+   * Canto em que a tag de titulo pousa sobre a borda.
+   *
+   * `.default` mantem o postit salvo antes deste campo exatamente onde estava —
+   * o titulo sempre viveu no canto superior esquerdo.
+   */
+  titlePosition: z.enum(['top-left', 'top-right', 'bottom-left', 'bottom-right']).default('top-left'),
   color: z.string(),
   /** Escala 0..1, nao 0..100: e o que ja esta persistido nos dashboards. */
   opacity: z.number().min(0).max(1),
   // `.default` pelo mesmo motivo dos arrays da topologia: postits salvos antes
   // deste campo continuam validando sem migracao.
   borderStyle: z.enum(['solid', 'dashed', 'dotted']).default('solid'),
+  /**
+   * Espessura da borda em px. Era fixa em 1.5 e passou a 2, que e a espessura
+   * em que o traco se sustenta sobre o fundo do canvas nos dois temas.
+   */
+  borderWidth: z.number().min(0).max(10).default(2),
   zIndex: z.number().int(),
 });
 
-/** Texto solto sobre o canvas. */
+/**
+ * Placa de fundo do texto. **Ausente significa transparente** — nao existe flag
+ * separada, pelo mesmo motivo do `secondaryText` do no.
+ *
+ * Objeto aninhado, e nao dois campos soltos ao lado de `fontSize`: cor e
+ * opacidade so fazem sentido juntas, e separadas abririam dois estados
+ * invalidos que alguem teria de tratar em runtime — cor sem opacidade e
+ * opacidade sem cor.
+ *
+ * `color` guarda **nome de cor do tema** (ou hex), nunca o valor resolvido:
+ * resolver na hora de salvar congelaria o tema vigente no momento da edicao, e a
+ * placa ficaria clara num dashboard escuro.
+ */
+export const textBackgroundSchema = z.object({
+  color: z.string(),
+  /** Escala 0..1, como no postit. */
+  opacity: z.number().min(0).max(1),
+});
+
+/**
+ * Texto solto sobre o canvas. Elemento decorativo: nao tem estado.
+ *
+ * `trigger` viveu aqui e saiu (decisao D5). O Texto era o unico elemento em que
+ * a fonte de estado nao pagava o proprio custo — o glifo e a unica superficie
+ * que ele tem, entao acender significava trocar a cor da letra, e um texto que
+ * muda de cor sozinho se le como erro de renderizacao, nao como alarme.
+ *
+ * `color` continua sendo uma `ColorDimension` por retrocompatibilidade: e o que
+ * ja esta salvo. Mas o editor so escreve `fixed`, e o canvas so le `fixed` — um
+ * `field` que tenha sobrado de antes fica inerte, sem migrador e sem repintar
+ * texto nenhum.
+ */
 export const topoTextSchema = z.object({
   id: z.string().min(1),
   position: z.object({
@@ -274,7 +403,7 @@ export const topoTextSchema = z.object({
   }),
   content: textDimensionSchema,
   color: colorDimensionSchema,
-  trigger: triggerBindingSchema.optional(),
+  background: textBackgroundSchema.optional(),
   fontSize: z.number().min(8).max(72),
   zIndex: z.number().int(),
 });

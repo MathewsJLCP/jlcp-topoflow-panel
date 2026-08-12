@@ -14,8 +14,10 @@ import {
 import { accentColor, resolveElementColor } from '../../data/elementColor';
 import { DEFAULT_EDGE_WIDTH } from '../../model/sizes';
 import { TopoFlowEdge } from '../flowTypes';
-import { alpha } from '../tokens';
-import { autoPositions, centerOf } from './geometry';
+import { edgeAlertClass } from '../alertAnimation';
+import { stateFill } from '../stateFill';
+import { alpha, motionOnly } from '../tokens';
+import { autoPositions, centerOf, endpointOf, trimToBoundaries } from './geometry';
 
 /** Aresta fina e dificil de acertar com o ponteiro; isto amplia o alvo. */
 const INTERACTION_WIDTH = 20;
@@ -47,23 +49,65 @@ export function TopoEdge({ data, selected, ...props }: EdgeProps<TopoFlowEdge>) 
   const [sourceX, sourceY] = centerOf(sourceNode, props.sourceX, props.sourceY);
   const [targetX, targetY] = centerOf(targetNode, props.targetX, props.targetY);
 
+  // Os lados da curva saem dos **centros**: quem decide para onde a aresta
+  // aponta e a direcao entre os elementos, e recortar as pontas nao muda isso.
   const [sourcePosition, targetPosition] = autoPositions(sourceX, sourceY, targetX, targetY);
+
+  /**
+   * O caminho e desenhado so no trecho visivel, entre as bordas dos dois
+   * elementos. Onde o card e opaco o traco fica identico ao de antes — o que se
+   * perde e o pedaco que ja estava escondido —, e em troca `labelX/labelY`
+   * passam a ser o meio do vao que o usuario ve, em vez do meio de um caminho
+   * cuja metade estava enterrada.
+   */
+  const [fromX, fromY, toX, toY] = trimToBoundaries(
+    sourceX,
+    sourceY,
+    targetX,
+    targetY,
+    endpointOf(sourceNode),
+    endpointOf(targetNode)
+  );
 
   const [path, labelX, labelY] =
     element?.shape === 'curved'
-      ? getBezierPath({ sourceX, sourceY, sourcePosition, targetX, targetY, targetPosition })
-      : getStraightPath({ sourceX, sourceY, targetX, targetY });
+      ? getBezierPath({
+          sourceX: fromX,
+          sourceY: fromY,
+          sourcePosition,
+          targetX: toX,
+          targetY: toY,
+          targetPosition,
+        })
+      : getStraightPath({ sourceX: fromX, sourceY: fromY, targetX: toX, targetY: toY });
 
-  const accent = element ? resolveElementColor(element.color, frames, theme, { trigger: element.trigger }) : undefined;
+  const accent = element
+    ? resolveElementColor(element.color, frames, theme, {
+        trigger: element.trigger,
+        thresholds: element.thresholds,
+      })
+    : undefined;
   const stateColor = accent
     ? (accentColor(accent) ?? (accent.state === 'nodata' ? theme.colors.text.disabled : undefined))
     : undefined;
 
   const color = stateColor ?? theme.colors.border.medium;
+  const fill = accent ? stateFill(accent, theme) : undefined;
   const stroke = selected ? theme.colors.primary.main : color;
 
   const animation = element?.animation ?? 'none';
   const width = element?.width ?? DEFAULT_EDGE_WIDTH;
+
+  /**
+   * O alerta tem precedencia sobre a animacao permanente.
+   *
+   * As duas dizem coisas diferentes: `flow` e `dash-flow` significam "aqui passa
+   * trafego" e valem o tempo todo; o alerta significa "isto caiu agora". Rodando
+   * juntas na mesma linha o resultado e borrao, e o operador perde as duas
+   * informacoes. Enquanto durar o alarme manda o alerta; normalizou, a
+   * permanente volta sozinha.
+   */
+  const alerting = edgeAlertClass(accent, element?.alert);
 
   // O dash da animacao `dash-flow` precisa vencer o `style`, senao uma aresta
   // solida animada nao teria tracos para deslocar.
@@ -79,7 +123,7 @@ export function TopoEdge({ data, selected, ...props }: EdgeProps<TopoFlowEdge>) 
         // direcao virar configuravel.
         markerEnd={props.markerEnd}
         interactionWidth={INTERACTION_WIDTH}
-        className={animationClass[animation]}
+        className={alerting ?? animationClass[animation]}
         style={{
           stroke,
           strokeWidth: selected ? width + 0.5 : width,
@@ -90,7 +134,7 @@ export function TopoEdge({ data, selected, ...props }: EdgeProps<TopoFlowEdge>) 
         }}
       />
 
-      {animation === 'flow' && (
+      {animation === 'flow' && !alerting && (
         <g className={styles.flowDots}>
           <circle r={3} fill={stroke}>
             <animateMotion dur="1.6s" repeatCount="indefinite" path={path} />
@@ -111,8 +155,12 @@ export function TopoEdge({ data, selected, ...props }: EdgeProps<TopoFlowEdge>) 
             className={cx(styles.label, 'nodrag', 'nopan')}
             style={{
               transform: `translate(-50%, -50%) translate(${labelX}px, ${labelY}px)`,
-              // Fundo sempre neutro (A.2): so a borda recebe cor.
               borderColor: selected ? theme.colors.primary.main : (stateColor ?? theme.colors.border.weak),
+              // O rotulo se pinta como o card do no: `stateFill` devolve o fundo
+              // **e** a cor de texto que o tema garante legivel sobre ele. Sem
+              // isso, um rotulo com fundo vermelho herdaria `text.primary` e
+              // ficaria branco sobre vermelho, que reprova em contraste.
+              ...(fill && { background: fill.background, color: fill.text }),
             }}
           >
             {element.label}
@@ -131,13 +179,6 @@ const pulse = keyframes({
   '0%, 100%': { opacity: 0.35 },
   '50%': { opacity: 1 },
 });
-
-/**
- * Todas as animacoes ficam dentro de `prefers-reduced-motion: no-preference`.
- * Quem pediu menos movimento ve a aresta parada, com o estilo de traco intacto.
- */
-const motionOnly = (animation: string) =>
-  css({ '@media (prefers-reduced-motion: no-preference)': { animation } });
 
 const animationClass: Record<string, string | undefined> = {
   none: undefined,

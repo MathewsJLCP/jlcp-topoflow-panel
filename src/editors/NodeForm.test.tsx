@@ -107,12 +107,12 @@ describe('NodeForm — valor exibido', () => {
   });
 });
 
-describe('NodeForm — ícone', () => {
-  it('vem ligado por padrão', () => {
+describe('NodeForm — exibir ícone', () => {
+  it('vem ligado por padrão, com o seletor na tela', () => {
     setup();
 
     expect(toggle('Exibir ícone')).toBeChecked();
-    expect(screen.getByRole('button', { name: 'Servidor' })).toBeInTheDocument();
+    expect(screen.getByLabelText('Ícone')).toBeInTheDocument();
   });
 
   it('desligar grava a flag', () => {
@@ -126,27 +126,62 @@ describe('NodeForm — ícone', () => {
     expect(result()?.presentation.showIcon).toBe(false);
   });
 
-  it('com a flag desligada, a grade não aparece', () => {
+  it('com a flag desligada, o seletor não aparece', () => {
     setup({ presentation: { ...node.presentation, showIcon: false } });
 
     expect(toggle('Exibir ícone')).not.toBeChecked();
-    expect(screen.queryByRole('button', { name: 'Servidor' })).not.toBeInTheDocument();
+    expect(screen.queryByLabelText('Ícone')).not.toBeInTheDocument();
+  });
+});
+
+/**
+ * Bloco 4: a grade de dez botoes virou dropdown. O valor persistido nao mudou —
+ * continua sendo a chave de `canvas/icons` em `presentation.icon` —, entao o que
+ * estes casos protegem e justamente isso: nenhuma migracao, nenhum icone salvo
+ * deixando de ser reconhecido.
+ */
+describe('NodeForm — ícone', () => {
+  const campo = () => screen.getByLabelText('Ícone');
+  const abrirMenu = () => fireEvent.keyDown(campo(), { key: 'ArrowDown' });
+
+  const comIcone = (icon: string | undefined) => ({ presentation: { ...node.presentation, icon } });
+
+  it('o ícone salvo aparece selecionado ao reabrir', () => {
+    setup(comIcone('switch'));
+
+    expect(screen.getByText('Switch')).toBeInTheDocument();
   });
 
-  it('escolher um ícone grava a chave da biblioteca', () => {
-    const { result } = setup();
+  /** `resolveTopoIcon` já resolvia isso; o dropdown não pode ter perdido. */
+  it('ícone salvo que não existe mais cai em Genérico, sem quebrar', () => {
+    setup(comIcone('tolstoi'));
 
-    fireEvent.click(screen.getByRole('button', { name: 'Firewall' }));
-
-    expect(result()?.presentation.icon).toBe('firewall');
+    expect(screen.getByText('Genérico')).toBeInTheDocument();
   });
 
-  /** Sem `icon` salvo, a grade precisa marcar o genérico — nunca nada. */
-  it('marca o ícone selecionado, e o genérico quando não há nenhum', () => {
-    setup({ presentation: { ...node.presentation, icon: undefined } });
+  it('nó sem ícone escolhido mostra Genérico', () => {
+    setup(comIcone(undefined));
 
-    expect(screen.getByRole('button', { name: 'Genérico' })).toHaveAttribute('aria-pressed', 'true');
-    expect(screen.getByRole('button', { name: 'Switch' })).toHaveAttribute('aria-pressed', 'false');
+    expect(screen.getByText('Genérico')).toBeInTheDocument();
+  });
+
+  it('escolher uma opção grava a chave, não o rótulo', () => {
+    const { result } = setup(comIcone(undefined));
+
+    abrirMenu();
+    fireEvent.click(screen.getByText('Load balancer'));
+
+    expect(result()?.presentation.icon).toBe('load-balancer');
+  });
+
+  it('a busca filtra por nome', () => {
+    setup(comIcone(undefined));
+
+    abrirMenu();
+    fireEvent.change(campo(), { target: { value: 'fire' } });
+
+    expect(screen.getByText('Firewall')).toBeInTheDocument();
+    expect(screen.queryByText('Roteador')).not.toBeInTheDocument();
   });
 });
 
@@ -157,10 +192,17 @@ describe('NodeForm — thresholds do elemento', () => {
     fireEvent.click(screen.getByRole('menuitem', { name: new RegExp(tipo) }));
   };
 
-  it('sem regra própria, avisa que o field continua mandando', () => {
-    setup({ thresholds: undefined });
+  it('sem campo escolhido, o corpo avisa que as regras não teriam efeito', () => {
+    setup({ thresholds: undefined, color: {} });
 
-    expect(screen.getByText(/segue os thresholds configurados no field/)).toBeInTheDocument();
+    expect(screen.getByText(/Escolha um campo acima/)).toBeInTheDocument();
+  });
+
+  /** Com campo escolhido não há nada a corrigir, e o corpo fica calado. */
+  it('com campo escolhido, o corpo não avisa nada', () => {
+    setup({ thresholds: undefined, color: { field: 'cpu' } });
+
+    expect(screen.queryByText(/Escolha um campo acima/)).not.toBeInTheDocument();
   });
 
   it('a cor de repouso aparece como a linha Base, ao pé da lista', () => {
@@ -216,10 +258,10 @@ describe('NodeForm — thresholds do elemento', () => {
     ]);
   });
 
-  it('o campo de estado continua acima das regras', () => {
+  it('o seletor de métrica continua acima das regras', () => {
     setup();
 
-    expect(screen.getByText('Campo de estado')).toBeInTheDocument();
+    expect(screen.getByText('Campo')).toBeInTheDocument();
   });
 });
 
@@ -294,21 +336,22 @@ describe('NodeForm — tipos de regra vindos do Value mappings', () => {
 });
 
 /**
- * Decisão D5: em modo Trigger a cor vem do mapa de severidade e nenhum controle
- * de threshold teria efeito. Esconder, e não desabilitar — um bloco inteiro
- * acinzentado ocupa mais espaço do que a informação "não se aplica" merece.
+ * Em modo Trigger o seletor de métrica sai da tela — não há field a observar —,
+ * mas o bloco de regras fica: uma regra de severidade sobrescreve o mapa de
+ * cores do Zabbix, e a linha Base continua sendo a cor sem alarme.
  */
 describe('NodeForm — thresholds com fonte em Trigger', () => {
-  it('o bloco de estado por métrica sai da tela', () => {
+  it('o seletor de métrica sai da tela, o bloco de regras fica', () => {
     setup({ trigger: { enabled: true, host: 'AGLIN-FW-STARTI' } });
 
-    expect(screen.queryByText('Campo de estado')).not.toBeInTheDocument();
-    expect(screen.queryByRole('button', { name: /Adicionar regra/ })).not.toBeInTheDocument();
+    expect(screen.queryByText('Campo')).not.toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /Adicionar regra/ })).toBeInTheDocument();
+    expect(screen.getByText('Base')).toBeInTheDocument();
   });
 
   it('com o vínculo desligado, o bloco volta', () => {
     setup({ trigger: { enabled: false, host: 'AGLIN-FW-STARTI' } });
 
-    expect(screen.getByText('Campo de estado')).toBeInTheDocument();
+    expect(screen.getByText('Campo')).toBeInTheDocument();
   });
 });

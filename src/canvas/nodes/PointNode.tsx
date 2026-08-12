@@ -6,7 +6,9 @@ import { Handle, NodeProps, Position, useConnection } from '@xyflow/react';
 
 import { accentColor, resolveElementColor } from '../../data/elementColor';
 import { POINT_NODE_SIZE } from '../../model/sizes';
+import { alertClass } from '../alertAnimation';
 import { PointFlowNode } from '../flowTypes';
+import { stateFill } from '../stateFill';
 import { ACCENT_VAR, HANDLE_SIZE, TRANSITION_FAST, accentVar, alpha, selectionRing } from '../tokens';
 
 const HANDLE_CLASS = 'topo-point-handle';
@@ -30,13 +32,31 @@ export function PointNode({ data, selected }: NodeProps<PointFlowNode>) {
    */
   const connecting = useConnection((connection) => connection.inProgress);
 
-  const accent = resolveElementColor(data.element.color, data.frames, theme, { trigger: data.element.trigger });
+  const accent = resolveElementColor(data.element.color, data.frames, theme, {
+    trigger: data.element.trigger,
+    thresholds: data.element.thresholds,
+  });
   const color =
     accentColor(accent) ?? (accent.state === 'nodata' ? theme.colors.text.disabled : theme.colors.primary.main);
 
+  /**
+   * O estado preenche o circulo, e nao so contorna.
+   *
+   * Num alvo de 14px a borda de 2px e quase toda a superficie visivel, mas o
+   * miolo em `background.canvas` fazia o point acender como um anel vazado
+   * enquanto o no ao lado acendia solido — o mesmo estado lido de duas formas na
+   * mesma cena. `stateFill` devolve `undefined` sem estado, e ai o miolo volta a
+   * ser o fundo do canvas: e o neutro de A.3, que precisa continuar distinto.
+   */
+  const fill = stateFill(accent, theme);
+
+  // `currentColor` e o que os aneis do radar herdam; sem isto eles sairiam na
+  // cor de texto do container, e nao na do estado que estao anunciando.
+  const alerting = alertClass(accent, data.element.alert);
+
   return (
     <div
-      className={styles.dot}
+      className={cx(styles.dot, alerting)}
       // A origem do gesto usa o mesmo halo de selecionado: durante a linkagem
       // ela e, de fato, o elemento em foco.
       data-selected={selected || data.link === 'source' || undefined}
@@ -45,7 +65,14 @@ export function PointNode({ data, selected }: NodeProps<PointFlowNode>) {
       data-link={data.link}
       // A cor entra como custom property para que os tres niveis de halo
       // vivam em CSS estatico, com `:hover` e `[data-selected]`.
-      style={{ borderColor: color, [ACCENT_VAR]: color } as React.CSSProperties}
+      style={
+        {
+          borderColor: color,
+          background: fill?.background,
+          color,
+          [ACCENT_VAR]: color,
+        } as React.CSSProperties
+      }
     >
       {/* Um handle so: o point e pequeno demais para quatro alvos distintos, e
           com `ConnectionMode.Loose` um basta. Ele muda de tamanho conforme o

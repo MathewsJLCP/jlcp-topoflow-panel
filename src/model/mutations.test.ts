@@ -7,12 +7,14 @@ import {
   findEdgeBetween,
   moveElements,
   removeElements,
+  resizeElement,
   reorderElement,
   reverseEdge,
   updateEdge,
 } from './mutations';
 import { topologySchema } from './schema';
 import { ElementKind, Topology } from './types';
+import { DEFAULT_EDGE_WIDTH } from './sizes';
 
 const kinds: ElementKind[] = ['node', 'point', 'postit', 'text'];
 
@@ -101,6 +103,50 @@ describe('moveElements', () => {
   });
 });
 
+/**
+ * `resizeElement` existia desde o commit inicial sem nunca ser chamado: a alca
+ * de redimensionamento do postit nao estava ligada ao canvas. Estes casos fixam
+ * o contrato agora que o `NodeResizer` a alimenta.
+ */
+describe('resizeElement', () => {
+  const [postit] = defaultTopology.postits;
+
+  it('grava o tamanho novo no postit', () => {
+    const next = resizeElement(defaultTopology, postit.id, { width: 400, height: 300 });
+
+    expect(next.postits[0].size).toEqual({ width: 400, height: 300 });
+  });
+
+  it('não toca nos demais campos do elemento', () => {
+    const next = resizeElement(defaultTopology, postit.id, { width: 400, height: 300 });
+
+    expect(next.postits[0]).toMatchObject({
+      title: postit.title,
+      color: postit.color,
+      borderWidth: postit.borderWidth,
+      position: postit.position,
+    });
+  });
+
+  /** Point e texto não têm `size` no schema; pedir resize neles é no-op. */
+  it('ignora elemento sem tamanho, devolvendo a topologia intacta', () => {
+    const [text] = defaultTopology.texts;
+
+    expect(resizeElement(defaultTopology, text.id, { width: 400, height: 300 })).toBe(defaultTopology);
+  });
+
+  it('ignora id inexistente', () => {
+    expect(resizeElement(defaultTopology, 'fantasma', { width: 400, height: 300 })).toBe(defaultTopology);
+  });
+
+  /** O resultado precisa continuar validando: é ele que vai para `options`. */
+  it('o resultado passa no schema', () => {
+    const next = resizeElement(defaultTopology, postit.id, { width: 400, height: 300 });
+
+    expect(topologySchema.safeParse(next).success).toBe(true);
+  });
+});
+
 describe('reorderElement', () => {
   it('trazer para frente deixa o elemento com o maior zIndex', () => {
     const next = reorderElement(defaultTopology, 'datacenter', 'front');
@@ -152,12 +198,12 @@ describe('connect', () => {
     expect(next.edges[0]).toMatchObject({ source: 'edge-router', target: 'app-server', animation: 'none' });
   });
 
-  it('a aresta nova nasce reta, fina e sem cor', () => {
+  it('a aresta nova nasce reta, na espessura padrão e sem cor', () => {
     const next = connect(semArestas, 'edge-router', 'app-server');
 
     // `straight` e o padrao do projeto; `curved` e opcao. E `color: {}` percorre
     // a cadeia ate o neutro — aresta nova nunca nasce branca.
-    expect(next.edges[0]).toMatchObject({ shape: 'straight', width: 1.5, color: {} });
+    expect(next.edges[0]).toMatchObject({ shape: 'straight', width: DEFAULT_EDGE_WIDTH, color: {} });
   });
 
   it('rejeita auto-conexão em silêncio', () => {

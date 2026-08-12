@@ -23,9 +23,13 @@ export function toFlowNodes(topology: Topology, frames: DataFrame[], editable: b
         id: element.id,
         type: 'postitNode',
         position: element.position,
-        data: { element },
+        data: { element, editable },
         zIndex: POSTIT_Z_OFFSET + element.zIndex,
-        style: { width: element.size.width, height: element.size.height },
+        // `width`/`height` do no, e nao `style`: sao os atributos que o
+        // `NodeResizer` escreve ao arrastar a alca. Em `style` a dimensao
+        // inline venceria a do resize e o postit nao mudaria de tamanho.
+        width: element.size.width,
+        height: element.size.height,
       })
     ),
     ...topology.nodes.map(

@@ -147,6 +147,228 @@ describe('parseTopoFlowOptions — thresholds do elemento', () => {
   });
 });
 
+/**
+ * Bloco 3: `thresholds` chegou a arestas e points. O campo entrou `.optional()`,
+ * entao `SCHEMA_VERSION` continua em 1 e nao existe migrador — o que estes casos
+ * fixam e que essa aposta se sustenta nos dois sentidos: o que estava salvo
+ * carrega intacto, e o que se salva agora sobrevive ao round-trip.
+ */
+describe('parseTopoFlowOptions — thresholds em aresta e point', () => {
+  // As duas pontas, e nao so a origem: uma aresta sem os dois nos e descartada
+  // pela integridade referencial da topologia, e o teste passaria a medir isso.
+  const nodes = defaultTopology.nodes;
+  const [edge] = defaultTopology.edges;
+  const point = { id: 'ponto', position: { x: 0, y: 0 }, color: { fixed: 'blue' }, zIndex: 0 };
+
+  it('aresta salva só com `color` carrega sem regra própria e sem perder a cor', () => {
+    const salva = { ...edge, color: { fixed: 'purple' } };
+    const { options, issues } = parseTopoFlowOptions({ topology: { nodes, edges: [salva] } });
+
+    expect(issues).toEqual([]);
+    // Sem regra propria o elemento segue o pipeline nativo, que era exatamente
+    // o comportamento anterior — e `color.fixed` continua sendo o nivel 2.
+    expect(options.topology.edges[0].thresholds).toBeUndefined();
+    expect(options.topology.edges[0].color).toEqual({ fixed: 'purple' });
+  });
+
+  it('point salvo só com `color` carrega sem regra própria e sem perder a cor', () => {
+    const { options, issues } = parseTopoFlowOptions({
+      topology: { nodes: [], edges: [], points: [point] },
+    });
+
+    expect(issues).toEqual([]);
+    expect(options.topology.points[0].thresholds).toBeUndefined();
+    expect(options.topology.points[0].color).toEqual({ fixed: 'blue' });
+  });
+
+  it('preserva as regras de uma aresta', () => {
+    const thresholds = { steps: [{ type: 'threshold', value: 1, color: 'red', label: 'down' }] };
+    const { options, issues } = parseTopoFlowOptions({
+      topology: { nodes, edges: [{ ...edge, thresholds }] },
+    });
+
+    expect(issues).toEqual([]);
+    expect(options.topology.edges[0].thresholds).toEqual(thresholds);
+  });
+
+  it('preserva as regras de um point', () => {
+    const thresholds = { steps: [{ type: 'special', match: 'null', color: 'orange' }] };
+    const { options, issues } = parseTopoFlowOptions({
+      topology: { nodes: [], edges: [], points: [{ ...point, thresholds }] },
+    });
+
+    expect(issues).toEqual([]);
+    expect(options.topology.points[0].thresholds).toEqual(thresholds);
+  });
+});
+
+/**
+ * Bloco 6: o Texto perdeu a fonte de estado e ganhou background.
+ *
+ * A remoção do `trigger` não precisa de migrador porque o Zod descarta chave
+ * desconhecida por padrão e nenhum schema daqui é `.strict()` — o texto salvo
+ * carrega, e a chave só some do JSON no primeiro save seguinte.
+ */
+describe('parseTopoFlowOptions — texto', () => {
+  const [text] = defaultTopology.texts;
+  const carrega = (raw: object) =>
+    parseTopoFlowOptions({ topology: { nodes: [], edges: [], texts: [raw] } });
+
+  it('texto salvo com `trigger` carrega sem erro, e a chave é descartada', () => {
+    const { options, issues } = carrega({ ...text, trigger: { enabled: true, host: 'AGLIN-FW-STARTI' } });
+
+    expect(issues).toEqual([]);
+    expect(options.topology.texts[0]).not.toHaveProperty('trigger');
+    // O resto do texto atravessa intacto — é só o estado que saiu.
+    expect(options.topology.texts[0].content).toEqual(text.content);
+    expect(options.topology.texts[0].fontSize).toBe(text.fontSize);
+  });
+
+  it('texto salvo com `color.field` carrega — o campo fica no JSON, apenas inerte', () => {
+    const { options, issues } = carrega({ ...text, color: { fixed: 'red', field: 'cpu_usage' } });
+
+    expect(issues).toEqual([]);
+    expect(options.topology.texts[0].color).toEqual({ fixed: 'red', field: 'cpu_usage' });
+  });
+
+  it('texto salvo antes do background carrega sem placa', () => {
+    const { options, issues } = carrega(text);
+
+    expect(issues).toEqual([]);
+    expect(options.topology.texts[0].background).toBeUndefined();
+  });
+
+  it('preserva a placa salva', () => {
+    const background = { color: 'blue', opacity: 0.3 };
+    const { options, issues } = carrega({ ...text, background });
+
+    expect(issues).toEqual([]);
+    expect(options.topology.texts[0].background).toEqual(background);
+  });
+
+  it('rejeita opacidade fora da faixa em vez de gravar valor impossível', () => {
+    const { issues } = carrega({ ...text, background: { color: 'blue', opacity: 4 } });
+
+    expect(issues).toHaveLength(1);
+  });
+});
+
+/** Campos novos do postit: ambos `.default`, então nada de migrador. */
+/** Bloco B: `alert` entrou opcional nos três elementos que têm trigger. */
+describe('parseTopoFlowOptions — animação de alerta', () => {
+  const [node] = defaultTopology.nodes;
+  const carrega = (alert: object) =>
+    parseTopoFlowOptions({ topology: { nodes: [{ ...node, alert }], edges: [] } });
+
+  it('elemento salvo antes da feature carrega parado', () => {
+    const { options, issues } = parseTopoFlowOptions({ topology: { nodes: [node], edges: [] } });
+
+    expect(issues).toEqual([]);
+    expect(options.topology.nodes[0].alert).toBeUndefined();
+  });
+
+  it('preserva a animação salva', () => {
+    const alert = { animation: 'radar', fromSeverity: 4 };
+    const { options, issues } = carrega(alert);
+
+    expect(issues).toEqual([]);
+    expect(options.topology.nodes[0].alert).toEqual(alert);
+  });
+
+  /** Sem `fromSeverity`, anima qualquer alarme — é o default de quem só quer ver mexer. */
+  it('sem `fromSeverity`, assume qualquer severidade', () => {
+    const { options, issues } = carrega({ animation: 'pulse' });
+
+    expect(issues).toEqual([]);
+    expect(options.topology.nodes[0].alert?.fromSeverity).toBe(0);
+  });
+
+  it('rejeita animação desconhecida em vez de aceitar valor livre', () => {
+    expect(carrega({ animation: 'girar' }).issues).toHaveLength(1);
+  });
+
+  /** No eixo de métrica a animação é campo da regra, não do elemento. */
+  it('preserva a animação por regra', () => {
+    const steps = [{ type: 'threshold', value: 90, color: 'red', animation: 'radar' }];
+    const { options, issues } = parseTopoFlowOptions({
+      topology: { nodes: [{ ...node, thresholds: { steps } }], edges: [] },
+    });
+
+    expect(issues).toEqual([]);
+    expect(options.topology.nodes[0].thresholds?.steps).toEqual(steps);
+  });
+
+  it('regra sem animação carrega parada', () => {
+    const steps = [{ type: 'threshold', value: 90, color: 'red' }];
+    const { options } = parseTopoFlowOptions({
+      topology: { nodes: [{ ...node, thresholds: { steps } }], edges: [] },
+    });
+
+    expect(options.topology.nodes[0].thresholds?.steps[0]).not.toHaveProperty('animation');
+  });
+});
+
+/** Bloco A: o tipo `severity` entrou na união de regras, de forma aditiva. */
+describe('parseTopoFlowOptions — regra de severidade', () => {
+  const [node] = defaultTopology.nodes;
+  const carrega = (steps: object[]) =>
+    parseTopoFlowOptions({ topology: { nodes: [{ ...node, thresholds: { steps } }], edges: [] } });
+
+  it('preserva a regra salva', () => {
+    const steps = [{ type: 'severity', atLeast: 4, color: 'purple', label: 'CAIU' }];
+    const { options, issues } = carrega(steps);
+
+    expect(issues).toEqual([]);
+    expect(options.topology.nodes[0].thresholds?.steps).toEqual(steps);
+  });
+
+  /** Alternar Métrica ↔ Trigger nunca descartou configuração; nem aqui. */
+  it('os dois eixos convivem na mesma lista', () => {
+    const steps = [
+      { type: 'threshold', value: 90, color: 'red' },
+      { type: 'severity', atLeast: 2, color: 'yellow' },
+    ];
+    const { options, issues } = carrega(steps);
+
+    expect(issues).toEqual([]);
+    expect(options.topology.nodes[0].thresholds?.steps).toHaveLength(2);
+  });
+
+  it('rejeita severidade fora de 0..5', () => {
+    expect(carrega([{ type: 'severity', atLeast: 9, color: 'red' }]).issues).toHaveLength(1);
+  });
+});
+
+describe('parseTopoFlowOptions — postit', () => {
+  const [postit] = defaultTopology.postits;
+
+  const carrega = (raw: object) => parseTopoFlowOptions({ topology: { nodes: [], edges: [], postits: [raw] } });
+
+  it('postit salvo antes dos campos novos assume o canto e a espessura padrão', () => {
+    const { titlePosition, borderWidth, ...salvo } = postit;
+    const { options, issues } = carrega(salvo);
+
+    expect(issues).toEqual([]);
+    // O título sempre viveu no canto superior esquerdo: o default preserva isso.
+    expect(options.topology.postits[0].titlePosition).toBe('top-left');
+    expect(options.topology.postits[0].borderWidth).toBe(2);
+  });
+
+  it('preserva o canto e a espessura escolhidos', () => {
+    const { options, issues } = carrega({ ...postit, titlePosition: 'bottom-right', borderWidth: 4 });
+
+    expect(issues).toEqual([]);
+    expect(options.topology.postits[0].titlePosition).toBe('bottom-right');
+    expect(options.topology.postits[0].borderWidth).toBe(4);
+  });
+
+  it('rejeita canto desconhecido em vez de aceitar valor livre', () => {
+    const { issues } = carrega({ ...postit, titlePosition: 'meio' });
+
+    expect(issues).toHaveLength(1);
+  });
+});
+
 describe('parseTopoFlowOptions — ícone do nó', () => {
   /** Ate o Bloco 3 exibir o icone era o unico comportamento possivel. */
   it('nó salvo antes do toggle continua exibindo o ícone', () => {

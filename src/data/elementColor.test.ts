@@ -319,3 +319,61 @@ describe('resolveElementColor — nível 1a (threshold do elemento)', () => {
     });
   });
 });
+
+/**
+ * Bloco A: uma regra de severidade sobrescreve o mapa de cores do Zabbix, pela
+ * mesma lógica que o nível 1a tem sobre o 1b — quem escreveu regra para aquele
+ * elemento manda nele.
+ */
+describe('resolveElementColor — regra própria de severidade', () => {
+  const frames = [problemsFrame([ALARMANDO])];
+  const severidade = (atLeast: 0 | 1 | 2 | 3 | 4 | 5, color: string) => ({
+    steps: [{ type: 'severity' as const, atLeast, color }],
+  });
+
+  it('sem regra própria, o mapa do Zabbix continua valendo', () => {
+    expect(resolveElementColor({}, frames, theme, { trigger })).toMatchObject({
+      state: 'trigger',
+      color: theme.visualization.getColorByName('red'),
+      label: 'High',
+    });
+  });
+
+  it('a regra própria troca a cor do alarme', () => {
+    expect(
+      resolveElementColor({}, frames, theme, { trigger, thresholds: severidade(4, 'purple') })
+    ).toMatchObject({
+      state: 'trigger',
+      color: theme.visualization.getColorByName('purple'),
+      severity: 4,
+    });
+  });
+
+  /** Trocar a cor não pode custar o nome do estado. */
+  it('sem rótulo na regra, o nome da severidade permanece', () => {
+    expect(resolveElementColor({}, frames, theme, { trigger, thresholds: severidade(4, 'purple') })).toMatchObject({
+      label: 'High',
+    });
+  });
+
+  it('o rótulo da regra, quando existe, substitui o nome da severidade', () => {
+    const thresholds = { steps: [{ type: 'severity' as const, atLeast: 4 as const, color: 'purple', label: 'CAIU' }] };
+
+    expect(resolveElementColor({}, frames, theme, { trigger, thresholds })).toMatchObject({ label: 'CAIU' });
+  });
+
+  it('regra mais grave que o alarme não se aplica, e o mapa volta', () => {
+    expect(resolveElementColor({}, frames, theme, { trigger, thresholds: severidade(5, 'purple') })).toMatchObject({
+      color: theme.visualization.getColorByName('red'),
+    });
+  });
+
+  /** O elemento não está alarmando: regra de severidade nenhuma se aplica. */
+  it('sem alarme, a regra de severidade não pinta nada', () => {
+    const semAlarme = [problemsFrame([])];
+
+    expect(
+      resolveElementColor({ fixed: 'blue' }, semAlarme, theme, { trigger, thresholds: severidade(0, 'purple') })
+    ).toEqual({ state: 'fixed', color: theme.visualization.getColorByName('blue') });
+  });
+});

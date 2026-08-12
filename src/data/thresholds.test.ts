@@ -1,5 +1,13 @@
-import { ElementRule, ElementThresholds } from '../model/types';
-import { hasOwnThresholds, hasSpecialRule, resolveOwnThreshold, sortRules } from './thresholds';
+import { ElementRule, ElementThresholds, Severity } from '../model/types';
+import {
+  hasOwnThresholds,
+  hasSpecialRule,
+  metricRules,
+  resolveOwnThreshold,
+  resolveSeverityRule,
+  severityRules,
+  sortRules,
+} from './thresholds';
 
 const rules = (...steps: ElementRule[]): ElementThresholds => ({ steps });
 
@@ -158,5 +166,83 @@ describe('hasSpecialRule', () => {
     expect(hasSpecialRule(rules({ type: 'special', match: 'null', color: 'red' }))).toBe(true);
     expect(hasSpecialRule(ESCALA)).toBe(false);
     expect(hasSpecialRule(undefined)).toBe(false);
+  });
+});
+
+/**
+ * Bloco A: a severidade entrou como sexto tipo de regra, na mesma lista. O que
+ * estes casos protegem e a separacao dos dois eixos — sem ela, uma regra `>= 90`
+ * de CPU casaria com uma severidade 5 e pintaria o alarme errado.
+ */
+describe('resolveSeverityRule', () => {
+  const regra = (atLeast: Severity, color: string) => ({ type: 'severity' as const, atLeast, color });
+
+  it('sem regra de severidade, não decide nada — o mapa do Zabbix continua valendo', () => {
+    expect(resolveSeverityRule(undefined, 5)).toBeUndefined();
+    expect(resolveSeverityRule({ steps: [] }, 5)).toBeUndefined();
+  });
+
+  it('vence a regra de maior severidade que o alarme alcança', () => {
+    const steps = [regra(2, 'yellow'), regra(4, 'red'), regra(5, 'dark-red')];
+
+    expect(resolveSeverityRule({ steps }, 5)?.color).toBe('dark-red');
+    expect(resolveSeverityRule({ steps }, 4)?.color).toBe('red');
+    expect(resolveSeverityRule({ steps }, 3)?.color).toBe('yellow');
+  });
+
+  it('alarme mais brando que todas as regras não casa', () => {
+    expect(resolveSeverityRule({ steps: [regra(4, 'red')] }, 2)).toBeUndefined();
+  });
+
+  /** É assim que se obtém "uma cor para qualquer alarme", sem modo separado. */
+  it('uma regra em Not classified pinta qualquer alarme', () => {
+    const steps = [regra(0, 'purple')];
+
+    expect(resolveSeverityRule({ steps }, 0)?.color).toBe('purple');
+    expect(resolveSeverityRule({ steps }, 5)?.color).toBe('purple');
+  });
+
+  it('ignora as regras de métrica que dividem a lista', () => {
+    const steps = [
+      { type: 'threshold' as const, value: 90, color: 'orange' },
+      { type: 'value' as const, match: '5', color: 'green' },
+      regra(4, 'red'),
+    ];
+
+    expect(resolveSeverityRule({ steps }, 5)?.color).toBe('red');
+  });
+});
+
+describe('separação dos dois eixos', () => {
+  const severidade = { type: 'severity' as const, atLeast: 4 as Severity, color: 'red' };
+  const metrica = { type: 'threshold' as const, value: 90, color: 'orange' };
+
+  /** Uma severidade 5 não pode casar com uma regra numérica `>= 90`. */
+  it('a resolução por métrica ignora regras de severidade', () => {
+    expect(resolveOwnThreshold({ steps: [severidade] }, 5)).toBeUndefined();
+    expect(resolveOwnThreshold({ steps: [severidade] }, 95)).toBeUndefined();
+  });
+
+  /**
+   * Um elemento que só configurou cores de trigger não pode perder o pipeline
+   * nativo do Grafana ao voltar para o modo Métrica.
+   */
+  it('só regras de severidade não contam como regra própria de métrica', () => {
+    expect(hasOwnThresholds({ steps: [severidade] })).toBe(false);
+    expect(hasOwnThresholds({ steps: [severidade, metrica] })).toBe(true);
+  });
+
+  it('as duas listas convivem sem se ver', () => {
+    const steps = [severidade, metrica];
+
+    expect(metricRules({ steps })).toEqual([metrica]);
+    expect(severityRules({ steps })).toEqual([severidade]);
+  });
+
+  it('a ordenação põe severidades da mais grave para a mais branda', () => {
+    const baixa = { type: 'severity' as const, atLeast: 1 as Severity, color: 'blue' };
+    const alta = { type: 'severity' as const, atLeast: 5 as Severity, color: 'dark-red' };
+
+    expect(sortRules([baixa, alta])).toEqual([alta, baixa]);
   });
 });

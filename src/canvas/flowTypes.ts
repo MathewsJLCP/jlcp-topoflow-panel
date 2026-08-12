@@ -38,8 +38,11 @@ export type PointNodeData = {
   link?: LinkRole;
 };
 export type TextNodeData = { element: TopoText; frames: DataFrame[] };
-/** Postit nao recebe `frames`: e estatico por decisao do PRD. */
-export type PostitNodeData = { element: TopoPostit };
+/**
+ * Postit nao recebe `frames`: e estatico por decisao do PRD. Recebe `editable`
+ * porque a alca de redimensionamento so existe em modo de edicao.
+ */
+export type PostitNodeData = { element: TopoPostit; editable: boolean };
 
 export type DeviceFlowNode = Node<DeviceNodeData, 'deviceNode'>;
 export type PointFlowNode = Node<PointNodeData, 'pointNode'>;
