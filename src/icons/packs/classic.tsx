@@ -1,7 +1,9 @@
 import React from 'react';
 
+import { IconPack } from '../types';
+
 /**
- * Biblioteca de icones de ativos de rede.
+ * Os icones com que o TopoFlow nasceu — ativos de rede em traco.
  *
  * Desenhados aqui em vez de vir de um pacote porque **nao existe conjunto
  * pronto que sirva**: o `@grafana/ui` expoe 115 icones e nenhum deles e switch,
@@ -9,6 +11,11 @@ import React from 'react';
  * de rede mais usa. As alternativas seriam mapear para o icone "mais parecido"
  * (um switch virando `apps` nao comunica nada) ou adicionar uma dependencia
  * inteira para dez glifos, num plugin que precisa ser assinado.
+ *
+ * Viraram um **pack** quando a biblioteca ganhou pastas. O `id` e `classic`, e
+ * nao `default`, porque o pack padrao passou a ser outro — mas as chaves curtas
+ * (`router`, sem pack) continuam apontando para ca, que e o que faz toda
+ * topologia ja salva carregar sem migrador. Ver `registry.ts`.
  *
  * Regras do traco, para quem for adicionar um icone:
  *
@@ -27,7 +34,7 @@ const dot = (cx: number, cy: number, key?: string) => (
   <circle key={key} cx={cx} cy={cy} r={0.9} fill="currentColor" stroke="none" />
 );
 
-const ICONS = {
+const SHAPES = {
   /** Chassi de duas unidades, com LED em cada uma. */
   server: (
     <>
@@ -121,64 +128,33 @@ const ICONS = {
   ),
 } as const;
 
-export type TopoIconName = keyof typeof ICONS;
-
-/** Chave usada quando `icon` esta vazio ou aponta para algo que nao existe. */
-export const DEFAULT_ICON: TopoIconName = 'generic';
-
-/** Ordem de exibicao no seletor: dos ativos mais comuns aos mais especificos. */
-export const TOPO_ICONS: Array<{ name: TopoIconName; label: string }> = [
-  { name: 'server', label: 'Servidor' },
-  { name: 'switch', label: 'Switch' },
-  { name: 'router', label: 'Roteador' },
-  { name: 'firewall', label: 'Firewall' },
-  { name: 'load-balancer', label: 'Load balancer' },
-  { name: 'access-point', label: 'Access point' },
-  { name: 'database', label: 'Banco de dados' },
-  { name: 'storage', label: 'Storage' },
-  { name: 'cloud', label: 'Nuvem' },
-  { name: 'generic', label: 'Genérico' },
+/**
+ * Ordem de exibicao: dos ativos mais comuns aos mais especificos, com o
+ * generico por ultimo — ele e o fallback, nao uma escolha de primeira linha.
+ */
+const ORDER: Array<[keyof typeof SHAPES, string, string[]?]> = [
+  ['server', 'Servidor', ['host', 'maquina', 'vm']],
+  ['switch', 'Switch', ['comutador', 'lan']],
+  ['router', 'Roteador', ['gateway', 'borda']],
+  ['firewall', 'Firewall', ['fw', 'seguranca']],
+  ['load-balancer', 'Load balancer', ['balanceador', 'lb']],
+  ['access-point', 'Access point', ['ap', 'wifi', 'wireless']],
+  ['database', 'Banco de dados', ['db', 'sql']],
+  ['storage', 'Storage', ['disco', 'nas', 'san']],
+  ['cloud', 'Nuvem', ['cloud', 'internet', 'wan']],
+  ['generic', 'Genérico', ['outro', 'ativo']],
 ];
 
-/**
- * O modelo guarda a chave como string livre — e o que mantem a topologia
- * serializavel e tolerante a um icone que deixe de existir. A UI precisa de uma
- * chave valida, e quem nao for reconhecido vira `generic` em vez de sumir.
- */
-export function isTopoIconName(value: unknown): value is TopoIconName {
-  return typeof value === 'string' && value in ICONS;
-}
+export const classicPack: IconPack = {
+  id: 'classic',
+  label: 'Clássicos',
+  icons: ORDER.map(([name, label, keywords]) => ({
+    name,
+    label,
+    keywords,
+    art: { kind: 'glyph', shape: SHAPES[name] },
+  })),
+};
 
-export function resolveTopoIcon(icon: string | undefined): TopoIconName {
-  return isTopoIconName(icon) ? icon : DEFAULT_ICON;
-}
-
-interface TopoIconProps {
-  name: TopoIconName;
-  size?: number;
-  className?: string;
-  style?: React.CSSProperties;
-}
-
-export function TopoIcon({ name, size = 20, className, style }: TopoIconProps) {
-  return (
-    <svg
-      className={className}
-      style={style}
-      viewBox="0 0 24 24"
-      width={size}
-      height={size}
-      fill="none"
-      stroke="currentColor"
-      strokeWidth={1.6}
-      strokeLinecap="round"
-      strokeLinejoin="round"
-      // Decorativo: o nome do ativo ja esta no texto do no, e anunciar o glifo
-      // de novo so encheria o leitor de tela de ruido.
-      aria-hidden
-      focusable="false"
-    >
-      {ICONS[name]}
-    </svg>
-  );
-}
+/** O fallback de tudo: chave vazia, desconhecida ou de um pack que sumiu. */
+export const FALLBACK_ICON = 'generic';

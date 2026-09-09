@@ -45,6 +45,7 @@ export function CanvasContextMenu({
             <Menu.Item label="Adicionar point aqui" icon="circle" onClick={() => onAdd('point')} />
             <Menu.Item label="Adicionar postit aqui" icon="apps" onClick={() => onAdd('postit')} />
             <Menu.Item label="Adicionar texto aqui" icon="text-fields" onClick={() => onAdd('text')} />
+            <Menu.Item label="Adicionar imagem aqui" icon="gf-layout-simple" onClick={() => onAdd('image')} />
           </Menu>
         );
 
@@ -67,8 +68,8 @@ export function CanvasContextMenu({
       return null;
     }
 
-    // Só nós e points aceitam conexão; postits e textos nunca.
-    const linkable = state.elementKind === 'node' || state.elementKind === 'point';
+    // Nós, points e imagens aceitam conexão; postits e textos nunca.
+    const linkable = state.elementKind === 'node' || state.elementKind === 'point' || state.elementKind === 'image';
 
     // Ordenar só faz diferença no postit, o único que se sobrepõe aos demais
     // por natureza — os outros já vivem numa camada acima dele.

@@ -1,7 +1,7 @@
 import React from 'react';
 import { fireEvent, render, screen } from '@testing-library/react';
 
-import { defaultTopology } from '../model/defaults';
+import { sampleTopology } from '../model/sampleTopology';
 import { TopoText, Topology } from '../model/types';
 import { TextForm } from './ElementForms';
 
@@ -10,11 +10,11 @@ import { TextForm } from './ElementForms';
  * tamanho — e nada que dependa de dado.
  */
 
-const [text] = defaultTopology.texts;
+const [text] = sampleTopology.texts;
 
 function setup(overrides: Partial<TopoText> = {}) {
   const element: TopoText = { ...text, ...overrides };
-  const topology: Topology = { ...defaultTopology, texts: [element] };
+  const topology: Topology = { ...sampleTopology, texts: [element] };
   const onChange = jest.fn<void, [Topology]>();
 
   render(<TextForm element={element} topology={topology} frames={[]} onChange={onChange} />);

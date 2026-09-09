@@ -17,8 +17,19 @@
  * viewport.
  */
 export interface TopoInstanceState {
-  /** Id do elemento selecionado no canvas. `undefined` quando nada esta. */
-  selected?: string;
+  /**
+   * Ids selecionados no canvas, na ordem em que aparecem na cena. Vazio quando
+   * nao ha selecao.
+   *
+   * E uma **lista** e nao um id desde que o Layer passou a editar conexoes em
+   * massa: o Ctrl+clique do React Flow ja selecionava varios, e o canal so
+   * publicava o primeiro — o editor nao tinha como saber que havia mais.
+   *
+   * A identidade do array e estavel enquanto o **conteudo** nao muda. Sem isso o
+   * canvas republicaria o estado a cada quadro de um arraste, e o painel de
+   * opcoes re-renderizaria junto.
+   */
+  selected: string[];
   /** Seleciona no canvas e traz o elemento para a area visivel. */
   select: (id: string) => void;
 }

@@ -10,14 +10,18 @@ import {
   toDataFrame,
 } from '@grafana/data';
 
-import { TriggerBinding } from '../model/types';
+import { ElementThresholds, TriggerBinding } from '../model/types';
 import { accentColor, resolveElementColor } from './elementColor';
+import { writeSeverityLadder } from './thresholds';
 import { ZabbixProblem } from './problems';
 
 const theme = createTheme();
 
 /** Só o step base — o que o Grafana injeta quando ninguém configurou regra. */
 const BASE_ONLY: Threshold[] = [{ value: -Infinity, color: 'green' }];
+
+/** Regra própria equivalente ao `WITH_RULE` do field, para os testes de vínculo. */
+const REGRA_METRICA = { steps: [{ type: 'threshold' as const, value: 85, color: 'red', label: 'crítico' }] };
 
 const WITH_RULE: Threshold[] = [
   { value: -Infinity, color: 'green' },
@@ -49,36 +53,60 @@ function buildFrames(
   return [frame];
 }
 
-describe('resolveElementColor — nível 1 (threshold)', () => {
+describe('resolveElementColor — nível 1 (threshold do elemento)', () => {
+  /** A regra que o usuário escreve no bloco do elemento — a única que pinta. */
+  const CRITICO = { steps: [{ type: 'threshold' as const, value: 85, color: 'red', label: 'crítico' }] };
+
   it('threshold vence o acento estático', () => {
     const frames = buildFrames('cpu', [92]);
 
-    expect(resolveElementColor({ fixed: 'blue', field: 'cpu' }, frames, theme)).toEqual({
+    expect(resolveElementColor({ fixed: 'blue', field: 'cpu' }, frames, theme, { thresholds: CRITICO })).toEqual({
       state: 'threshold',
       color: theme.visualization.getColorByName('red'),
       label: 'crítico',
+      animation: undefined,
     });
   });
 
-  it('sem `state` no step, o badge fica sem rótulo', () => {
-    const frames = buildFrames('cpu', [92], [
-      { value: -Infinity, color: 'green' },
-      { value: 85, color: 'red' },
-    ]);
+  it('sem rótulo na regra, o badge fica livre para a métrica', () => {
+    const frames = buildFrames('cpu', [92]);
+    const semRotulo = { steps: [{ type: 'threshold' as const, value: 85, color: 'red' }] };
 
-    expect(resolveElementColor({ field: 'cpu' }, frames, theme)).toEqual({
+    expect(resolveElementColor({ field: 'cpu' }, frames, theme, { thresholds: semRotulo })).toEqual({
       state: 'threshold',
       color: theme.visualization.getColorByName('red'),
       label: undefined,
+      animation: undefined,
+    });
+  });
+});
+
+/**
+ * O nível que saiu da cadeia em 2026-09-02.
+ *
+ * Enquanto existia, o bloco de Thresholds do elemento perdia para uma
+ * configuração de **outra tela**: sem regra própria, a cor vinha do step do
+ * field, e a Base escolhida no elemento nunca era alcançada. O sintoma que
+ * levou à decisão foi exatamente este — Base laranja no elemento, azul do step
+ * base do field na topologia.
+ */
+describe('resolveElementColor — o pipeline nativo não pinta elemento', () => {
+  it('sem regra própria, o step do field é ignorado e vale a Base', () => {
+    // O field diz `red`/`crítico` em 92 e o elemento não tem regra nenhuma.
+    const frames = buildFrames('cpu', [92]);
+
+    expect(
+      resolveElementColor({ fixed: 'orange', field: 'cpu' }, frames, theme, { thresholds: { steps: [] } })
+    ).toEqual({
+      state: 'fixed',
+      color: theme.visualization.getColorByName('orange'),
     });
   });
 
-  it('no modo percentual a cor resolve, mas o rótulo não', () => {
-    const frames = buildFrames('cpu', [92], WITH_RULE, ThresholdsMode.Percentage);
-    const result = resolveElementColor({ field: 'cpu' }, frames, theme);
+  it('sem regra própria e sem Base, o elemento fica neutro', () => {
+    const frames = buildFrames('cpu', [92]);
 
-    expect(result.state).toBe('threshold');
-    expect(result).not.toHaveProperty('label', 'crítico');
+    expect(resolveElementColor({ field: 'cpu' }, frames, theme)).toEqual({ state: 'neutral' });
   });
 });
 
@@ -163,7 +191,7 @@ function problemsFrame(values: ZabbixProblem[]): DataFrame {
 const ALARMANDO: ZabbixProblem = { hosts: [{ name: HOST }], name: 'ICMP', severity: '4', value: '1' };
 const RESOLVIDA: ZabbixProblem = { ...ALARMANDO, value: '0' };
 
-const trigger: TriggerBinding = { enabled: true, host: HOST };
+const trigger: TriggerBinding = { enabled: true, host: HOST, names: [], showActive: true };
 
 /**
  * Nível 0. O ponto sensível não é a trigger acender — é o que acontece quando
@@ -175,7 +203,7 @@ describe('resolveElementColor — nível 0 (trigger)', () => {
   it('trigger alarmando vence threshold e acento estático', () => {
     const frames = [...buildFrames('cpu', [92]), problemsFrame([ALARMANDO])];
 
-    expect(resolveElementColor({ fixed: 'blue', field: 'cpu' }, frames, theme, { trigger })).toEqual({
+    expect(resolveElementColor({ fixed: 'blue', field: 'cpu' }, frames, theme, { trigger })).toMatchObject({
       state: 'trigger',
       color: theme.visualization.getColorByName('red'),
       severity: 4,
@@ -205,21 +233,27 @@ describe('resolveElementColor — nível 0 (trigger)', () => {
     const frames = [...buildFrames('cpu', [92]), problemsFrame([ALARMANDO])];
     const desligado: TriggerBinding = { ...trigger, enabled: false };
 
-    expect(resolveElementColor({ field: 'cpu' }, frames, theme, { trigger: desligado })).toEqual({
+    expect(
+      resolveElementColor({ field: 'cpu' }, frames, theme, { trigger: desligado, thresholds: REGRA_METRICA })
+    ).toEqual({
       state: 'threshold',
       color: theme.visualization.getColorByName('red'),
       label: 'crítico',
+      animation: undefined,
     });
   });
 
-  /** Regressão do critério 4: elemento salvo antes da feature não passa nada. */
-  it('sem o quarto argumento, o comportamento é o de antes', () => {
+  /**
+   * Regressão do critério 4: elemento salvo antes da feature não passa nada.
+   * Sem fontes de estado não há regra própria, então ele repousa na Base — o
+   * alarme no frame de problemas não pode pintá-lo por conta própria.
+   */
+  it('sem o quarto argumento, nenhuma fonte de estado é consultada', () => {
     const frames = [...buildFrames('cpu', [92]), problemsFrame([ALARMANDO])];
 
-    expect(resolveElementColor({ field: 'cpu' }, frames, theme)).toEqual({
-      state: 'threshold',
-      color: theme.visualization.getColorByName('red'),
-      label: 'crítico',
+    expect(resolveElementColor({ fixed: 'blue', field: 'cpu' }, frames, theme)).toEqual({
+      state: 'fixed',
+      color: theme.visualization.getColorByName('blue'),
     });
   });
 });
@@ -231,7 +265,9 @@ describe('resolveElementColor — nível 0 (trigger)', () => {
  */
 describe('accentColor', () => {
   it('devolve a cor dos estados que carregam uma', () => {
-    expect(accentColor({ state: 'trigger', color: '#f00', severity: 4, label: 'High' })).toBe('#f00');
+    const problems = [{ name: 'Unavailable by ICMP ping', severity: 4 as const, label: 'High', color: '#f00' }];
+
+    expect(accentColor({ state: 'trigger', color: '#f00', severity: 4, label: 'High', problems })).toBe('#f00');
     expect(accentColor({ state: 'threshold', color: '#f00' })).toBe('#f00');
     expect(accentColor({ state: 'fixed', color: '#00f' })).toBe('#00f');
   });
@@ -244,12 +280,11 @@ describe('accentColor', () => {
 });
 
 /**
- * Nível 1a. A regra do elemento e o pipeline nativo **coexistem** (decisão D8),
- * mas nunca no mesmo elemento: quem define regra própria não consulta mais o
- * field. Misturar os dois daria uma cor cuja origem exige abrir o painel de
- * opções do field para descobrir.
+ * Nível 1. A regra do elemento é a autoridade sobre a cor dele: o pipeline
+ * nativo do Grafana não concorre mais (ver o describe acima), e abaixo de todas
+ * as regras o elemento repousa na Base em vez de consultar o field.
  */
-describe('resolveElementColor — nível 1a (threshold do elemento)', () => {
+describe('resolveElementColor — nível 1 (regra do elemento)', () => {
   const REGRAS = { steps: [{ type: 'threshold' as const, value: 70, color: 'orange', label: 'atenção' }] };
 
   it('a regra do elemento vence a do field', () => {
@@ -263,20 +298,9 @@ describe('resolveElementColor — nível 1a (threshold do elemento)', () => {
     });
   });
 
-  it('sem regra própria, o field continua mandando', () => {
-    const frames = buildFrames('cpu', [92]);
-
-    expect(resolveElementColor({ field: 'cpu' }, frames, theme, { thresholds: { steps: [] } })).toEqual({
-      state: 'threshold',
-      color: theme.visualization.getColorByName('red'),
-      label: 'crítico',
-    });
-  });
-
   /**
-   * O caso que a exclusão entre 1a e 1b existe para resolver: com regra própria
-   * e valor abaixo dela, o elemento está OK — não pode cair no `crítico` do
-   * field, que dispararia em 85.
+   * Com regra própria e valor abaixo dela, o elemento está OK — não pode cair
+   * no `crítico` do field, que dispararia em 85.
    */
   it('abaixo da regra própria, o elemento fica em repouso — não volta ao field', () => {
     const frames = buildFrames('cpu', [92]);
@@ -311,7 +335,7 @@ describe('resolveElementColor — nível 1a (threshold do elemento)', () => {
   it('a trigger alarmando vence a regra do elemento', () => {
     const frames = [...buildFrames('cpu', [92]), problemsFrame([ALARMANDO])];
 
-    expect(resolveElementColor({ field: 'cpu' }, frames, theme, { trigger, thresholds: REGRAS })).toEqual({
+    expect(resolveElementColor({ field: 'cpu' }, frames, theme, { trigger, thresholds: REGRAS })).toMatchObject({
       state: 'trigger',
       color: theme.visualization.getColorByName('red'),
       severity: 4,
@@ -322,8 +346,8 @@ describe('resolveElementColor — nível 1a (threshold do elemento)', () => {
 
 /**
  * Bloco A: uma regra de severidade sobrescreve o mapa de cores do Zabbix, pela
- * mesma lógica que o nível 1a tem sobre o 1b — quem escreveu regra para aquele
- * elemento manda nele.
+ * mesma lógica que tirou o pipeline nativo da cadeia — quem escreveu regra para
+ * aquele elemento manda nele.
  */
 describe('resolveElementColor — regra própria de severidade', () => {
   const frames = [problemsFrame([ALARMANDO])];
@@ -340,9 +364,7 @@ describe('resolveElementColor — regra própria de severidade', () => {
   });
 
   it('a regra própria troca a cor do alarme', () => {
-    expect(
-      resolveElementColor({}, frames, theme, { trigger, thresholds: severidade(4, 'purple') })
-    ).toMatchObject({
+    expect(resolveElementColor({}, frames, theme, { trigger, thresholds: severidade(4, 'purple') })).toMatchObject({
       state: 'trigger',
       color: theme.visualization.getColorByName('purple'),
       severity: 4,
@@ -375,5 +397,102 @@ describe('resolveElementColor — regra própria de severidade', () => {
     expect(
       resolveElementColor({ fixed: 'blue' }, semAlarme, theme, { trigger, thresholds: severidade(0, 'purple') })
     ).toEqual({ state: 'fixed', color: theme.visualization.getColorByName('blue') });
+  });
+});
+
+/**
+ * Severidade desligada na escada: o elemento ignora aquele alarme por completo —
+ * não acende, não conta no badge e não aparece na lista. Fica na Base, como se
+ * não houvesse problema.
+ */
+describe('resolveElementColor — severidade desligada', () => {
+  /**
+   * Monta a escada como o editor a grava: os seis níveis materializados. Uma
+   * escada esparsa se comportaria diferente — a regra é "a partir de", então
+   * `atLeast: 4` desligado apagaria também o Disaster —, e é justamente por isso
+   * que `writeSeverityLadder` escreve os seis de uma vez.
+   */
+  const semNivel = (atLeast: 0 | 1 | 2 | 3 | 4 | 5): ElementThresholds => ({
+    steps: writeSeverityLadder(undefined, atLeast, { enabled: false }, '#888'),
+  });
+
+  it('o alarme daquele nível deixa de acender e vale a Base', () => {
+    const frames = [problemsFrame([ALARMANDO])];
+
+    expect(resolveElementColor({ fixed: 'green' }, frames, theme, { trigger, thresholds: semNivel(4) })).toEqual({
+      state: 'fixed',
+      color: theme.visualization.getColorByName('green'),
+    });
+  });
+
+  it('sem acento estático, fica neutro — não é `nodata`', () => {
+    const frames = [problemsFrame([ALARMANDO])];
+
+    expect(resolveElementColor({}, frames, theme, { trigger, thresholds: semNivel(4) })).toEqual({
+      state: 'neutral',
+    });
+  });
+
+  it('desligar um nível não desliga os outros', () => {
+    const disaster: ZabbixProblem = { ...ALARMANDO, severity: '5' };
+    const frames = [problemsFrame([ALARMANDO, disaster])];
+
+    // High (4) desligado, Disaster (5) intacto: acende pelo pior que resta.
+    expect(resolveElementColor({}, frames, theme, { trigger, thresholds: semNivel(4) })).toMatchObject({
+      state: 'trigger',
+      severity: 5,
+    });
+  });
+
+  /** O badge e a lista contam o mesmo que a cor: o descarte é anterior a tudo. */
+  it('o alarme descartado some também da contagem e da lista', () => {
+    const warning: ZabbixProblem = { ...ALARMANDO, severity: '2', name: 'Memória alta' };
+    const frames = [problemsFrame([ALARMANDO, warning])];
+
+    const accent = resolveElementColor({}, frames, theme, { trigger, thresholds: semNivel(2) });
+
+    expect(accent.state === 'trigger' && accent.problems).toHaveLength(1);
+    expect(accent.state === 'trigger' && accent.problems[0].severity).toBe(4);
+  });
+
+  it('escada intacta continua acendendo em qualquer nível', () => {
+    const frames = [problemsFrame([ALARMANDO])];
+
+    expect(resolveElementColor({}, frames, theme, { trigger })).toMatchObject({ state: 'trigger', severity: 4 });
+  });
+});
+
+/**
+ * O vínculo por host+item passa pela mesma cadeia de cor do vínculo por field:
+ * o que muda é só como a série é nomeada.
+ */
+describe('resolveElementColor — vínculo por host + item', () => {
+  const HOST = 'AGLIN-FW-STARTI';
+  const ITEM = 'CPU utilization';
+
+  it('a regra do elemento pinta a série achada pelo nome qualificado', () => {
+    const frames = buildFrames(`${HOST}: ${ITEM}`, [92], BASE_ONLY);
+
+    const resultado = resolveElementColor({ metric: { host: HOST, item: ITEM } }, frames, theme, {
+      thresholds: REGRA_METRICA,
+    });
+
+    expect(resultado).toMatchObject({ state: 'threshold', label: 'crítico' });
+  });
+
+  /**
+   * É o estado que o bloco 3 existe para acabar: a métrica está escolhida e
+   * nenhuma query a traz. NO DATA, e não a Base — "sem dado" tem que ser
+   * visivelmente diferente de "tudo bem".
+   */
+  it('métrica escolhida e ausente das queries fica em NO DATA, não na Base', () => {
+    const resultado = resolveElementColor(
+      { fixed: 'purple', metric: { host: HOST, item: ITEM } },
+      buildFrames('outra série', [1], BASE_ONLY),
+      theme,
+      { thresholds: REGRA_METRICA }
+    );
+
+    expect(resultado).toEqual({ state: 'nodata' });
   });
 });

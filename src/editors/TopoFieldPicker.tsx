@@ -37,7 +37,9 @@ export interface TopoFieldPickerProps {
 export function TopoFieldPicker({ frames, value, onChange, placeholder, filter }: TopoFieldPickerProps) {
   const NativePicker = useMemo(() => standardEditorsRegistry.getIfExists(FIELD_NAME_EDITOR_ID)?.editor, []);
 
-  const fallback = <FieldNameSelect frames={frames} value={value} onChange={onChange} placeholder={placeholder} filter={filter} />;
+  const fallback = (
+    <FieldNameSelect frames={frames} value={value} onChange={onChange} placeholder={placeholder} filter={filter} />
+  );
 
   if (!NativePicker) {
     return fallback;

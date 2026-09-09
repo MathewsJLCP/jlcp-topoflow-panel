@@ -1,11 +1,12 @@
 import { defaultCanvas, defaultTopology } from './defaults';
 import { parseTopoFlowOptions } from './parse';
+import { sampleTopology } from './sampleTopology';
 
 describe('parseTopoFlowOptions', () => {
   it('aceita opcoes validas sem reclamar', () => {
     const { options, issues } = parseTopoFlowOptions({
       schemaVersion: 1,
-      topology: defaultTopology,
+      topology: sampleTopology,
       canvas: { showGrid: false, snapToGrid: false, gridSize: 8 },
     });
 
@@ -15,11 +16,12 @@ describe('parseTopoFlowOptions', () => {
   });
 
   it('usa os defaults em silencio quando as secoes estao ausentes', () => {
-    // Estado de um painel recem-adicionado ao dashboard.
+    // Estado de um painel recem-adicionado ao dashboard: canvas em branco.
     const { options, issues } = parseTopoFlowOptions({});
 
     expect(issues).toEqual([]);
     expect(options.topology).toEqual(defaultTopology);
+    expect(options.topology.nodes).toEqual([]);
     expect(options.canvas).toEqual(defaultCanvas);
   });
 
@@ -27,6 +29,28 @@ describe('parseTopoFlowOptions', () => {
     expect(parseTopoFlowOptions(undefined).options.topology).toEqual(defaultTopology);
     expect(parseTopoFlowOptions(null).options.topology).toEqual(defaultTopology);
     expect(parseTopoFlowOptions('lixo').options.topology).toEqual(defaultTopology);
+  });
+
+  /**
+   * A flag existe para que o painel se **cale** em vez de escrever: com a
+   * topologia invalida ele desenha o canvas vazio, e um arraste sem querer
+   * gravaria esse vazio por cima do desenho do usuario.
+   */
+  it('marca a topologia como invalida so quando havia valor salvo e ele nao validou', () => {
+    expect(parseTopoFlowOptions({}).topologyInvalid).toBe(false);
+    expect(parseTopoFlowOptions({ topology: sampleTopology }).topologyInvalid).toBe(false);
+    expect(parseTopoFlowOptions({ topology: { nodes: 'nao é uma lista' } }).topologyInvalid).toBe(true);
+  });
+
+  /** Erro de canvas nao pode trancar a edicao da topologia, que esta intacta. */
+  it('nao marca a topologia por causa de um canvas corrompido', () => {
+    const { issues, topologyInvalid } = parseTopoFlowOptions({
+      topology: sampleTopology,
+      canvas: { gridSize: 'grande' },
+    });
+
+    expect(issues).toHaveLength(1);
+    expect(topologyInvalid).toBe(false);
   });
 
   it('reporta e isola uma secao corrompida sem derrubar a outra', () => {
@@ -43,13 +67,13 @@ describe('parseTopoFlowOptions', () => {
   });
 
   it('descarta arestas penduradas em vez de rejeitar a topologia inteira', () => {
-    const [node] = defaultTopology.nodes;
+    const [node] = sampleTopology.nodes;
     const { options, issues } = parseTopoFlowOptions({
       topology: {
         nodes: [node],
         edges: [
-          { ...defaultTopology.edges[0], target: 'no-que-nao-existe' },
-          { ...defaultTopology.edges[1], source: node.id, target: node.id },
+          { ...sampleTopology.edges[0], target: 'no-que-nao-existe' },
+          { ...sampleTopology.edges[1], source: node.id, target: node.id },
         ],
       },
     });
@@ -57,11 +81,11 @@ describe('parseTopoFlowOptions', () => {
     expect(issues).toEqual([]);
     expect(options.topology.nodes).toHaveLength(1);
     expect(options.topology.edges).toHaveLength(1);
-    expect(options.topology.edges[0].id).toBe(defaultTopology.edges[1].id);
+    expect(options.topology.edges[0].id).toBe(sampleTopology.edges[1].id);
   });
 
   it('descarta ids duplicados de no e de aresta', () => {
-    const [node] = defaultTopology.nodes;
+    const [node] = sampleTopology.nodes;
     const { options } = parseTopoFlowOptions({
       topology: {
         nodes: [node, { ...node, position: { x: 999, y: 999 } }],
@@ -84,7 +108,7 @@ describe('parseTopoFlowOptions', () => {
  * topologia salva antes deles carrega e continua sendo pintada pelo field.
  */
 describe('parseTopoFlowOptions — thresholds do elemento', () => {
-  const [node] = defaultTopology.nodes;
+  const [node] = sampleTopology.nodes;
 
   it('nó salvo antes da feature carrega sem regra própria', () => {
     const { options, issues } = parseTopoFlowOptions({ topology: { nodes: [node], edges: [] } });
@@ -156,8 +180,8 @@ describe('parseTopoFlowOptions — thresholds do elemento', () => {
 describe('parseTopoFlowOptions — thresholds em aresta e point', () => {
   // As duas pontas, e nao so a origem: uma aresta sem os dois nos e descartada
   // pela integridade referencial da topologia, e o teste passaria a medir isso.
-  const nodes = defaultTopology.nodes;
-  const [edge] = defaultTopology.edges;
+  const nodes = sampleTopology.nodes;
+  const [edge] = sampleTopology.edges;
   const point = { id: 'ponto', position: { x: 0, y: 0 }, color: { fixed: 'blue' }, zIndex: 0 };
 
   it('aresta salva só com `color` carrega sem regra própria e sem perder a cor', () => {
@@ -165,8 +189,8 @@ describe('parseTopoFlowOptions — thresholds em aresta e point', () => {
     const { options, issues } = parseTopoFlowOptions({ topology: { nodes, edges: [salva] } });
 
     expect(issues).toEqual([]);
-    // Sem regra propria o elemento segue o pipeline nativo, que era exatamente
-    // o comportamento anterior — e `color.fixed` continua sendo o nivel 2.
+    // Sem regra propria o elemento nao exibe estado por metrica, e
+    // `color.fixed` continua sendo o nivel 2 — a Base.
     expect(options.topology.edges[0].thresholds).toBeUndefined();
     expect(options.topology.edges[0].color).toEqual({ fixed: 'purple' });
   });
@@ -210,9 +234,8 @@ describe('parseTopoFlowOptions — thresholds em aresta e point', () => {
  * carrega, e a chave só some do JSON no primeiro save seguinte.
  */
 describe('parseTopoFlowOptions — texto', () => {
-  const [text] = defaultTopology.texts;
-  const carrega = (raw: object) =>
-    parseTopoFlowOptions({ topology: { nodes: [], edges: [], texts: [raw] } });
+  const [text] = sampleTopology.texts;
+  const carrega = (raw: object) => parseTopoFlowOptions({ topology: { nodes: [], edges: [], texts: [raw] } });
 
   it('texto salvo com `trigger` carrega sem erro, e a chave é descartada', () => {
     const { options, issues } = carrega({ ...text, trigger: { enabled: true, host: 'AGLIN-FW-STARTI' } });
@@ -256,9 +279,8 @@ describe('parseTopoFlowOptions — texto', () => {
 /** Campos novos do postit: ambos `.default`, então nada de migrador. */
 /** Bloco B: `alert` entrou opcional nos três elementos que têm trigger. */
 describe('parseTopoFlowOptions — animação de alerta', () => {
-  const [node] = defaultTopology.nodes;
-  const carrega = (alert: object) =>
-    parseTopoFlowOptions({ topology: { nodes: [{ ...node, alert }], edges: [] } });
+  const [node] = sampleTopology.nodes;
+  const carrega = (alert: object) => parseTopoFlowOptions({ topology: { nodes: [{ ...node, alert }], edges: [] } });
 
   it('elemento salvo antes da feature carrega parado', () => {
     const { options, issues } = parseTopoFlowOptions({ topology: { nodes: [node], edges: [] } });
@@ -310,7 +332,7 @@ describe('parseTopoFlowOptions — animação de alerta', () => {
 
 /** Bloco A: o tipo `severity` entrou na união de regras, de forma aditiva. */
 describe('parseTopoFlowOptions — regra de severidade', () => {
-  const [node] = defaultTopology.nodes;
+  const [node] = sampleTopology.nodes;
   const carrega = (steps: object[]) =>
     parseTopoFlowOptions({ topology: { nodes: [{ ...node, thresholds: { steps } }], edges: [] } });
 
@@ -340,7 +362,7 @@ describe('parseTopoFlowOptions — regra de severidade', () => {
 });
 
 describe('parseTopoFlowOptions — postit', () => {
-  const [postit] = defaultTopology.postits;
+  const [postit] = sampleTopology.postits;
 
   const carrega = (raw: object) => parseTopoFlowOptions({ topology: { nodes: [], edges: [], postits: [raw] } });
 
@@ -369,10 +391,104 @@ describe('parseTopoFlowOptions — postit', () => {
   });
 });
 
+/**
+ * A imagem chegou depois de tudo, e o teste que importa e o de ausencia:
+ * dashboard salvo antes dela nao tem `images`, e nao pode cair para os defaults
+ * por causa disso. E o mesmo contrato que permitiu manter `schemaVersion: 1` ao
+ * longo de todos os tipos novos.
+ */
+describe('parseTopoFlowOptions — imagem', () => {
+  const image = {
+    id: 'image-1',
+    position: { x: 10, y: 20 },
+    size: { width: 96, height: 96 },
+    src: 'data:image/png;base64,iVBORw0KGgo=',
+    color: {},
+    zIndex: 0,
+  };
+
+  const carrega = (raw: object) => parseTopoFlowOptions({ topology: { nodes: [], edges: [], images: [raw] } });
+
+  it('topologia salva antes da imagem carrega intacta, com a lista vazia', () => {
+    const { options, issues } = parseTopoFlowOptions({
+      topology: { nodes: sampleTopology.nodes, edges: [], postits: [], texts: [] },
+    });
+
+    expect(issues).toEqual([]);
+    expect(options.topology.images).toEqual([]);
+    expect(options.topology.nodes).toHaveLength(sampleTopology.nodes.length);
+  });
+
+  it('imagem sem `fit` assume o ajuste que preserva a proporção', () => {
+    const { options, issues } = carrega(image);
+
+    expect(issues).toEqual([]);
+    expect(options.topology.images[0].fit).toBe('contain');
+  });
+
+  /** Campo novo, dashboard antigo: o default é o tamanho com que ela já aparecia. */
+  it('imagem sem `fontSize` assume o tamanho de legenda padrão', () => {
+    const { options, issues } = carrega(image);
+
+    expect(issues).toEqual([]);
+    expect(options.topology.images[0].fontSize).toBe(12);
+  });
+
+  it('rejeita tamanho de fonte fora da faixa', () => {
+    expect(carrega({ ...image, fontSize: 200 }).issues).toHaveLength(1);
+  });
+
+  it('preserva arquivo, texto e fundo salvos', () => {
+    const { options, issues } = carrega({
+      ...image,
+      text: 'IN: ${traffic in}',
+      background: { mode: 'state', color: 'blue', opacity: 0.5 },
+    });
+
+    expect(issues).toEqual([]);
+    expect(options.topology.images[0]).toMatchObject({
+      src: image.src,
+      text: 'IN: ${traffic in}',
+      background: { mode: 'state', color: 'blue', opacity: 0.5 },
+    });
+  });
+
+  it('rejeita modo de fundo desconhecido em vez de aceitar valor livre', () => {
+    const { issues } = carrega({ ...image, background: { mode: 'gradiente', color: 'blue', opacity: 1 } });
+
+    expect(issues).toHaveLength(1);
+  });
+
+  /** O pedido do cliente: a conexão vale para a imagem. */
+  it('mantém a aresta que liga um nó a uma imagem', () => {
+    const [node] = sampleTopology.nodes;
+    const { options, issues } = parseTopoFlowOptions({
+      topology: {
+        nodes: [node],
+        images: [image],
+        edges: [
+          {
+            id: 'e1',
+            source: node.id,
+            target: image.id,
+            style: 'solid',
+            shape: 'straight',
+            color: {},
+            width: 2,
+          },
+        ],
+      },
+    });
+
+    expect(issues).toEqual([]);
+    expect(options.topology.edges).toHaveLength(1);
+  });
+});
+
 describe('parseTopoFlowOptions — ícone do nó', () => {
   /** Ate o Bloco 3 exibir o icone era o unico comportamento possivel. */
   it('nó salvo antes do toggle continua exibindo o ícone', () => {
-    const [node] = defaultTopology.nodes;
+    const [node] = sampleTopology.nodes;
     const { showIcon, ...semFlag } = node.presentation;
     const { options, issues } = parseTopoFlowOptions({
       topology: { nodes: [{ ...node, presentation: semFlag }], edges: [] },
@@ -383,7 +499,7 @@ describe('parseTopoFlowOptions — ícone do nó', () => {
   });
 
   it('respeita o toggle desligado', () => {
-    const [node] = defaultTopology.nodes;
+    const [node] = sampleTopology.nodes;
     const { options } = parseTopoFlowOptions({
       topology: { nodes: [{ ...node, presentation: { ...node.presentation, showIcon: false } }], edges: [] },
     });
@@ -396,7 +512,7 @@ describe('parseTopoFlowOptions — ícone do nó', () => {
    * invalidar a topologia inteira. Quem resolve o fallback e `resolveTopoIcon`.
    */
   it('aceita chave de ícone desconhecida sem reclamar', () => {
-    const [node] = defaultTopology.nodes;
+    const [node] = sampleTopology.nodes;
     const { options, issues } = parseTopoFlowOptions({
       topology: { nodes: [{ ...node, presentation: { ...node.presentation, icon: 'sitemap' } }], edges: [] },
     });
@@ -413,31 +529,83 @@ describe('parseTopoFlowOptions — ícone do nó', () => {
  */
 describe('parseTopoFlowOptions — binding de trigger', () => {
   it('carrega topologia salva antes da feature sem tocar em nada', () => {
-    const { options, issues } = parseTopoFlowOptions({ topology: defaultTopology });
+    const { options, issues } = parseTopoFlowOptions({ topology: sampleTopology });
 
     expect(issues).toEqual([]);
-    expect(options.topology).toEqual(defaultTopology);
+    expect(options.topology).toEqual(sampleTopology);
     expect(options.topology.nodes[0]).not.toHaveProperty('trigger');
   });
 
   it('aceita o vinculo e assume `enabled: false` quando a flag falta', () => {
-    const [node] = defaultTopology.nodes;
+    const [node] = sampleTopology.nodes;
     const { options, issues } = parseTopoFlowOptions({
       topology: { nodes: [{ ...node, trigger: { host: 'AGLIN-FW-STARTI' } }], edges: [] },
     });
 
     expect(issues).toEqual([]);
-    expect(options.topology.nodes[0].trigger).toEqual({ enabled: false, host: 'AGLIN-FW-STARTI' });
+    expect(options.topology.nodes[0].trigger).toEqual({
+      enabled: false,
+      host: 'AGLIN-FW-STARTI',
+      names: [],
+      showActive: true,
+    });
+  });
+
+  /**
+   * Topologia salva antes da lista de triggers ativas ganha o recurso **ligado**.
+   * Desligado, um elemento vermelho continuaria sem dizer o que caiu — que era
+   * a lacuna a fechar; quem achar poluido desliga no editor.
+   */
+  it('a lista de triggers ativas nasce ligada em vínculo salvo antes dela', () => {
+    const [node] = sampleTopology.nodes;
+    const { options } = parseTopoFlowOptions({
+      topology: { nodes: [{ ...node, trigger: { enabled: true, host: 'AGLIN-FW-STARTI' } }], edges: [] },
+    });
+
+    expect(options.topology.nodes[0].trigger?.showActive).toBe(true);
   });
 
   it('preserva o vinculo completo, inclusive o `refId` ainda nao exposto na UI', () => {
-    const [node] = defaultTopology.nodes;
-    const trigger = { enabled: true, host: 'AGLIN-FW-STARTI', name: 'Unavailable by ICMP ping', refId: 'B' };
+    const [node] = sampleTopology.nodes;
+    const trigger = { enabled: true, host: 'AGLIN-FW-STARTI', names: ['Unavailable by ICMP ping'], refId: 'B' };
     const { options } = parseTopoFlowOptions({
       topology: { nodes: [{ ...node, trigger }], edges: [] },
     });
 
-    expect(options.topology.nodes[0].trigger).toEqual(trigger);
+    expect(options.topology.nodes[0].trigger).toEqual({ ...trigger, showActive: true });
+  });
+
+  /**
+   * Topologia salva quando o vinculo aceitava uma trigger so: o `name` vira o
+   * unico item da lista e desaparece do JSON no proximo save. Sem isto, a
+   * trigger escolhida sumiria calada no primeiro parse e o elemento passaria a
+   * acender com qualquer problema do host.
+   */
+  it('dobra o `name` unico de uma topologia antiga na lista de triggers', () => {
+    const [node] = sampleTopology.nodes;
+    const trigger = { enabled: true, host: 'AGLIN-FW-STARTI', name: 'Unavailable by ICMP ping' };
+    const { options, issues } = parseTopoFlowOptions({
+      topology: { nodes: [{ ...node, trigger }], edges: [] },
+    });
+
+    expect(issues).toEqual([]);
+    expect(options.topology.nodes[0].trigger).toEqual({
+      enabled: true,
+      host: 'AGLIN-FW-STARTI',
+      names: ['Unavailable by ICMP ping'],
+      showActive: true,
+    });
+    expect(options.topology.nodes[0].trigger).not.toHaveProperty('name');
+  });
+
+  /** `name` em branco sempre significou "qualquer trigger do host". */
+  it('`name` vazio de topologia antiga vira lista vazia, e nao uma linha em branco', () => {
+    const [node] = sampleTopology.nodes;
+    const { options } = parseTopoFlowOptions({
+      topology: { nodes: [{ ...node, trigger: { enabled: true, host: 'X', name: '  ' } }], edges: [] },
+    });
+
+    expect(options.topology.nodes[0].trigger?.names).toEqual([]);
   });
 
   /**
@@ -445,7 +613,7 @@ describe('parseTopoFlowOptions — binding de trigger', () => {
    * alternar Metrica <-> Trigger sobreviver a um save (criterio de aceite 1).
    */
   it('mantem a config de metrica e a de trigger lado a lado', () => {
-    const [node] = defaultTopology.nodes;
+    const [node] = sampleTopology.nodes;
     const { options } = parseTopoFlowOptions({
       topology: {
         nodes: [
@@ -463,6 +631,170 @@ describe('parseTopoFlowOptions — binding de trigger', () => {
     const parsed = options.topology.nodes[0];
     expect(parsed.color).toEqual({ field: 'cpu' });
     expect(parsed.value).toEqual({ field: 'cpu' });
-    expect(parsed.trigger).toEqual({ enabled: false, host: 'AGLIN-FW-STARTI' });
+    expect(parsed.trigger).toEqual({ enabled: false, host: 'AGLIN-FW-STARTI', names: [], showActive: true });
+  });
+});
+
+/**
+ * O drill-down chegou aos tres elementos que tem superficie clicavel propria —
+ * No, Imagem e Texto. Como todo campo opcional do modelo, **ausente significa
+ * desligado**, entao nao ha migrador e nenhuma topologia salva antes dele muda
+ * de comportamento.
+ */
+describe('drill-down', () => {
+  const semLink = { schemaVersion: 1, topology: sampleTopology };
+
+  it('topologia salva antes do drill-down continua válida e sem link', () => {
+    const { options, issues } = parseTopoFlowOptions(semLink);
+
+    expect(issues).toEqual([]);
+    expect(options.topology.nodes[0].drilldown).toBeUndefined();
+    expect(options.topology.texts[0].drilldown).toBeUndefined();
+  });
+
+  it('sobrevive ao round-trip nos três elementos, com nova aba e sem', () => {
+    const [node] = sampleTopology.nodes;
+    const [text] = sampleTopology.texts;
+
+    const { options, issues } = parseTopoFlowOptions({
+      topology: {
+        ...sampleTopology,
+        nodes: [{ ...node, drilldown: { url: '/d/uid/host?var-host=$host' } }],
+        texts: [{ ...text, drilldown: { url: 'https://wiki/runbook', targetBlank: true } }],
+        images: [
+          {
+            id: 'logo',
+            position: { x: 0, y: 0 },
+            size: { width: 80, height: 80 },
+            src: 'topoflow/router',
+            color: {},
+            zIndex: 0,
+            drilldown: { url: '/d/uid/detalhe' },
+          },
+        ],
+      },
+    });
+
+    expect(issues).toEqual([]);
+    expect(options.topology.nodes[0].drilldown).toEqual({ url: '/d/uid/host?var-host=$host' });
+    expect(options.topology.texts[0].drilldown).toEqual({ url: 'https://wiki/runbook', targetBlank: true });
+    expect(options.topology.images[0].drilldown).toEqual({ url: '/d/uid/detalhe' });
+  });
+
+  /**
+   * O `.default('')` do `url` existe para o instante entre ligar o toggle e
+   * digitar: o objeto ja e valido, e um link vazio simplesmente nao vira `<a>`.
+   */
+  it('aceita o vínculo recém-criado, ainda sem endereço', () => {
+    const [node] = sampleTopology.nodes;
+    const { options, issues } = parseTopoFlowOptions({
+      topology: { ...sampleTopology, nodes: [{ ...node, drilldown: {} }] },
+    });
+
+    expect(issues).toEqual([]);
+    expect(options.topology.nodes[0].drilldown).toEqual({ url: '' });
+  });
+});
+
+/**
+ * O grafico de hover e um booleano opcional nos tres elementos que tem estado
+ * por metrica **e** superficie propria. Como todo campo opcional do modelo,
+ * ausente significa desligado — sem migrador, e sem mudar nada do que ja estava
+ * salvo.
+ */
+describe('gráfico de hover', () => {
+  it('topologia salva antes do gráfico continua válida e sem gráfico', () => {
+    const { options, issues } = parseTopoFlowOptions({ schemaVersion: 1, topology: sampleTopology });
+
+    expect(issues).toEqual([]);
+    expect(options.topology.nodes[0].chart).toBeUndefined();
+  });
+
+  it('sobrevive ao round-trip no nó, no point e na imagem', () => {
+    const [node] = sampleTopology.nodes;
+
+    const { options, issues } = parseTopoFlowOptions({
+      topology: {
+        ...sampleTopology,
+        nodes: [{ ...node, chart: true, color: { field: 'cpu' } }],
+        points: [{ id: 'ponto', position: { x: 0, y: 0 }, color: { field: 'cpu' }, chart: true, zIndex: 0 }],
+        images: [
+          {
+            id: 'logo',
+            position: { x: 0, y: 0 },
+            size: { width: 80, height: 80 },
+            src: '',
+            color: { field: 'cpu' },
+            chart: true,
+            zIndex: 0,
+          },
+        ],
+      },
+    });
+
+    expect(issues).toEqual([]);
+    expect(options.topology.nodes[0].chart).toBe(true);
+    expect(options.topology.points[0].chart).toBe(true);
+    expect(options.topology.images[0].chart).toBe(true);
+  });
+
+  /** A aresta nao tem o campo: o painel de hover dela pendura no chip de alarme. */
+  it('a conexão não ganhou o campo — e um valor solto ali é descartado', () => {
+    const [edge] = sampleTopology.edges;
+    const { options } = parseTopoFlowOptions({
+      topology: { ...sampleTopology, edges: [{ ...edge, chart: true }] },
+    });
+
+    expect(options.topology.edges[0]).not.toHaveProperty('chart');
+  });
+});
+
+/**
+ * A rodada do vínculo direto acrescentou dois campos, os dois opcionais e sem
+ * bump de `schemaVersion`. O que estes testes fixam é o que isso exige: nada do
+ * que já está salvo em produção pode deixar de validar.
+ */
+describe('parseTopoFlowOptions — vínculo direto com o Zabbix', () => {
+  // Parte de um nó completo: o que está em teste é o `color`, e montar o nó à
+  // mão só acrescentaria chances de falhar por um campo obrigatório esquecido.
+  const no = (color: unknown) => ({
+    schemaVersion: 1,
+    topology: { nodes: [{ ...sampleTopology.nodes[0], color }] },
+  });
+
+  it('guarda o datasource escolhido no painel', () => {
+    const { options, issues } = parseTopoFlowOptions({ schemaVersion: 1, zabbix: { datasource: 'zbx-uid' } });
+
+    expect(issues).toEqual([]);
+    expect(options.zabbix?.datasource).toBe('zbx-uid');
+  });
+
+  it('painel salvo antes da opção existir continua válido', () => {
+    const { options, issues } = parseTopoFlowOptions({ schemaVersion: 1, topology: sampleTopology });
+
+    expect(issues).toEqual([]);
+    expect(options.zabbix).toBeUndefined();
+  });
+
+  it('guarda host e item do vínculo por métrica', () => {
+    const { options, issues } = parseTopoFlowOptions(no({ metric: { host: 'AGLIN-FW', item: 'CPU utilization' } }));
+
+    expect(issues).toEqual([]);
+    expect(options.topology.nodes[0].color.metric).toEqual({ host: 'AGLIN-FW', item: 'CPU utilization' });
+  });
+
+  it('o field de sempre continua atravessando o parse', () => {
+    const { options, issues } = parseTopoFlowOptions(no({ field: 'cpu', fixed: 'blue' }));
+
+    expect(issues).toEqual([]);
+    expect(options.topology.nodes[0].color).toEqual({ field: 'cpu', fixed: 'blue' });
+  });
+
+  /** Metade de um par não é vínculo — mas também não pode derrubar o parse. */
+  it('métrica sem item não invalida a topologia', () => {
+    const { options, issues } = parseTopoFlowOptions(no({ metric: { host: 'AGLIN-FW', item: '' } }));
+
+    expect(issues).toEqual([]);
+    expect(options.topology.nodes[0].color.metric).toEqual({ host: 'AGLIN-FW', item: '' });
   });
 });

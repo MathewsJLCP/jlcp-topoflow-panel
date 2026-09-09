@@ -1,0 +1,1095 @@
+{
+  "annotations": {
+    "list": []
+  },
+  "editable": true,
+  "fiscalYearStartMonth": 0,
+  "graphTooltip": 0,
+  "links": [],
+  "panels": [
+    {
+      "type": "jlcp-topoflow-panel",
+      "title": "Topologia SITE-A",
+      "id": 1,
+      "gridPos": {
+        "h": 24,
+        "w": 24,
+        "x": 0,
+        "y": 0
+      },
+      "transparent": true,
+      "fieldConfig": {
+        "defaults": {},
+        "overrides": []
+      },
+      "options": {
+        "schemaVersion": 1,
+        "topology": {
+          "nodes": [
+            {
+              "id": "cedge1",
+              "position": {
+                "x": 300,
+                "y": 170
+              },
+              "size": {
+                "width": 176,
+                "height": 46
+              },
+              "presentation": {
+                "showIcon": false,
+                "primaryText": {
+                  "mode": "fixed",
+                  "fixed": "SITE-A-cEdge-1"
+                },
+                "secondaryText": {
+                  "mode": "fixed",
+                  "fixed": "192.168.10.2"
+                }
+              },
+              "color": {},
+              "zIndex": 1
+            },
+            {
+              "id": "cedge2",
+              "position": {
+                "x": 1120,
+                "y": 170
+              },
+              "size": {
+                "width": 176,
+                "height": 46
+              },
+              "presentation": {
+                "showIcon": false,
+                "primaryText": {
+                  "mode": "fixed",
+                  "fixed": "SITE-A-cEdge-2"
+                },
+                "secondaryText": {
+                  "mode": "fixed",
+                  "fixed": "192.168.10.6"
+                }
+              },
+              "color": {},
+              "zIndex": 1
+            },
+            {
+              "id": "fw01",
+              "position": {
+                "x": 300,
+                "y": 520
+              },
+              "size": {
+                "width": 176,
+                "height": 46
+              },
+              "presentation": {
+                "showIcon": false,
+                "primaryText": {
+                  "mode": "fixed",
+                  "fixed": "SITE-A-FW-01"
+                },
+                "secondaryText": {
+                  "mode": "fixed",
+                  "fixed": "192.168.20.160"
+                }
+              },
+              "color": {},
+              "zIndex": 1
+            },
+            {
+              "id": "fw02",
+              "position": {
+                "x": 1120,
+                "y": 520
+              },
+              "size": {
+                "width": 176,
+                "height": 46
+              },
+              "presentation": {
+                "showIcon": false,
+                "primaryText": {
+                  "mode": "fixed",
+                  "fixed": "SITE-A-FW-02"
+                },
+                "secondaryText": {
+                  "mode": "fixed",
+                  "fixed": "192.168.20.161"
+                }
+              },
+              "color": {},
+              "zIndex": 1
+            },
+            {
+              "id": "sw1",
+              "position": {
+                "x": 330,
+                "y": 800
+              },
+              "size": {
+                "width": 176,
+                "height": 46
+              },
+              "presentation": {
+                "showIcon": false,
+                "primaryText": {
+                  "mode": "fixed",
+                  "fixed": "SITE-A-L3-SVL (SW1)"
+                },
+                "secondaryText": {
+                  "mode": "fixed",
+                  "fixed": "192.168.10.4"
+                }
+              },
+              "color": {},
+              "zIndex": 1
+            },
+            {
+              "id": "sw2",
+              "position": {
+                "x": 1150,
+                "y": 800
+              },
+              "size": {
+                "width": 176,
+                "height": 46
+              },
+              "presentation": {
+                "showIcon": false,
+                "primaryText": {
+                  "mode": "fixed",
+                  "fixed": "SITE-A-L3-SVL (SW2)"
+                },
+                "secondaryText": {
+                  "mode": "fixed",
+                  "fixed": "192.168.10.4"
+                }
+              },
+              "color": {},
+              "zIndex": 1
+            },
+            {
+              "id": "vg",
+              "position": {
+                "x": 60,
+                "y": 1090
+              },
+              "size": {
+                "width": 176,
+                "height": 46
+              },
+              "presentation": {
+                "showIcon": false,
+                "primaryText": {
+                  "mode": "fixed",
+                  "fixed": "SITE-A-VG"
+                },
+                "secondaryText": {
+                  "mode": "fixed",
+                  "fixed": "192.168.40.10"
+                }
+              },
+              "color": {},
+              "zIndex": 1
+            }
+          ],
+          "edges": [
+            {
+              "id": "e-cedge1-mpls",
+              "source": "cedge1",
+              "target": "p-mpls-l",
+              "style": "solid",
+              "shape": "straight",
+              "color": {
+                "fixed": "semi-dark-blue"
+              },
+              "width": 2,
+              "animation": "none"
+            },
+            {
+              "id": "e-mpls",
+              "source": "p-mpls-l",
+              "target": "p-mpls-r",
+              "style": "solid",
+              "shape": "straight",
+              "color": {
+                "fixed": "semi-dark-blue"
+              },
+              "width": 2,
+              "animation": "none",
+              "label": "Gi0/0/1.20 .105 —— .106 Gi0/0/1.20\n198.51.100.104/30  │  mpls\n↓ 384 bps  │  ↑ 48 bps"
+            },
+            {
+              "id": "e-mpls-cedge2",
+              "source": "p-mpls-r",
+              "target": "cedge2",
+              "style": "solid",
+              "shape": "straight",
+              "color": {
+                "fixed": "semi-dark-blue"
+              },
+              "width": 2,
+              "animation": "none"
+            },
+            {
+              "id": "e-cedge1-priv",
+              "source": "cedge1",
+              "target": "p-priv-l",
+              "style": "solid",
+              "shape": "straight",
+              "color": {
+                "fixed": "semi-dark-blue"
+              },
+              "width": 2,
+              "animation": "none"
+            },
+            {
+              "id": "e-priv",
+              "source": "p-priv-l",
+              "target": "p-priv-r",
+              "style": "solid",
+              "shape": "straight",
+              "color": {
+                "fixed": "semi-dark-blue"
+              },
+              "width": 2,
+              "animation": "none",
+              "label": "Gi0/0/1.30 .109 —— .110 Gi0/0/1.30\n198.51.100.108/30  │  private1\n↓ 24.76 Mbps  │  ↑ 3.51 Mbps"
+            },
+            {
+              "id": "e-priv-cedge2",
+              "source": "p-priv-r",
+              "target": "cedge2",
+              "style": "solid",
+              "shape": "straight",
+              "color": {
+                "fixed": "semi-dark-blue"
+              },
+              "width": 2,
+              "animation": "none"
+            },
+            {
+              "id": "e-cedge1-lanha",
+              "source": "cedge1",
+              "target": "p-lanha-l",
+              "style": "solid",
+              "shape": "straight",
+              "color": {
+                "fixed": "semi-dark-blue"
+              },
+              "width": 2,
+              "animation": "none"
+            },
+            {
+              "id": "e-lanha",
+              "source": "p-lanha-l",
+              "target": "p-lanha-r",
+              "style": "solid",
+              "shape": "straight",
+              "color": {
+                "fixed": "semi-dark-blue"
+              },
+              "width": 2,
+              "animation": "none",
+              "label": "Gi0/0/1.40 .113 —— .114 Gi0/0/1.40\n198.51.100.112/30  │  LAN-HA\n↓ 376 bps  │  ↑ 6.66 Kbps"
+            },
+            {
+              "id": "e-lanha-cedge2",
+              "source": "p-lanha-r",
+              "target": "cedge2",
+              "style": "solid",
+              "shape": "straight",
+              "color": {
+                "fixed": "semi-dark-blue"
+              },
+              "width": 2,
+              "animation": "none"
+            },
+            {
+              "id": "e-cedge1-fw01",
+              "source": "cedge1",
+              "target": "fw01",
+              "style": "solid",
+              "shape": "straight",
+              "color": {
+                "fixed": "semi-dark-blue"
+              },
+              "width": 2,
+              "animation": "none",
+              "label": "Gi0/0/3 —— ETH2\n192.168.30.1/29\n↓ 7.21 Mbps  │  ↑ 22.75 Mbps"
+            },
+            {
+              "id": "e-cedge2-fw02",
+              "source": "cedge2",
+              "target": "fw02",
+              "style": "solid",
+              "shape": "straight",
+              "color": {
+                "fixed": "semi-dark-blue"
+              },
+              "width": 2,
+              "animation": "none",
+              "label": "Gi0/0/3 —— ETH2\n192.168.30.9/29\n↓ 11.42 Kbps  │  ↑ 528 bps"
+            },
+            {
+              "id": "e-fw-ha",
+              "source": "fw01",
+              "target": "fw02",
+              "style": "dashed",
+              "shape": "straight",
+              "color": {
+                "fixed": "semi-dark-blue"
+              },
+              "width": 2,
+              "animation": "none",
+              "label": "ETH8 ————— ETH8\n↓ 28.01 Kbps  │  ↑ 1.24 Mbps"
+            },
+            {
+              "id": "e-fw01-sw1",
+              "source": "fw01",
+              "target": "sw1",
+              "style": "solid",
+              "shape": "straight",
+              "color": {
+                "fixed": "semi-dark-blue"
+              },
+              "width": 2,
+              "animation": "none",
+              "label": "ETH1 —— G1/1/0/1\n192.168.30.3/29\n↓ 6.51 Mbps  │  ↑ 18.02 Mbps"
+            },
+            {
+              "id": "e-fw02-sw2",
+              "source": "fw02",
+              "target": "sw2",
+              "style": "solid",
+              "shape": "straight",
+              "color": {
+                "fixed": "semi-dark-blue"
+              },
+              "width": 2,
+              "animation": "none",
+              "label": "ETH1 —— G2/1/0/1\n192.168.30.10/29\n↓ 2.62 Kbps  │  ↑ 2.41 Kbps"
+            },
+            {
+              "id": "e-sw1-svl1",
+              "source": "sw1",
+              "target": "p-svl1-l",
+              "style": "solid",
+              "shape": "straight",
+              "color": {
+                "fixed": "semi-dark-orange"
+              },
+              "width": 2,
+              "animation": "none"
+            },
+            {
+              "id": "e-svl1",
+              "source": "p-svl1-l",
+              "target": "p-svl1-r",
+              "style": "solid",
+              "shape": "straight",
+              "color": {
+                "fixed": "semi-dark-orange"
+              },
+              "width": 2,
+              "animation": "none",
+              "label": "Stackwise Virtual Link\nTe1/2/0/1 —— Te2/2/0/1\n↓ 14.77 Kbps  │  ↑ 81.32 Kbps"
+            },
+            {
+              "id": "e-svl1-sw2",
+              "source": "p-svl1-r",
+              "target": "sw2",
+              "style": "solid",
+              "shape": "straight",
+              "color": {
+                "fixed": "semi-dark-orange"
+              },
+              "width": 2,
+              "animation": "none"
+            },
+            {
+              "id": "e-sw1-svl2",
+              "source": "sw1",
+              "target": "p-svl2-l",
+              "style": "solid",
+              "shape": "straight",
+              "color": {
+                "fixed": "semi-dark-orange"
+              },
+              "width": 2,
+              "animation": "none"
+            },
+            {
+              "id": "e-svl2",
+              "source": "p-svl2-l",
+              "target": "p-svl2-r",
+              "style": "solid",
+              "shape": "straight",
+              "color": {
+                "fixed": "semi-dark-orange"
+              },
+              "width": 2,
+              "animation": "none",
+              "label": "Te1/2/0/2 —— Te2/2/0/2\n↓ 36.89 Kbps  │  ↑ 77.96 Kbps"
+            },
+            {
+              "id": "e-svl2-sw2",
+              "source": "p-svl2-r",
+              "target": "sw2",
+              "style": "solid",
+              "shape": "straight",
+              "color": {
+                "fixed": "semi-dark-orange"
+              },
+              "width": 2,
+              "animation": "none"
+            },
+            {
+              "id": "e-sw1-svl3",
+              "source": "sw1",
+              "target": "p-svl3-l",
+              "style": "solid",
+              "shape": "straight",
+              "color": {
+                "fixed": "semi-dark-orange"
+              },
+              "width": 2,
+              "animation": "none"
+            },
+            {
+              "id": "e-svl3",
+              "source": "p-svl3-l",
+              "target": "p-svl3-r",
+              "style": "solid",
+              "shape": "straight",
+              "color": {
+                "fixed": "semi-dark-orange"
+              },
+              "width": 2,
+              "animation": "none",
+              "label": "Te1/2/0/3 —— Te2/2/0/3\n↓ 16.91 Kbps  │  ↑ 107.6 Kbps"
+            },
+            {
+              "id": "e-svl3-sw2",
+              "source": "p-svl3-r",
+              "target": "sw2",
+              "style": "solid",
+              "shape": "straight",
+              "color": {
+                "fixed": "semi-dark-orange"
+              },
+              "width": 2,
+              "animation": "none"
+            },
+            {
+              "id": "e-sw1-svl4",
+              "source": "sw1",
+              "target": "p-svl4-l",
+              "style": "solid",
+              "shape": "straight",
+              "color": {
+                "fixed": "semi-dark-orange"
+              },
+              "width": 2,
+              "animation": "none"
+            },
+            {
+              "id": "e-svl4",
+              "source": "p-svl4-l",
+              "target": "p-svl4-r",
+              "style": "solid",
+              "shape": "straight",
+              "color": {
+                "fixed": "semi-dark-orange"
+              },
+              "width": 2,
+              "animation": "none",
+              "label": "Te1/2/0/4 —— Te2/2/0/4\n↓ 621.92 Kbps  │  ↑ 1.01 Mbps"
+            },
+            {
+              "id": "e-svl4-sw2",
+              "source": "p-svl4-r",
+              "target": "sw2",
+              "style": "solid",
+              "shape": "straight",
+              "color": {
+                "fixed": "semi-dark-orange"
+              },
+              "width": 2,
+              "animation": "none"
+            },
+            {
+              "id": "e-vg-bot",
+              "source": "vg",
+              "target": "p-vg-bot",
+              "style": "solid",
+              "shape": "straight",
+              "color": {
+                "fixed": "semi-dark-blue"
+              },
+              "width": 2,
+              "animation": "none"
+            },
+            {
+              "id": "e-vg",
+              "source": "p-vg-bot",
+              "target": "p-vg-top",
+              "style": "solid",
+              "shape": "straight",
+              "color": {
+                "fixed": "semi-dark-blue"
+              },
+              "width": 2,
+              "animation": "none",
+              "label": "Gi0/0/3 —— ETH2\n↓ 15.79 Mbps  │  ↑ 3.95 Mbps"
+            },
+            {
+              "id": "e-vg-sw1",
+              "source": "p-vg-top",
+              "target": "sw1",
+              "style": "solid",
+              "shape": "straight",
+              "color": {
+                "fixed": "semi-dark-blue"
+              },
+              "width": 2,
+              "animation": "none"
+            },
+            {
+              "id": "e-leg-utp",
+              "source": "p-leg-utp-a",
+              "target": "p-leg-utp-b",
+              "style": "solid",
+              "shape": "straight",
+              "color": {
+                "fixed": "semi-dark-blue"
+              },
+              "width": 3,
+              "animation": "none"
+            },
+            {
+              "id": "e-leg-fib",
+              "source": "p-leg-fib-a",
+              "target": "p-leg-fib-b",
+              "style": "solid",
+              "shape": "straight",
+              "color": {
+                "fixed": "semi-dark-orange"
+              },
+              "width": 3,
+              "animation": "none"
+            }
+          ],
+          "points": [
+            {
+              "id": "p-mpls-l",
+              "position": {
+                "x": 493,
+                "y": 143
+              },
+              "color": {
+                "fixed": "semi-dark-blue"
+              },
+              "zIndex": 1
+            },
+            {
+              "id": "p-mpls-r",
+              "position": {
+                "x": 1093,
+                "y": 143
+              },
+              "color": {
+                "fixed": "semi-dark-blue"
+              },
+              "zIndex": 1
+            },
+            {
+              "id": "p-priv-l",
+              "position": {
+                "x": 493,
+                "y": 198
+              },
+              "color": {
+                "fixed": "semi-dark-blue"
+              },
+              "zIndex": 1
+            },
+            {
+              "id": "p-priv-r",
+              "position": {
+                "x": 1093,
+                "y": 198
+              },
+              "color": {
+                "fixed": "semi-dark-blue"
+              },
+              "zIndex": 1
+            },
+            {
+              "id": "p-lanha-l",
+              "position": {
+                "x": 493,
+                "y": 253
+              },
+              "color": {
+                "fixed": "semi-dark-blue"
+              },
+              "zIndex": 1
+            },
+            {
+              "id": "p-lanha-r",
+              "position": {
+                "x": 1093,
+                "y": 253
+              },
+              "color": {
+                "fixed": "semi-dark-blue"
+              },
+              "zIndex": 1
+            },
+            {
+              "id": "p-svl1-l",
+              "position": {
+                "x": 523,
+                "y": 808
+              },
+              "color": {
+                "fixed": "semi-dark-orange"
+              },
+              "zIndex": 1
+            },
+            {
+              "id": "p-svl1-r",
+              "position": {
+                "x": 1123,
+                "y": 808
+              },
+              "color": {
+                "fixed": "semi-dark-orange"
+              },
+              "zIndex": 1
+            },
+            {
+              "id": "p-svl2-l",
+              "position": {
+                "x": 523,
+                "y": 855
+              },
+              "color": {
+                "fixed": "semi-dark-orange"
+              },
+              "zIndex": 1
+            },
+            {
+              "id": "p-svl2-r",
+              "position": {
+                "x": 1123,
+                "y": 855
+              },
+              "color": {
+                "fixed": "semi-dark-orange"
+              },
+              "zIndex": 1
+            },
+            {
+              "id": "p-svl3-l",
+              "position": {
+                "x": 523,
+                "y": 902
+              },
+              "color": {
+                "fixed": "semi-dark-orange"
+              },
+              "zIndex": 1
+            },
+            {
+              "id": "p-svl3-r",
+              "position": {
+                "x": 1123,
+                "y": 902
+              },
+              "color": {
+                "fixed": "semi-dark-orange"
+              },
+              "zIndex": 1
+            },
+            {
+              "id": "p-svl4-l",
+              "position": {
+                "x": 523,
+                "y": 949
+              },
+              "color": {
+                "fixed": "semi-dark-orange"
+              },
+              "zIndex": 1
+            },
+            {
+              "id": "p-svl4-r",
+              "position": {
+                "x": 1123,
+                "y": 949
+              },
+              "color": {
+                "fixed": "semi-dark-orange"
+              },
+              "zIndex": 1
+            },
+            {
+              "id": "p-vg-top",
+              "position": {
+                "x": 243,
+                "y": 823
+              },
+              "color": {
+                "fixed": "purple"
+              },
+              "zIndex": 1
+            },
+            {
+              "id": "p-vg-bot",
+              "position": {
+                "x": 243,
+                "y": 1113
+              },
+              "color": {
+                "fixed": "purple"
+              },
+              "zIndex": 1
+            },
+            {
+              "id": "p-leg-utp-a",
+              "position": {
+                "x": 1168,
+                "y": 1163
+              },
+              "color": {
+                "fixed": "semi-dark-blue"
+              },
+              "zIndex": 1
+            },
+            {
+              "id": "p-leg-utp-b",
+              "position": {
+                "x": 1278,
+                "y": 1163
+              },
+              "color": {
+                "fixed": "semi-dark-blue"
+              },
+              "zIndex": 1
+            },
+            {
+              "id": "p-leg-fib-a",
+              "position": {
+                "x": 1168,
+                "y": 1208
+              },
+              "color": {
+                "fixed": "semi-dark-orange"
+              },
+              "zIndex": 1
+            },
+            {
+              "id": "p-leg-fib-b",
+              "position": {
+                "x": 1278,
+                "y": 1208
+              },
+              "color": {
+                "fixed": "semi-dark-orange"
+              },
+              "zIndex": 1
+            }
+          ],
+          "postits": [
+            {
+              "id": "area-wan",
+              "position": {
+                "x": 20,
+                "y": 55
+              },
+              "size": {
+                "width": 1390,
+                "height": 620
+              },
+              "titlePosition": "top-left",
+              "color": "blue",
+              "opacity": 0.1,
+              "borderStyle": "solid",
+              "borderWidth": 2,
+              "zIndex": 0
+            },
+            {
+              "id": "area-core",
+              "position": {
+                "x": 20,
+                "y": 715
+              },
+              "size": {
+                "width": 1390,
+                "height": 590
+              },
+              "titlePosition": "top-left",
+              "color": "green",
+              "opacity": 0.12,
+              "borderStyle": "solid",
+              "borderWidth": 2,
+              "zIndex": 0
+            }
+          ],
+          "texts": [
+            {
+              "id": "t-wan",
+              "position": {
+                "x": 640,
+                "y": 70
+              },
+              "content": {
+                "mode": "fixed",
+                "fixed": "WAN EDGE"
+              },
+              "color": {
+                "fixed": "text"
+              },
+              "fontSize": 22,
+              "zIndex": 2
+            },
+            {
+              "id": "t-core",
+              "position": {
+                "x": 675,
+                "y": 730
+              },
+              "content": {
+                "mode": "fixed",
+                "fixed": "CORE"
+              },
+              "color": {
+                "fixed": "text"
+              },
+              "fontSize": 22,
+              "zIndex": 2
+            },
+            {
+              "id": "t-update",
+              "position": {
+                "x": 1160,
+                "y": 1080
+              },
+              "content": {
+                "mode": "fixed",
+                "fixed": "  Last Update  \n   2026.07.27   "
+              },
+              "color": {
+                "fixed": "text"
+              },
+              "fontSize": 13,
+              "zIndex": 2,
+              "background": {
+                "color": "dark-blue",
+                "opacity": 0.35
+              }
+            },
+            {
+              "id": "t-leg-utp",
+              "position": {
+                "x": 1305,
+                "y": 1159
+              },
+              "content": {
+                "mode": "fixed",
+                "fixed": "UTP cable"
+              },
+              "color": {
+                "fixed": "text"
+              },
+              "fontSize": 15,
+              "zIndex": 2
+            },
+            {
+              "id": "t-leg-fib",
+              "position": {
+                "x": 1305,
+                "y": 1204
+              },
+              "content": {
+                "mode": "fixed",
+                "fixed": "Fiber"
+              },
+              "color": {
+                "fixed": "text"
+              },
+              "fontSize": 15,
+              "zIndex": 2
+            }
+          ],
+          "images": [
+            {
+              "id": "img-cedge1",
+              "position": {
+                "x": 340,
+                "y": 70
+              },
+              "size": {
+                "width": 96,
+                "height": 96
+              },
+              "src": "topoflow/router",
+              "fit": "contain",
+              "fontSize": 12,
+              "iconTone": "blue",
+              "color": {},
+              "zIndex": 0
+            },
+            {
+              "id": "img-cedge2",
+              "position": {
+                "x": 1160,
+                "y": 70
+              },
+              "size": {
+                "width": 96,
+                "height": 96
+              },
+              "src": "topoflow/router",
+              "fit": "contain",
+              "fontSize": 12,
+              "iconTone": "blue",
+              "color": {},
+              "zIndex": 0
+            },
+            {
+              "id": "img-fw01",
+              "position": {
+                "x": 340,
+                "y": 420
+              },
+              "size": {
+                "width": 96,
+                "height": 96
+              },
+              "src": "topoflow/firewall",
+              "fit": "contain",
+              "fontSize": 12,
+              "iconTone": "blue",
+              "color": {},
+              "zIndex": 0
+            },
+            {
+              "id": "img-fw02",
+              "position": {
+                "x": 1160,
+                "y": 420
+              },
+              "size": {
+                "width": 96,
+                "height": 96
+              },
+              "src": "topoflow/firewall",
+              "fit": "contain",
+              "fontSize": 12,
+              "iconTone": "blue",
+              "color": {},
+              "zIndex": 0
+            },
+            {
+              "id": "img-sw1",
+              "position": {
+                "x": 370,
+                "y": 700
+              },
+              "size": {
+                "width": 96,
+                "height": 96
+              },
+              "src": "topoflow/layer-switch",
+              "fit": "contain",
+              "fontSize": 12,
+              "iconTone": "blue",
+              "color": {},
+              "zIndex": 0
+            },
+            {
+              "id": "img-sw2",
+              "position": {
+                "x": 1190,
+                "y": 700
+              },
+              "size": {
+                "width": 96,
+                "height": 96
+              },
+              "src": "topoflow/layer-switch",
+              "fit": "contain",
+              "fontSize": 12,
+              "iconTone": "blue",
+              "color": {},
+              "zIndex": 0
+            },
+            {
+              "id": "img-vg",
+              "position": {
+                "x": 100,
+                "y": 990
+              },
+              "size": {
+                "width": 96,
+                "height": 96
+              },
+              "src": "topoflow/router",
+              "fit": "contain",
+              "fontSize": 12,
+              "iconTone": "gray",
+              "color": {},
+              "zIndex": 0
+            }
+          ]
+        },
+        "canvas": {
+          "showGrid": true,
+          "snapToGrid": true,
+          "gridSize": 16,
+          "inlineEditing": false
+        }
+      },
+      "targets": []
+    }
+  ],
+  "preload": false,
+  "refresh": "",
+  "schemaVersion": 41,
+  "tags": [
+    "topoflow",
+    "exemplo"
+  ],
+  "templating": {
+    "list": []
+  },
+  "time": {
+    "from": "now-6h",
+    "to": "now"
+  },
+  "timepicker": {},
+  "timezone": "browser",
+  "title": "TopoFlow — Exemplo (estático)",
+  "uid": "topoflow-exemplo-estatico",
+  "version": 1,
+  "weekStart": "",
+  "__requires": [
+    {
+      "type": "grafana",
+      "id": "grafana",
+      "name": "Grafana",
+      "version": "12.3.0"
+    },
+    {
+      "type": "panel",
+      "id": "jlcp-topoflow-panel",
+      "name": "TopoFlow",
+      "version": "1.0.0"
+    }
+  ]
+}

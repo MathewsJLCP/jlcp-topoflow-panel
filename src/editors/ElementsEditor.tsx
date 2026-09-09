@@ -3,10 +3,14 @@ import { css, cx } from '@emotion/css';
 import { DataFrame, GrafanaTheme2, IconName, StandardEditorProps } from '@grafana/data';
 import { Button, Dropdown, Icon, IconButton, Menu, useStyles2 } from '@grafana/ui';
 
+import { defaultTopology } from '../model/defaults';
 import { addElement, duplicateElement, removeElements } from '../model/mutations';
+import { topologySchema } from '../model/schema';
 import { ElementKind, TopoFlowOptions, Topology } from '../model/types';
 import { TopoInstanceState } from '../panel/instanceState';
-import { EdgeForm, NodeForm, PointForm, PostitForm, TextForm } from './ElementForms';
+import { BulkEdgeForm, BulkPointForm } from './BulkForms';
+import { EdgeForm, ImageForm, NodeForm, PointForm, PostitForm, TextForm } from './ElementForms';
+import { ZabbixSourceProvider } from './zabbixSource';
 
 /**
  * O "layer": lista plana dos elementos da topologia com o formulario de cada um
@@ -16,7 +20,51 @@ import { EdgeForm, NodeForm, PointForm, PostitForm, TextForm } from './ElementFo
  * (ver `../panel/instanceState.ts`). O canal e opcional: sem ele o acordeao
  * volta a ser puramente local, que era o comportamento anterior.
  */
-export function ElementsEditor({
+export function ElementsEditor(props: StandardEditorProps<Topology, unknown, TopoFlowOptions, TopoInstanceState>) {
+  /**
+   * O editor recebe `panel.options.topology` **cru** — o Grafana entrega o que
+   * esta salvo, sem passar pelo Zod que o painel usa do outro lado. Duas coisas
+   * dependiam disso e nenhuma estava garantida:
+   *
+   *   - uma topologia salva antes de `points`, `postits`, `texts` ou `images`
+   *     existirem (o schema aceita isso de proposito, via `.default([])`)
+   *     derrubava a aba inteira de opcoes com "Cannot read properties of
+   *     undefined (reading 'map')" — a lista percorre as seis colecoes;
+   *   - o que o formulario escrevia podia diferir do que o canvas desenhava, que
+   *     e a origem da sensacao de configuracao que "volta ao default".
+   *
+   * Normalizar aqui faz o editor e o canvas lerem exatamente o mesmo objeto.
+   */
+  const parsed = useMemo(() => topologySchema.safeParse(props.value ?? defaultTopology), [props.value]);
+
+  if (!parsed.success) {
+    return <InvalidTopology />;
+  }
+
+  /*
+    O provider fica aqui, e nao dentro de cada formulario, porque este e o unico
+    componente do editor que ve `context.options` — os formularios recebem so o
+    elemento e os frames.
+  */
+  return (
+    <ZabbixSourceProvider datasource={props.context.options?.zabbix?.datasource}>
+      <ElementsLayer {...props} value={parsed.data} />
+    </ZabbixSourceProvider>
+  );
+}
+
+function InvalidTopology() {
+  const styles = useStyles2(getStyles);
+
+  return (
+    <div className={styles.empty}>
+      A topologia salva neste painel não é válida e o canvas está mostrando o exemplo padrão. Corrija-a em{' '}
+      <strong>Panel JSON</strong> — a edição fica desligada para não sobrescrever o que está salvo.
+    </div>
+  );
+}
+
+function ElementsLayer({
   value,
   onChange,
   context,
@@ -25,27 +73,64 @@ export function ElementsEditor({
   const [openId, setOpenId] = useState<string | undefined>();
 
   const canvas = context.instanceState;
-  const selectedOnCanvas = canvas?.selected;
+  const selectedOnCanvas = canvas?.selected ?? EMPTY_SELECTION;
+  const selectedSet = useMemo(() => new Set(selectedOnCanvas), [selectedOnCanvas]);
+  /** Um so selecionado: e o caso em que abrir o formulario dele faz sentido. */
+  const onlySelected = selectedOnCanvas.length === 1 ? selectedOnCanvas[0] : undefined;
 
   /**
    * Selecionar no canvas abre o formulario do elemento — e o que torna o clique
    * util, e nao so um realce. Deselecionar (clique no vazio) nao fecha nada:
    * fechar o formulario a cada clique perdido seria hostil.
    *
+   * **Selecionar varios fecha.** Com dois ou mais, quem manda na tela e o bloco
+   * de edicao em massa, e o acordeao individual precisa sair do caminho.
+   *
+   * Era o defeito da primeira versao da edicao em massa, e ele nao se anunciava:
+   * o clique inicial numa conexao abria o formulario **dela**; o Ctrl+clique
+   * seguinte fazia o bloco em massa nascer no topo, fora da vista de quem estava
+   * olhando para o formulario ja aberto. O usuario editava o que via, e so a
+   * primeira conexao mudava — dois formularios na mesma tela, e o errado embaixo
+   * do ponteiro.
+   *
+   * A sincronia reage a **selecao inteira**, e nao so ao id unico: sem isso,
+   * passar de `[a]` para `[a, b]` nao mexeria em `openId`, que e exatamente o
+   * caso a corrigir.
+   *
    * Ajuste durante o render, e nao em efeito: `openId` tem duas fontes (o clique
    * na lista e a selecao no canvas) e por isso continua sendo estado, nao valor
    * derivado. E o padrao que o React documenta para esse caso — em efeito, a
    * lista renderizaria uma vez com a linha errada aberta antes de corrigir.
    */
-  const [syncedSelection, setSyncedSelection] = useState(selectedOnCanvas);
-  if (selectedOnCanvas && selectedOnCanvas !== syncedSelection) {
-    setSyncedSelection(selectedOnCanvas);
-    setOpenId(selectedOnCanvas);
+  const selectionKey = selectedOnCanvas.join('\u0000');
+  const [syncedSelection, setSyncedSelection] = useState(selectionKey);
+  if (selectedOnCanvas.length > 0 && selectionKey !== syncedSelection) {
+    setSyncedSelection(selectionKey);
+    // `undefined` quando ha varios: nao ha "o formulario do elemento" a abrir.
+    setOpenId(onlySelected);
   }
 
   const frames = context.data ?? [];
   const rows = useMemo(() => listElements(value), [value]);
   const edgeRows = useMemo(() => listEdges(value), [value]);
+
+  /**
+   * O que da selecao tem edicao em massa, por tipo e na ordem da topologia.
+   *
+   * Conexoes e points, que sao os dois lados do caminho que motivou a feature —
+   * os segmentos e as ancoras entre eles. Cada bloco anuncia **quantos** edita,
+   * entao um no que tenha entrado na selecao nao confunde: ele fica de fora da
+   * escrita e o rotulo diz o que esta sendo editado. Silenciar tudo por causa
+   * dele seria pior — o usuario nao teria como saber por que.
+   */
+  const bulkEdges = useMemo(() => value.edges.filter((edge) => selectedSet.has(edge.id)), [value.edges, selectedSet]);
+  const bulkPoints = useMemo(
+    () => value.points.filter((point) => selectedSet.has(point.id)),
+    [value.points, selectedSet]
+  );
+
+  /** Ha bloco de edicao em massa na tela — e e ele que manda na rolagem. */
+  const bulkMode = bulkEdges.length > 1 || bulkPoints.length > 1;
 
   const handleAdd = (kind: ElementKind) => {
     const next = addElement(value, kind, NEW_ELEMENT_POSITION);
@@ -66,6 +151,23 @@ export function ElementsEditor({
 
   return (
     <div className={styles.root}>
+      {/* No topo, acima do botao de adicionar: e a resposta imediata a um gesto
+          que acabou de acontecer no canvas, e enterra-la no fim da lista faria o
+          usuario selecionar tres conexoes e concluir que nada aconteceu. */}
+      {bulkMode && (
+        <BulkSelection selectionKey={selectionKey}>
+          {/* Selecionando conexoes e points juntos aparecem os dois blocos, cada
+              um dizendo quantos edita. E o caso do caminho por points, em que o
+              enlace **e** os segmentos mais as ancoras. */}
+          {bulkEdges.length > 1 && (
+            <BulkEdgeForm edges={bulkEdges} topology={value} frames={frames} onChange={onChange} />
+          )}
+          {bulkPoints.length > 1 && (
+            <BulkPointForm points={bulkPoints} topology={value} frames={frames} onChange={onChange} />
+          )}
+        </BulkSelection>
+      )}
+
       <Dropdown
         overlay={
           <Menu>
@@ -73,6 +175,7 @@ export function ElementsEditor({
             <Menu.Item label="Point" icon="circle" onClick={() => handleAdd('point')} />
             <Menu.Item label="Postit" icon="apps" onClick={() => handleAdd('postit')} />
             <Menu.Item label="Texto" icon="text-fields" onClick={() => handleAdd('text')} />
+            <Menu.Item label="Imagem" icon="gf-layout-simple" onClick={() => handleAdd('image')} />
           </Menu>
         }
       >
@@ -91,7 +194,8 @@ export function ElementsEditor({
               icon={KIND_ICON[row.kind]}
               label={row.label}
               open={row.id === openId}
-              highlight={row.id === selectedOnCanvas}
+              highlight={selectedSet.has(row.id)}
+              reveal={!bulkMode}
               onToggle={() => handleToggle(row.id)}
               onDuplicate={() => onChange(duplicateElement(value, row.id))}
               onDelete={() => {
@@ -116,7 +220,8 @@ export function ElementsEditor({
               icon="link"
               label={row.label}
               open={row.id === openId}
-              highlight={row.id === selectedOnCanvas}
+              highlight={selectedSet.has(row.id)}
+              reveal={!bulkMode}
               onToggle={() => handleToggle(row.id)}
               onDelete={() => {
                 setOpenId(undefined);
@@ -132,19 +237,58 @@ export function ElementsEditor({
   );
 }
 
+/**
+ * Traz o bloco de edicao em massa para a area visivel quando ele nasce.
+ *
+ * O Layer de uma topologia grande e uma lista longa, e o bloco nasce no **topo**
+ * dela. Quem rolou ate a secao de Conexoes para clicar nelas nao veria o bloco
+ * aparecer — e foi assim que a primeira versao desta feature falhou: o usuario
+ * continuava editando o formulario que tinha diante dos olhos.
+ *
+ * Mesma tecnica que o `Accordion` ja usa para a linha realcada, e pelo mesmo
+ * motivo: `nearest` rola o minimo necessario, em vez de saltar a lista.
+ */
+function BulkSelection({ selectionKey, children }: { selectionKey: string; children: React.ReactNode }) {
+  const ref = useRef<HTMLDivElement>(null);
+
+  /**
+   * Depende da selecao, e nao so da montagem: ir somando conexoes com Ctrl nao
+   * remonta o bloco, e so no nascimento ele voltaria a vista uma vez e nunca
+   * mais. `nearest` nao faz nada quando ele ja esta visivel, entao acrescentar a
+   * quinta conexao nao sacode a tela.
+   */
+  useEffect(() => {
+    ref.current?.scrollIntoView({ block: 'nearest' });
+  }, [selectionKey]);
+
+  return <div ref={ref}>{children}</div>;
+}
+
 interface AccordionProps {
   icon: IconName;
   label: string;
   open: boolean;
   /** Este e o elemento selecionado no canvas. */
   highlight?: boolean;
+  /** Realcar tambem rola a linha para a vista. Ver o efeito no corpo. */
+  reveal?: boolean;
   onToggle: () => void;
   onDuplicate?: () => void;
   onDelete: () => void;
   children: React.ReactNode;
 }
 
-function Accordion({ icon, label, open, highlight, onToggle, onDuplicate, onDelete, children }: AccordionProps) {
+function Accordion({
+  icon,
+  label,
+  open,
+  highlight,
+  reveal = true,
+  onToggle,
+  onDuplicate,
+  onDelete,
+  children,
+}: AccordionProps) {
   const styles = useStyles2(getStyles);
   const ref = useRef<HTMLDivElement>(null);
 
@@ -152,15 +296,29 @@ function Accordion({ icon, label, open, highlight, onToggle, onDuplicate, onDele
    * Numa topologia de dezenas de elementos a linha correspondente costuma estar
    * fora da area visivel — sem isto, o realce existiria mas ninguem veria.
    * `nearest` rola o minimo necessario, em vez de jogar a linha para o topo.
+   *
+   * `reveal` desliga isso durante a edicao em massa, e foi um defeito relatado:
+   * as duas rolagens disputavam. O bloco em massa subia a tela, e logo depois a
+   * linha recem-realcada a trazia de volta para baixo — os efeitos das linhas
+   * rodam depois do dele, entao a lista sempre vencia e o usuario terminava
+   * olhando para o lugar errado. Com varios selecionados quem tem de estar na
+   * vista e o bloco; o realce das linhas continua, so nao arrasta a tela.
    */
   useEffect(() => {
-    if (highlight) {
+    if (highlight && reveal) {
       ref.current?.scrollIntoView({ block: 'nearest' });
     }
-  }, [highlight]);
+  }, [highlight, reveal]);
 
   return (
-    <div ref={ref} className={cx(styles.item, highlight && styles.itemHighlight)}>
+    /* `data-selected` e gancho estavel para o seletor, como nos nos do canvas: o
+       nome que o Emotion gera muda entre builds, e a classe de realce nao serve
+       para afirmar nada num teste. */
+    <div
+      ref={ref}
+      className={cx(styles.item, highlight && styles.itemHighlight)}
+      data-selected={highlight || undefined}
+    >
       <div
         className={styles.header}
         role="button"
@@ -209,6 +367,9 @@ function Accordion({ icon, label, open, highlight, onToggle, onDuplicate, onDele
  */
 const NEW_ELEMENT_POSITION = { x: 100, y: 100 };
 
+/** Referencia estavel para o canal ausente: sem ela, todo render recalcularia. */
+const EMPTY_SELECTION: string[] = [];
+
 /** Id que existe em `next` e nao existia em `before`. */
 function newestId(before: Topology, next: Topology): string | undefined {
   const known = new Set(listElements(before).map((row) => row.id));
@@ -236,6 +397,8 @@ function ElementForm({ row, topology, frames, onChange }: ElementFormProps) {
       return <PostitForm element={row.element} {...common} />;
     case 'text':
       return <TextForm element={row.element} {...common} />;
+    case 'image':
+      return <ImageForm element={row.element} {...common} />;
   }
 }
 
@@ -244,6 +407,7 @@ const KIND_ICON: Record<ElementKind, IconName> = {
   point: 'circle',
   postit: 'apps',
   text: 'text-fields',
+  image: 'gf-layout-simple',
 };
 
 /**
@@ -275,6 +439,14 @@ function listElements(topology: Topology) {
       id: element.id,
       element,
       label: element.content.fixed || element.id,
+    })),
+    // O template cru, e nao o texto resolvido: a lista nao tem os frames, e um
+    // rotulo que muda a cada refresh atrapalharia mais do que ajuda.
+    ...topology.images.map((element) => ({
+      kind: 'image' as const,
+      id: element.id,
+      element,
+      label: element.text || element.id,
     })),
   ];
 }

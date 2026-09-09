@@ -3,6 +3,8 @@ import { DataFrame } from '@grafana/data';
 import { Field, Input, RadioButtonGroup, Stack } from '@grafana/ui';
 
 import { TextDimension } from '../model/types';
+import { isDisplayableField } from '../data/dimensions';
+import { TemplateTextField } from './TemplateTextField';
 import { TopoFieldPicker } from './TopoFieldPicker';
 
 /**
@@ -24,10 +26,21 @@ interface TextDimensionFieldProps {
   label?: string;
   frames: DataFrame[];
   value: TextDimension;
+  /**
+   * Troca o campo de uma linha pelo editor de template — texto de varias linhas
+   * com `${nome do field}` e seletor de metrica.
+   *
+   * E opcional, e nao o padrao, porque nem todo texto do painel quer isso: o
+   * texto do no e o nome do equipamento, e um textarea de tres linhas ali seria
+   * espaco gasto para dizer uma palavra. A **resolucao** e a mesma nos dois
+   * casos (`resolveText` interpola sempre); o que este sinalizador liga e a
+   * ferramenta para escrever o template, nao a capacidade de ter um.
+   */
+  template?: boolean;
   onChange: (next: TextDimension) => void;
 }
 
-export function TextDimensionField({ label, frames, value, onChange }: TextDimensionFieldProps) {
+export function TextDimensionField({ label, frames, value, template, onChange }: TextDimensionFieldProps) {
   return (
     <Field label={label}>
       <Stack direction="column" gap={1}>
@@ -39,17 +52,28 @@ export function TextDimensionField({ label, frames, value, onChange }: TextDimen
           fullWidth
         />
         {value.mode === 'fixed' ? (
-          <Input
-            value={value.fixed ?? ''}
-            onChange={(event) => onChange({ ...value, fixed: event.currentTarget.value })}
-            placeholder="Texto"
-          />
+          template ? (
+            <TemplateTextField
+              frames={frames}
+              value={value.fixed ?? ''}
+              placeholder={'Texto. Ex.: Status: ${oper status}'}
+              aria-label="Texto"
+              onChange={(fixed) => onChange({ ...value, fixed })}
+            />
+          ) : (
+            <Input
+              value={value.fixed ?? ''}
+              onChange={(event) => onChange({ ...value, fixed: event.currentTarget.value })}
+              placeholder="Texto"
+            />
+          )
         ) : (
           <TopoFieldPicker
             frames={frames}
             value={value.field}
             onChange={(field) => onChange({ ...value, field })}
             placeholder="Selecione um field"
+            filter={isDisplayableField}
           />
         )}
       </Stack>

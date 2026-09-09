@@ -1,8 +1,23 @@
 import { createTheme } from '@grafana/data';
 
+import { ActiveProblem } from '../../data/triggerState';
+import { Severity } from '../../model/types';
 import { resolveBadge } from './DeviceNode';
 
 const theme = createTheme();
+
+/**
+ * Um acento de trigger sempre carrega ao menos um problema — sem problema nao
+ * haveria alarme. O helper existe para que cada caso escreva so o que importa
+ * nele: a severidade e **quantas** triggers estao abertas.
+ */
+const alarmando = (severity: Severity, label: string, count = 1): ActiveProblem[] =>
+  Array.from({ length: count }, (_, index) => ({
+    name: `Trigger ${index + 1}`,
+    severity,
+    label,
+    color: '#f00',
+  }));
 
 /**
  * O badge e o unico lugar do no onde o estado vira texto. Renderizar o
@@ -10,29 +25,6 @@ const theme = createTheme();
  * layout, nao decisao — a decisao esta toda aqui.
  */
 describe('resolveBadge', () => {
-  it('trigger alarmando exibe o nome da severidade', () => {
-    const badge = resolveBadge(
-      { state: 'trigger', color: '#f00', severity: 5, label: 'Disaster' },
-      theme,
-      false,
-      undefined
-    );
-
-    // O CSS do badge aplica `text-transform: uppercase`; o modelo guarda o nome.
-    expect(badge).toEqual({ color: '#f00', label: 'Disaster' });
-  });
-
-  /**
-   * Com a trigger no comando, o numero da metrica sairia ao lado da severidade
-   * e sugeriria que as duas pintam o no. O estado vem de uma fonte so.
-   */
-  it('a trigger substitui a métrica no badge, não divide espaço', () => {
-    const display = { text: '92', numeric: 92, color: '#0f0' };
-    const badge = resolveBadge({ state: 'trigger', color: '#f00', severity: 4, label: 'High' }, theme, true, display);
-
-    expect(badge?.label).toBe('High');
-  });
-
   it('mantém `NO DATA`, o nome do step e o valor da métrica', () => {
     const display = { text: '92', numeric: 92 };
 
@@ -53,11 +45,37 @@ describe('resolveBadge', () => {
 });
 
 /**
- * A correção pedida na rodada: com "Valor exibido" desligado, o texto da regra
+ * O badge chegou a exibir a severidade por ser o único texto de estado que o nó
+ * tinha. Com a lista de triggers ativas embaixo do elemento, aquilo virou um
+ * segundo lugar dizendo pior a mesma coisa — e ocupava o badge, que o usuário
+ * liga para ver a **métrica**.
+ */
+describe('resolveBadge — modo trigger', () => {
+  const alarme = {
+    state: 'trigger',
+    color: '#f00',
+    severity: 4,
+    label: 'High',
+    problems: alarmando(4, 'High', 3),
+  } as const;
+
+  it('com "Exibir valor" desligado, o badge não aparece', () => {
+    expect(resolveBadge(alarme, theme, false, undefined)).toBeUndefined();
+  });
+
+  it('com "Exibir valor" ligado, o badge mostra a métrica — não a severidade', () => {
+    const badge = resolveBadge(alarme, theme, true, { text: '4.07%', numeric: 4.07 });
+
+    expect(badge?.label).toBe('4.07%');
+  });
+});
+
+/**
+ * A correção pedida na rodada: com "Exibir valor" desligado, o texto da regra
  * não aparece. Ele é o *display text* do valor — sem valor na tela, não há o
  * que substituir. A cor continua sinalizando o estado no ícone e na cápsula.
  */
-describe('resolveBadge — governado pelo toggle "Valor exibido"', () => {
+describe('resolveBadge — governado pelo toggle "Exibir valor"', () => {
   const display = { text: '92', numeric: 92 };
 
   it('com o valor desligado, a regra pinta mas não escreve', () => {
@@ -83,9 +101,8 @@ describe('resolveBadge — governado pelo toggle "Valor exibido"', () => {
     expect(resolveBadge({ state: 'neutral' }, theme, false, display)).toBeUndefined();
   });
 
-  /** Nenhum dos dois é o valor da métrica: são avisos sobre o próprio vínculo. */
-  it('trigger e `no data` não são silenciados pelo toggle', () => {
-    expect(resolveBadge({ state: 'trigger', color: '#f00', severity: 4, label: 'High' }, theme, false, undefined)?.label).toBe('High');
+  /** `no data` não é o valor da métrica: é um aviso sobre o próprio vínculo. */
+  it('`no data` não é silenciado pelo toggle', () => {
     expect(resolveBadge({ state: 'nodata' }, theme, false, undefined)?.label).toBe('no data');
   });
 });

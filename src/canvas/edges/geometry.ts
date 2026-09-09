@@ -15,11 +15,7 @@ import { InternalNode, Position } from '@xyflow/react';
  * Flow ja tinha calculado — a aresta nasce no lugar aproximado e se acerta no
  * frame seguinte, em vez de saltar do canto (0,0).
  */
-export function centerOf(
-  node: InternalNode | undefined,
-  fallbackX: number,
-  fallbackY: number
-): [number, number] {
+export function centerOf(node: InternalNode | undefined, fallbackX: number, fallbackY: number): [number, number] {
   const { width, height } = node?.measured ?? {};
   if (!node || !width || !height) {
     return [fallbackX, fallbackY];
@@ -33,8 +29,7 @@ export function centerOf(
  * descobrir onde o proprio traco deixa de ser visivel.
  */
 export type EdgeEndpoint =
-  | { shape: 'rect'; halfWidth: number; halfHeight: number }
-  | { shape: 'circle'; radius: number };
+  { shape: 'rect'; halfWidth: number; halfHeight: number } | { shape: 'circle'; radius: number };
 
 /**
  * O point e recortado como circulo porque **e** um circulo.

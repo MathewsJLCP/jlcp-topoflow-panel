@@ -22,6 +22,31 @@ export const colorDimensionSchema = z.object({
   fixed: z.string().optional(),
   /** Display name do field, obtido com `getFieldDisplayName`. */
   field: z.string().optional(),
+  /**
+   * A mesma pergunta que `field` responde — **qual serie observar** —, mas
+   * nomeada como o Zabbix a nomeia, e nao como o frame a nomeia.
+   *
+   * Existe porque escolher pelo nome do field exige que a query ja traga aquela
+   * metrica: e a ordem invertida do trabalho real, em que o usuario sabe o host
+   * e o item muito antes de haver query. Com host e item, o editor pergunta ao
+   * Zabbix (ver `data/zabbixApi.ts`) e o vinculo nasce antes do dado.
+   *
+   * `field` continua valido para sempre: e o formato de tudo que ja esta salvo
+   * em producao. Quem traduz um no outro e `stateFieldName`, em
+   * `data/dimensions.ts` — e e la que esta a regra de precedencia.
+   *
+   * Os dois nunca sao gravados juntos pelo editor: sao dois nomes para a mesma
+   * serie, e mante-los lado a lado seria uma segunda fonte da verdade livre para
+   * discordar da primeira.
+   */
+  metric: z
+    .object({
+      /** Nome do host no Zabbix, visivel ou tecnico. */
+      host: z.string(),
+      /** Nome do item **ja expandido** — ver `expandItemName`. */
+      item: z.string(),
+    })
+    .optional(),
 });
 
 /**
@@ -43,11 +68,12 @@ export const valueDimensionSchema = z.object({
 /**
  * Regras de estado por elemento, sobre o valor do field em `color.field`.
  *
- * **Coexiste** com o pipeline nativo do Grafana (decisao D8): um elemento sem
- * regra propria continua sendo pintado pelos thresholds do field, exatamente
- * como antes. Quem define regra aqui passa a mandar, e o nativo sai de cena
- * para aquele elemento — misturar os dois daria uma cor que ninguem consegue
- * explicar olhando so para um lugar.
+ * **E a unica fonte de cor por metrica do elemento.** Ate 2026-09-02 ela
+ * coexistia com o pipeline nativo do Grafana (decisao D8): sem regra propria, o
+ * elemento era pintado pelos thresholds do field. A coexistencia caiu porque
+ * misturava duas telas numa cor so — a Base escolhida no elemento perdia para
+ * um step configurado no painel de opcoes, sem nada dizer isso a quem editava.
+ * Lista vazia (ou campo ausente) significa hoje: sem estado, vale a Base.
  *
  * Duas diferencas deliberadas em relacao ao `ThresholdsConfig` do core:
  *
@@ -94,25 +120,31 @@ export const severitySchema = z.union([
  * de outro vermelho parado nao diz qual acabou de cair. O movimento e o que
  * separa "esta ruim" de "acabou de ficar ruim".
  *
- * Onde a animacao e configurada difere entre os dois eixos, e a diferenca tem
- * motivo:
- *
- *   - **Metrica**: campo opcional de cada regra. Quem usa metrica ja escreve as
- *     regras, entao a animacao e so mais uma coluna da linha — e assim cada
- *     faixa anima do seu jeito (`>= 75` pulsa, `> 90` faz radar).
- *   - **Trigger**: campo do elemento (`elementAlertSchema`). Ali existe um
- *     default que vale a pena preservar — o mapa de cores de severidade do
- *     Zabbix —, e amarrar a animacao a uma regra obrigaria a definir uma cor
- *     para poder animar, sobrescrevendo aquele mapa sem querer.
+ * A animacao e **coluna da regra**, nos dois eixos: cada faixa e cada severidade
+ * anima do seu jeito (`>= 75` pulsa, `> 90` faz radar; *High* pulsa, *Disaster*
+ * faz radar). Onde a regra estiver, esta a animacao dela.
  */
 export const alertAnimationSchema = z.enum(['pulse', 'blink', 'radar']);
 
+/**
+ * **Aposentado.** Era o "Animação de alerta" do elemento, com um `fromSeverity`
+ * que dizia "anime deste nivel para cima".
+ *
+ * Nasceu porque, quando a animacao chegou ao eixo de trigger, nao havia lista de
+ * severidades na tela — amarrar a animacao a uma regra obrigaria a definir uma
+ * cor so para poder animar, sobrescrevendo o mapa do Zabbix sem querer. A escada
+ * de severidades tirou esse obstaculo: as seis linhas estao sempre la, com as
+ * cores padrao, e a animacao virou uma coluna delas. O `fromSeverity` deixou de
+ * ter o que responder — "deste nivel para cima" e o que a propria escada mostra.
+ *
+ * Continua no schema **so para leitura**: topologias salvas antes disso ainda
+ * trazem o campo, e ele segue animando ate a primeira edicao da escada, que o
+ * dobra para dentro das regras e o apaga (ver `foldAlertIntoLadder`). Nao ha
+ * mais nenhuma UI que o escreva.
+ */
 export const elementAlertSchema = z.object({
   animation: alertAnimationSchema,
-  /**
-   * A partir desta severidade, inclusive. `0` (*Not classified*) faz qualquer
-   * alarme animar, que e o default de quem so quer ver o elemento se mexer.
-   */
+  /** A partir desta severidade, inclusive. */
   fromSeverity: severitySchema.default(0),
 });
 
@@ -196,6 +228,22 @@ export const elementRuleSchema = z.preprocess(
       atLeast: severitySchema,
       color: z.string(),
       label: z.string().optional(),
+      /**
+       * Severidade **desligada**: o elemento ignora alarmes deste nivel e fica
+       * na cor Base, como se nao houvesse problema nenhum.
+       *
+       * Serve para o ruido conhecido — um parque cheio de *Information* que
+       * ninguem atende deixaria o mapa inteiro aceso o tempo todo, e um mapa
+       * sempre aceso nao avisa nada. Ausente significa ligada: e o
+       * comportamento de sempre, e por isso nao ha migrador.
+       */
+      enabled: z.boolean().optional(),
+      /**
+       * Mesmo campo das regras de metrica, pelo mesmo motivo: a animacao
+       * pertence a regra que casou, e nao ao elemento. Foi o que aposentou o
+       * `elementAlertSchema` — ver o comentario dele.
+       */
+      animation: alertAnimationSchema.optional(),
     }),
   ])
 );
@@ -227,23 +275,122 @@ export const elementThresholdsSchema = z.object({
  * objeto: e a flag que decide quem manda em runtime, e ela pode voltar a `false`
  * sem levar a configuracao da trigger junto.
  */
-export const triggerBindingSchema = z.object({
-  // `.default` porque o editor escreve o objeto no instante em que o usuario
-  // abre o modo trigger, antes de existir host escolhido.
-  enabled: z.boolean().default(false),
+/**
+ * Dobra o `name` unico das topologias salvas antes de o vinculo aceitar mais de
+ * uma trigger.
+ *
+ * Mesma armadilha do `elementRuleSchema`: um `.default([])` sozinho nao resolve,
+ * porque o objeto legado nao chega com o campo *vazio* — ele chega com o campo
+ * *antigo*, e sem alguem para traduzir a escolha do usuario sumiria calada no
+ * primeiro parse. Dobrar aqui e o que dispensa migrador: o `name` vira o unico
+ * item da lista, e o proximo save grava so `names`.
+ *
+ * `name` em branco vira lista vazia, e nao `['']`, porque em branco sempre
+ * significou "qualquer trigger do host" — que e o que a lista vazia diz agora.
+ */
+function foldLegacyTriggerName(raw: unknown): unknown {
+  if (typeof raw !== 'object' || raw === null || !('name' in raw)) {
+    return raw;
+  }
+
+  const { name, ...rest } = raw as { name?: unknown };
+
+  // Ja migrado (ou escrito a mao com os dois campos): a lista manda.
+  if ('names' in rest) {
+    return rest;
+  }
+
+  return { ...rest, names: typeof name === 'string' && name.trim() ? [name] : [] };
+}
+
+export const triggerBindingSchema = z.preprocess(
+  foldLegacyTriggerName,
+  z.object({
+    // `.default` porque o editor escreve o objeto no instante em que o usuario
+    // abre o modo trigger, antes de existir host escolhido.
+    enabled: z.boolean().default(false),
+    /**
+     * `hosts[].name` (o nome que o operador ve) ou `hosts[].host` (o nome
+     * tecnico). O match aceita os dois — ver `matchesHost` em `data/problems.ts`.
+     */
+    host: z.string(),
+    /**
+     * Descricoes das triggers que acendem o elemento. A relacao entre elas e
+     * **OU**: qualquer uma em PROBLEM acende, e todas as que estiverem alarmando
+     * ao mesmo tempo entram na lista e no contador.
+     *
+     * **Lista vazia significa qualquer trigger do host** — e o mesmo que o `name`
+     * ausente dizia antes de a lista existir, e segue sendo o default de quem so
+     * escolhe o host. Entrada em branco no meio da lista e rascunho do editor e o
+     * resolver a ignora, em vez de deixa-la abranger tudo por acidente.
+     */
+    names: z.array(z.string()).default([]),
+    /**
+     * Query de Problems especifica. Reservado: esta versao varre todos os frames
+     * de Problems e nao expoe a escolha na UI. Fica declarado para que expor
+     * depois nao custe uma migracao.
+     */
+    refId: z.string().optional(),
+    /**
+     * Lista as triggers em PROBLEM logo abaixo do elemento.
+     *
+     * `.default(true)` e deliberado: sem a lista, um elemento vermelho diz que
+     * algo caiu e nao **o que** caiu — que era exatamente a lacuna relatada. O
+     * hover responde, mas so para quem tem mouse e sabe que ha algo ali; num
+     * telao de parede a resposta precisa estar na tela. Por isso quem ja tem
+     * topologia salva ganha a lista ligada, e nao desligada.
+     */
+    showActive: z.boolean().default(true),
+    /**
+     * De que lado do elemento a lista aparece. Ausente significa `bottom`, que era
+     * o unico lugar possivel ate aqui — e por isso nao ha migrador.
+     *
+     * A escolha existe porque a topologia decide por ela: um elemento na borda
+     * inferior do painel joga a lista para fora da area visivel, e um no com
+     * vizinho logo abaixo cobre o vizinho. Quem sabe onde ha espaco e quem
+     * desenhou o mapa.
+     */
+    activePosition: z.enum(['top', 'bottom', 'left', 'right']).optional(),
+    /**
+     * Formato da extensao: os nomes das triggers ou so a contagem.
+     *
+     * Ausente significa `list`, que era o unico formato possivel ate aqui — e
+     * por isso nao ha migrador. `count` troca as ate tres linhas por uma so,
+     * "4 incidentes ativos", para a topologia densa em que o operador quer saber
+     * **quanto** esta caindo e vai ao hover para saber **o que**.
+     */
+    activeDisplay: z.enum(['list', 'count']).optional(),
+  })
+);
+
+/**
+ * Drill-down: para onde o clique no elemento leva.
+ *
+ * **Ausente significa desligado**, como o `secondaryText` do no e a placa do
+ * texto — nao ha flag separada para manter em sincronia.
+ *
+ * `url` guarda o que o usuario digitou, cru, e nao o endereco ja resolvido. E o
+ * que permite escrever `/d/uid/host?var-host=$host`: as variaveis do dashboard
+ * so tem valor no instante do clique, e congelar a interpolacao no que fica
+ * salvo produziria um link que aponta para o host de quem configurou o painel.
+ *
+ * Nao ha campo de "titulo" nem lista de varios links, ao contrario do
+ * `DataLink` do core: o gatilho aqui e o elemento inteiro, e um elemento so tem
+ * um clique. Uma lista precisaria de um menu, e um menu no canvas disputaria com
+ * o menu de contexto e com o painel de triggers.
+ */
+export const drilldownSchema = z.object({
   /**
-   * `hosts[].name` (o nome que o operador ve) ou `hosts[].host` (o nome
-   * tecnico). O match aceita os dois — ver `matchesHost` em `data/problems.ts`.
+   * Caminho interno (`/d/uid/...`) ou URL completa. O caminho interno navega
+   * dentro do Grafana, sem recarregar a pagina; ver `canvas/drilldown.ts`.
    */
-  host: z.string(),
-  /** Descricao da trigger. Ausente significa qualquer trigger do host. */
-  name: z.string().optional(),
+  url: z.string().default(''),
   /**
-   * Query de Problems especifica. Reservado: esta versao varre todos os frames
-   * de Problems e nao expoe a escolha na UI. Fica declarado para que expor
-   * depois nao custe uma migracao.
+   * Abre noutra aba. Ausente e a mesma aba, que e o default do `DataLink` do
+   * core — e o certo para o operador que vai e volta pelo botao de voltar.
+   * Ligado e para o telao, onde sair do mapa nao e uma opcao.
    */
-  refId: z.string().optional(),
+  targetBlank: z.boolean().optional(),
 });
 
 export const topoNodeSchema = z.object({
@@ -266,6 +413,17 @@ export const topoNodeSchema = z.object({
     // `.default(true)` e o que faz um no salvo antes deste campo continuar
     // exibindo o icone, que era o unico comportamento possivel ate aqui.
     showIcon: z.boolean().default(true),
+    /**
+     * Qual variante de cor usar, nos icones que tem varias.
+     *
+     * **Ausente significa `state`**: a cor acompanha o estado do elemento, que e
+     * o que da sentido a um pack de figuras coloridas — sem isso, um icone
+     * vermelho ficaria vermelho tambem com tudo em ordem. Fica `.optional()` em
+     * vez de `.default('state')` porque ausente ja diz exatamente isso, e um
+     * default explicito obrigaria todo objeto de presentation escrito a mao (e
+     * todo teste) a carregar um campo que nao muda nada.
+     */
+    iconTone: z.enum(['state', 'gray', 'blue', 'green', 'yellow', 'orange', 'red']).optional(),
     primaryText: textDimensionSchema,
     /** Ausente significa desligado — nao ha flag separada. */
     secondaryText: textDimensionSchema.optional(),
@@ -277,10 +435,29 @@ export const topoNodeSchema = z.object({
    */
   color: colorDimensionSchema,
   trigger: triggerBindingSchema.optional(),
-  /** Ausente = o elemento usa os thresholds do field (pipeline nativo). */
+  /** Ausente = sem regra de metrica; o elemento repousa na Base (`color.fixed`). */
   thresholds: elementThresholdsSchema.optional(),
   /** Ausente = o elemento nao se move em alerta. */
   alert: elementAlertSchema.optional(),
+  /** Ausente = clicar no no nao leva a lugar nenhum. */
+  drilldown: drilldownSchema.optional(),
+  /**
+   * Grafico da metrica ao passar o mouse sobre o elemento.
+   *
+   * **Ausente significa desligado**, como os demais campos opcionais do modelo — e
+   * o default e desligado de proposito: um painel de parede com trinta elementos
+   * nao quer um grafico abrindo a cada movimento do ponteiro.
+   *
+   * E um booleano, e nao um objeto com o field a plotar, porque a metrica ja esta
+   * escolhida: e a mesma de `color.field`, a que decide o estado do elemento. Um
+   * segundo seletor abriria a porta para o grafico mostrar uma serie e a cor vir
+   * de outra — dois numeros no mesmo elemento, sem nada na tela dizendo qual e
+   * qual.
+   *
+   * So vale no modo Metrica. No modo Trigger nao ha field escolhido, e o hover ja
+   * tem dono: a lista de triggers em PROBLEM (ver `ElementHover`).
+   */
+  chart: z.boolean().optional(),
   zIndex: z.number().int(),
 });
 
@@ -292,7 +469,7 @@ export const topoEdgeSchema = z.object({
   shape: z.enum(['curved', 'straight']),
   color: colorDimensionSchema,
   trigger: triggerBindingSchema.optional(),
-  /** Ausente = a aresta usa os thresholds do field (pipeline nativo). */
+  /** Ausente = sem regra de metrica; a aresta repousa na Base (`color.fixed`). */
   thresholds: elementThresholdsSchema.optional(),
   /** Ausente = a aresta nao se move em alerta. */
   alert: elementAlertSchema.optional(),
@@ -317,10 +494,12 @@ export const topoPointSchema = z.object({
   }),
   color: colorDimensionSchema,
   trigger: triggerBindingSchema.optional(),
-  /** Ausente = o point usa os thresholds do field (pipeline nativo). */
+  /** Ausente = sem regra de metrica; o point repousa na Base (`color.fixed`). */
   thresholds: elementThresholdsSchema.optional(),
   /** Ausente = o point nao se move em alerta. */
   alert: elementAlertSchema.optional(),
+  /** Grafico da metrica no hover. Ver `chart` em `topoNodeSchema`. */
+  chart: z.boolean().optional(),
   zIndex: z.number().int(),
 });
 
@@ -405,6 +584,103 @@ export const topoTextSchema = z.object({
   color: colorDimensionSchema,
   background: textBackgroundSchema.optional(),
   fontSize: z.number().min(8).max(72),
+  /** Ausente = clicar no texto nao leva a lugar nenhum. */
+  drilldown: drilldownSchema.optional(),
+  zIndex: z.number().int(),
+});
+
+/**
+ * Fundo da imagem. **Ausente significa desligado** — nao existe flag separada,
+ * pelo mesmo motivo do `secondaryText` do no e da placa do texto.
+ *
+ * Os dois modos respondem a perguntas diferentes, e por isso convivem num campo
+ * so em vez de virarem dois elementos:
+ *
+ *   - `fixed` e identidade visual: a placa branca atras de um logo PNG que
+ *     sumiria no canvas escuro.
+ *   - `state` e monitoramento: a mesma caixa passa a ser pintada pela cadeia de
+ *     cor do elemento (metrica ou trigger, com os thresholds de sempre), e a
+ *     imagem vira o rotulo de um estado — que e como os mapas do Zabbix usam
+ *     icone.
+ *
+ * `color` guarda **nome de cor do tema** (ou hex), nunca o valor resolvido, e so
+ * vale no modo `fixed`: no modo `state` quem manda e o estado. Guardar os dois
+ * lados preserva a cor solida escolhida ao alternar os modos, do mesmo jeito que
+ * alternar Metrica <-> Trigger nunca descartou configuracao.
+ *
+ * `opacity` vale nos dois: e o que permite tanto uma placa discreta quanto um
+ * alarme solido atras de um PNG transparente.
+ */
+export const imageBackgroundSchema = z.object({
+  mode: z.enum(['fixed', 'state']),
+  color: z.string(),
+  opacity: z.number().min(0).max(1),
+});
+
+/**
+ * Imagem carregada pelo usuario. O unico elemento cujo conteudo principal nao e
+ * texto nem forma: e um arquivo.
+ *
+ * `src` guarda **data URI** (o upload) ou **URL** (o caminho colado). Sao a
+ * mesma coisa para o `<img>`, e por isso um campo so: o que muda e de onde o
+ * dado veio, nao o que ele e. O upload vive dentro do JSON do dashboard porque
+ * o plugin nao tem backend para onde subir arquivo — dai o teto de tamanho no
+ * editor, e dai a URL continuar existindo como saida para imagem grande.
+ *
+ * Conecta como no e point (o pedido do cliente), tem texto com metrica como o
+ * rotulo da conexao, e tem estado **so quando o fundo esta no modo `state`** —
+ * sem fundo nao ha superficie onde a cor pousaria, e pintar a propria imagem
+ * seria descaracteriza-la.
+ */
+export const topoImageSchema = z.object({
+  id: z.string().min(1),
+  position: z.object({
+    x: z.number(),
+    y: z.number(),
+  }),
+  size: z.object({
+    width: z.number().positive(),
+    height: z.number().positive(),
+  }),
+  /**
+   * Data URI (upload), URL, **ou uma chave da biblioteca de icones**
+   * (`topoflow/router`).
+   *
+   * Os tres no mesmo campo pelo mesmo motivo que data URI e URL ja dividiam um:
+   * o que muda e de onde o desenho vem, nao o que ele e. E o que faz a
+   * biblioteca chegar a Imagem sem migrador e sem um segundo campo que
+   * precisaria ser mantido em sincronia com este.
+   */
+  src: z.string().default(''),
+  /**
+   * Como a figura ocupa a caixa. `contain` preserva a proporcao e e o padrao:
+   * um logo esticado e pior que um logo com sobra ao lado.
+   */
+  fit: z.enum(['contain', 'cover', 'fill']).default('contain'),
+  /**
+   * Legenda, com `${nome do field}` interpolado — a mesma gramatica do rotulo da
+   * conexao. String simples, e nao `TextDimension`: aqui nao existe o modo "so o
+   * valor de um field", porque o template ja o cobre escrevendo `${field}`
+   * sozinho, e o radio Fixo|Field so ocuparia espaco.
+   */
+  text: z.string().optional(),
+  /**
+   * Tamanho da legenda. `.default` porque imagens salvas antes deste campo
+   * existirem continuam validando — e 12 e o tamanho com que elas ja apareciam.
+   */
+  fontSize: z.number().min(8).max(72).default(12),
+  background: imageBackgroundSchema.optional(),
+  /** Mesmo campo do no: qual variante usar num icone da biblioteca que tem varias. */
+  iconTone: z.enum(['state', 'gray', 'blue', 'green', 'yellow', 'orange', 'red']).optional(),
+  /** Base da cadeia de cor quando o fundo esta em `state`. */
+  color: colorDimensionSchema,
+  trigger: triggerBindingSchema.optional(),
+  thresholds: elementThresholdsSchema.optional(),
+  alert: elementAlertSchema.optional(),
+  /** Ausente = clicar na imagem nao leva a lugar nenhum. */
+  drilldown: drilldownSchema.optional(),
+  /** Grafico da metrica no hover. Ver `chart` em `topoNodeSchema`. */
+  chart: z.boolean().optional(),
   zIndex: z.number().int(),
 });
 
@@ -434,8 +710,9 @@ export const topologySchema = z
     points: z.array(topoPointSchema).default([]),
     postits: z.array(topoPostitSchema).default([]),
     texts: z.array(topoTextSchema).default([]),
+    images: z.array(topoImageSchema).default([]),
   })
-  .transform(({ nodes, edges, points, postits, texts }) => {
+  .transform(({ nodes, edges, points, postits, texts, images }) => {
     // Um unico espaco de ids para todos os elementos: sao todos `Node` do React
     // Flow, e ids repetidos entre tipos quebrariam a reconciliacao igual.
     const seen = new Set<string>();
@@ -452,9 +729,10 @@ export const topologySchema = z
     const keptPoints = dedupe(points);
     const keptPostits = dedupe(postits);
     const keptTexts = dedupe(texts);
+    const keptImages = dedupe(images);
 
-    // Só nós e points aceitam conexao (Bloco 4). Postits e textos nunca.
-    const connectable = new Set([...keptNodes, ...keptPoints].map((item) => item.id));
+    // Nós, points e imagens aceitam conexao. Postits e textos nunca.
+    const connectable = new Set([...keptNodes, ...keptPoints, ...keptImages].map((item) => item.id));
 
     const edgeIds = new Set<string>();
     const keptEdges = edges.filter((edge) => {
@@ -471,11 +749,35 @@ export const topologySchema = z
       points: keptPoints,
       postits: keptPostits,
       texts: keptTexts,
+      images: keptImages,
     };
   });
+
+/**
+ * De onde o editor pergunta o catalogo (hosts, itens, triggers) ao Zabbix.
+ *
+ * Objeto, e nao um `datasource` solto no topo, porque o bloco 3 acrescenta aqui
+ * o interruptor de buscar o dado direto — e as duas coisas sao a mesma
+ * configuracao vista do painel: "qual Zabbix".
+ *
+ * Tudo opcional: ausente significa o comportamento de sempre, em que os combos
+ * listam apenas o que esta nos frames das queries do painel. Por isso nao ha
+ * migrador nem bump de `schemaVersion`.
+ */
+export const zabbixOptionsSchema = z.object({
+  /**
+   * Uid do datasource Zabbix. Aceita variavel (`${zbx}`), interpolada na hora de
+   * resolver — ver `resolveZabbixUid` em `data/zabbixApi.ts`.
+   *
+   * Ausente nao significa "sem Zabbix": com exatamente um datasource Zabbix na
+   * instancia, ele e escolhido sozinho.
+   */
+  datasource: z.string().optional(),
+});
 
 export const topoFlowOptionsSchema = z.object({
   schemaVersion: z.literal(SCHEMA_VERSION),
   topology: topologySchema,
   canvas: canvasSchema,
+  zabbix: zabbixOptionsSchema.optional(),
 });

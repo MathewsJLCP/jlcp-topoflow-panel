@@ -1,0 +1,877 @@
+{
+  "annotations": {
+    "list": []
+  },
+  "editable": true,
+  "fiscalYearStartMonth": 0,
+  "graphTooltip": 0,
+  "links": [],
+  "panels": [
+    {
+      "type": "jlcp-topoflow-panel",
+      "title": "Datacenter — topologia de referência",
+      "id": 1,
+      "gridPos": {
+        "h": 24,
+        "w": 24,
+        "x": 0,
+        "y": 0
+      },
+      "transparent": true,
+      "fieldConfig": {
+        "defaults": {},
+        "overrides": []
+      },
+      "targets": [],
+      "options": {
+        "schemaVersion": 1,
+        "topology": {
+          "nodes": [
+            {
+              "id": "wan",
+              "position": {
+                "x": 48,
+                "y": 508
+              },
+              "size": {
+                "width": 176,
+                "height": 46
+              },
+              "presentation": {
+                "showIcon": false,
+                "primaryText": {
+                  "mode": "fixed",
+                  "fixed": "INTERNET"
+                },
+                "secondaryText": {
+                  "mode": "fixed",
+                  "fixed": "AS 64500"
+                }
+              },
+              "color": {},
+              "zIndex": 1
+            },
+            {
+              "id": "edge1",
+              "position": {
+                "x": 376,
+                "y": 248
+              },
+              "size": {
+                "width": 176,
+                "height": 46
+              },
+              "presentation": {
+                "showIcon": false,
+                "primaryText": {
+                  "mode": "fixed",
+                  "fixed": "EDGE-RTR-01"
+                },
+                "secondaryText": {
+                  "mode": "fixed",
+                  "fixed": "198.51.100.2"
+                }
+              },
+              "color": {},
+              "zIndex": 1
+            },
+            {
+              "id": "edge2",
+              "position": {
+                "x": 376,
+                "y": 768
+              },
+              "size": {
+                "width": 176,
+                "height": 46
+              },
+              "presentation": {
+                "showIcon": false,
+                "primaryText": {
+                  "mode": "fixed",
+                  "fixed": "EDGE-RTR-02"
+                },
+                "secondaryText": {
+                  "mode": "fixed",
+                  "fixed": "198.51.100.6 · SEM ENLACE"
+                }
+              },
+              "color": {
+                "fixed": "red"
+              },
+              "zIndex": 1
+            },
+            {
+              "id": "fw1",
+              "position": {
+                "x": 704,
+                "y": 248
+              },
+              "size": {
+                "width": 176,
+                "height": 46
+              },
+              "presentation": {
+                "showIcon": false,
+                "primaryText": {
+                  "mode": "fixed",
+                  "fixed": "FW-01"
+                },
+                "secondaryText": {
+                  "mode": "fixed",
+                  "fixed": "192.168.10.2"
+                }
+              },
+              "color": {},
+              "zIndex": 1
+            },
+            {
+              "id": "fw2",
+              "position": {
+                "x": 704,
+                "y": 768
+              },
+              "size": {
+                "width": 176,
+                "height": 46
+              },
+              "presentation": {
+                "showIcon": false,
+                "primaryText": {
+                  "mode": "fixed",
+                  "fixed": "FW-02"
+                },
+                "secondaryText": {
+                  "mode": "fixed",
+                  "fixed": "192.168.10.3"
+                }
+              },
+              "color": {},
+              "zIndex": 1
+            },
+            {
+              "id": "core1",
+              "position": {
+                "x": 1032,
+                "y": 248
+              },
+              "size": {
+                "width": 176,
+                "height": 46
+              },
+              "presentation": {
+                "showIcon": false,
+                "primaryText": {
+                  "mode": "fixed",
+                  "fixed": "CORE-SW-01"
+                },
+                "secondaryText": {
+                  "mode": "fixed",
+                  "fixed": "192.168.20.2"
+                }
+              },
+              "color": {},
+              "zIndex": 1
+            },
+            {
+              "id": "core2",
+              "position": {
+                "x": 1032,
+                "y": 768
+              },
+              "size": {
+                "width": 176,
+                "height": 46
+              },
+              "presentation": {
+                "showIcon": false,
+                "primaryText": {
+                  "mode": "fixed",
+                  "fixed": "CORE-SW-02"
+                },
+                "secondaryText": {
+                  "mode": "fixed",
+                  "fixed": "192.168.20.3"
+                }
+              },
+              "color": {},
+              "zIndex": 1
+            },
+            {
+              "id": "accsw",
+              "position": {
+                "x": 1360,
+                "y": 508
+              },
+              "size": {
+                "width": 176,
+                "height": 46
+              },
+              "presentation": {
+                "showIcon": false,
+                "primaryText": {
+                  "mode": "fixed",
+                  "fixed": "ACC-SW-01"
+                },
+                "secondaryText": {
+                  "mode": "fixed",
+                  "fixed": "192.168.30.2"
+                }
+              },
+              "color": {},
+              "zIndex": 1
+            },
+            {
+              "id": "srvapp",
+              "position": {
+                "x": 1688,
+                "y": 248
+              },
+              "size": {
+                "width": 176,
+                "height": 46
+              },
+              "presentation": {
+                "showIcon": false,
+                "primaryText": {
+                  "mode": "fixed",
+                  "fixed": "SRV-APP-01"
+                },
+                "secondaryText": {
+                  "mode": "fixed",
+                  "fixed": "192.168.40.10"
+                }
+              },
+              "color": {},
+              "zIndex": 1
+            },
+            {
+              "id": "srvdb",
+              "position": {
+                "x": 1688,
+                "y": 508
+              },
+              "size": {
+                "width": 176,
+                "height": 46
+              },
+              "presentation": {
+                "showIcon": false,
+                "primaryText": {
+                  "mode": "fixed",
+                  "fixed": "SRV-DB-01"
+                },
+                "secondaryText": {
+                  "mode": "fixed",
+                  "fixed": "192.168.40.11"
+                }
+              },
+              "color": {},
+              "zIndex": 1
+            },
+            {
+              "id": "ap",
+              "position": {
+                "x": 1688,
+                "y": 768
+              },
+              "size": {
+                "width": 176,
+                "height": 46
+              },
+              "presentation": {
+                "showIcon": false,
+                "primaryText": {
+                  "mode": "fixed",
+                  "fixed": "AP-WIFI-01"
+                },
+                "secondaryText": {
+                  "mode": "fixed",
+                  "fixed": "192.168.50.20 · DEGRADADO"
+                }
+              },
+              "color": {
+                "fixed": "orange"
+              },
+              "zIndex": 1
+            }
+          ],
+          "edges": [
+            {
+              "id": "e-wan-edge1",
+              "source": "wan",
+              "target": "edge1",
+              "style": "solid",
+              "shape": "straight",
+              "color": {
+                "fixed": "semi-dark-blue"
+              },
+              "width": 2,
+              "animation": "none",
+              "label": "Link 1 · 1 Gbps"
+            },
+            {
+              "id": "e-wan-edge2",
+              "source": "wan",
+              "target": "edge2",
+              "style": "dashed",
+              "shape": "straight",
+              "color": {
+                "fixed": "red"
+              },
+              "width": 3,
+              "animation": "none",
+              "label": "Circuito fora"
+            },
+            {
+              "id": "e-edge1-fw1",
+              "source": "edge1",
+              "target": "fw1",
+              "style": "solid",
+              "shape": "straight",
+              "color": {
+                "fixed": "semi-dark-blue"
+              },
+              "width": 2,
+              "animation": "none",
+              "label": "Gi0/1 · 1 Gbps"
+            },
+            {
+              "id": "e-edge2-fw2",
+              "source": "edge2",
+              "target": "fw2",
+              "style": "solid",
+              "shape": "straight",
+              "color": {
+                "fixed": "semi-dark-blue"
+              },
+              "width": 2,
+              "animation": "none",
+              "label": "Gi0/1 · 1 Gbps"
+            },
+            {
+              "id": "e-fw-ha",
+              "source": "fw1",
+              "target": "fw2",
+              "style": "dashed",
+              "shape": "straight",
+              "color": {
+                "fixed": "semi-dark-blue"
+              },
+              "width": 2,
+              "animation": "none"
+            },
+            {
+              "id": "e-fw1-core1",
+              "source": "fw1",
+              "target": "core1",
+              "style": "solid",
+              "shape": "straight",
+              "color": {
+                "fixed": "semi-dark-blue"
+              },
+              "width": 2,
+              "animation": "none",
+              "label": "Po1 · 10 Gbps"
+            },
+            {
+              "id": "e-fw2-core2",
+              "source": "fw2",
+              "target": "core2",
+              "style": "solid",
+              "shape": "straight",
+              "color": {
+                "fixed": "semi-dark-blue"
+              },
+              "width": 2,
+              "animation": "none",
+              "label": "Po1 · 10 Gbps"
+            },
+            {
+              "id": "e-core-stack",
+              "source": "core1",
+              "target": "core2",
+              "style": "solid",
+              "shape": "straight",
+              "color": {
+                "fixed": "semi-dark-blue"
+              },
+              "width": 4,
+              "animation": "none"
+            },
+            {
+              "id": "e-core1-acc",
+              "source": "core1",
+              "target": "accsw",
+              "style": "solid",
+              "shape": "straight",
+              "color": {
+                "fixed": "semi-dark-blue"
+              },
+              "width": 2,
+              "animation": "none",
+              "label": "Po10 · 10 Gbps"
+            },
+            {
+              "id": "e-core2-acc",
+              "source": "core2",
+              "target": "accsw",
+              "style": "solid",
+              "shape": "straight",
+              "color": {
+                "fixed": "semi-dark-blue"
+              },
+              "width": 2,
+              "animation": "none",
+              "label": "Po11 · 10 Gbps"
+            },
+            {
+              "id": "e-acc-srvapp",
+              "source": "accsw",
+              "target": "srvapp",
+              "style": "solid",
+              "shape": "straight",
+              "color": {
+                "fixed": "semi-dark-blue"
+              },
+              "width": 2,
+              "animation": "none",
+              "label": "Gi1/0/1"
+            },
+            {
+              "id": "e-acc-srvdb",
+              "source": "accsw",
+              "target": "srvdb",
+              "style": "solid",
+              "shape": "straight",
+              "color": {
+                "fixed": "semi-dark-blue"
+              },
+              "width": 2,
+              "animation": "none",
+              "label": "Gi1/0/2"
+            },
+            {
+              "id": "e-acc-ap",
+              "source": "accsw",
+              "target": "ap",
+              "style": "solid",
+              "shape": "straight",
+              "color": {
+                "fixed": "orange"
+              },
+              "width": 2,
+              "animation": "none",
+              "label": "Gi1/0/8 · 60%"
+            }
+          ],
+          "points": [
+            {
+              "id": "p-leg-ok",
+              "position": {
+                "x": 24,
+                "y": 896
+              },
+              "color": {
+                "fixed": "blue"
+              },
+              "zIndex": 1
+            },
+            {
+              "id": "p-leg-warn",
+              "position": {
+                "x": 224,
+                "y": 896
+              },
+              "color": {
+                "fixed": "orange"
+              },
+              "zIndex": 1
+            },
+            {
+              "id": "p-leg-crit",
+              "position": {
+                "x": 424,
+                "y": 896
+              },
+              "color": {
+                "fixed": "red"
+              },
+              "zIndex": 1
+            }
+          ],
+          "postits": [
+            {
+              "id": "z-borda",
+              "position": {
+                "x": 24,
+                "y": 104
+              },
+              "size": {
+                "width": 552,
+                "height": 760
+              },
+              "title": "BORDA",
+              "titlePosition": "top-left",
+              "color": "blue",
+              "opacity": 0.08,
+              "borderStyle": "solid",
+              "borderWidth": 2,
+              "zIndex": 0
+            },
+            {
+              "id": "z-perimetro",
+              "position": {
+                "x": 656,
+                "y": 104
+              },
+              "size": {
+                "width": 272,
+                "height": 760
+              },
+              "title": "PERÍMETRO",
+              "titlePosition": "top-left",
+              "color": "purple",
+              "opacity": 0.08,
+              "borderStyle": "solid",
+              "borderWidth": 2,
+              "zIndex": 0
+            },
+            {
+              "id": "z-nucleo",
+              "position": {
+                "x": 984,
+                "y": 104
+              },
+              "size": {
+                "width": 272,
+                "height": 760
+              },
+              "title": "NÚCLEO",
+              "titlePosition": "top-left",
+              "color": "green",
+              "opacity": 0.08,
+              "borderStyle": "solid",
+              "borderWidth": 2,
+              "zIndex": 0
+            },
+            {
+              "id": "z-acesso",
+              "position": {
+                "x": 1312,
+                "y": 104
+              },
+              "size": {
+                "width": 608,
+                "height": 760
+              },
+              "title": "ACESSO",
+              "titlePosition": "top-left",
+              "color": "yellow",
+              "opacity": 0.08,
+              "borderStyle": "solid",
+              "borderWidth": 2,
+              "zIndex": 0
+            }
+          ],
+          "texts": [
+            {
+              "id": "t-titulo",
+              "position": {
+                "x": 24,
+                "y": 24
+              },
+              "content": {
+                "mode": "fixed",
+                "fixed": "DATACENTER — TOPOLOGIA DE REFERÊNCIA"
+              },
+              "color": {
+                "fixed": "text"
+              },
+              "fontSize": 22,
+              "zIndex": 2
+            },
+            {
+              "id": "t-leg-ok",
+              "position": {
+                "x": 50,
+                "y": 892
+              },
+              "content": {
+                "mode": "fixed",
+                "fixed": "Operacional"
+              },
+              "color": {
+                "fixed": "text-secondary"
+              },
+              "fontSize": 14,
+              "zIndex": 2
+            },
+            {
+              "id": "t-leg-warn",
+              "position": {
+                "x": 250,
+                "y": 892
+              },
+              "content": {
+                "mode": "fixed",
+                "fixed": "Degradado"
+              },
+              "color": {
+                "fixed": "text-secondary"
+              },
+              "fontSize": 14,
+              "zIndex": 2
+            },
+            {
+              "id": "t-leg-crit",
+              "position": {
+                "x": 450,
+                "y": 892
+              },
+              "content": {
+                "mode": "fixed",
+                "fixed": "Crítico"
+              },
+              "color": {
+                "fixed": "text-secondary"
+              },
+              "fontSize": 14,
+              "zIndex": 2
+            }
+          ],
+          "images": [
+            {
+              "id": "i-wan",
+              "position": {
+                "x": 100,
+                "y": 428
+              },
+              "size": {
+                "width": 72,
+                "height": 72
+              },
+              "src": "topoflow/world",
+              "fit": "contain",
+              "fontSize": 12,
+              "iconTone": "blue",
+              "color": {},
+              "zIndex": 0
+            },
+            {
+              "id": "i-edge1",
+              "position": {
+                "x": 428,
+                "y": 168
+              },
+              "size": {
+                "width": 72,
+                "height": 72
+              },
+              "src": "topoflow/router",
+              "fit": "contain",
+              "fontSize": 12,
+              "iconTone": "blue",
+              "color": {},
+              "zIndex": 0
+            },
+            {
+              "id": "i-edge2",
+              "position": {
+                "x": 428,
+                "y": 688
+              },
+              "size": {
+                "width": 72,
+                "height": 72
+              },
+              "src": "topoflow/router",
+              "fit": "contain",
+              "fontSize": 12,
+              "iconTone": "blue",
+              "color": {},
+              "zIndex": 0
+            },
+            {
+              "id": "i-fw1",
+              "position": {
+                "x": 756,
+                "y": 168
+              },
+              "size": {
+                "width": 72,
+                "height": 72
+              },
+              "src": "topoflow/firewall",
+              "fit": "contain",
+              "fontSize": 12,
+              "iconTone": "blue",
+              "color": {},
+              "zIndex": 0
+            },
+            {
+              "id": "i-fw2",
+              "position": {
+                "x": 756,
+                "y": 688
+              },
+              "size": {
+                "width": 72,
+                "height": 72
+              },
+              "src": "topoflow/firewall",
+              "fit": "contain",
+              "fontSize": 12,
+              "iconTone": "blue",
+              "color": {},
+              "zIndex": 0
+            },
+            {
+              "id": "i-core1",
+              "position": {
+                "x": 1084,
+                "y": 168
+              },
+              "size": {
+                "width": 72,
+                "height": 72
+              },
+              "src": "topoflow/layer-switch",
+              "fit": "contain",
+              "fontSize": 12,
+              "iconTone": "blue",
+              "color": {},
+              "zIndex": 0
+            },
+            {
+              "id": "i-core2",
+              "position": {
+                "x": 1084,
+                "y": 688
+              },
+              "size": {
+                "width": 72,
+                "height": 72
+              },
+              "src": "topoflow/layer-switch",
+              "fit": "contain",
+              "fontSize": 12,
+              "iconTone": "blue",
+              "color": {},
+              "zIndex": 0
+            },
+            {
+              "id": "i-accsw",
+              "position": {
+                "x": 1412,
+                "y": 428
+              },
+              "size": {
+                "width": 72,
+                "height": 72
+              },
+              "src": "topoflow/layer-switch",
+              "fit": "contain",
+              "fontSize": 12,
+              "iconTone": "blue",
+              "color": {},
+              "zIndex": 0
+            },
+            {
+              "id": "i-srvapp",
+              "position": {
+                "x": 1740,
+                "y": 168
+              },
+              "size": {
+                "width": 72,
+                "height": 72
+              },
+              "src": "topoflow/server",
+              "fit": "contain",
+              "fontSize": 12,
+              "iconTone": "blue",
+              "color": {},
+              "zIndex": 0
+            },
+            {
+              "id": "i-srvdb",
+              "position": {
+                "x": 1740,
+                "y": 428
+              },
+              "size": {
+                "width": 72,
+                "height": 72
+              },
+              "src": "topoflow/database",
+              "fit": "contain",
+              "fontSize": 12,
+              "iconTone": "blue",
+              "color": {},
+              "zIndex": 0
+            },
+            {
+              "id": "i-ap",
+              "position": {
+                "x": 1740,
+                "y": 688
+              },
+              "size": {
+                "width": 72,
+                "height": 72
+              },
+              "src": "topoflow/wifi",
+              "fit": "contain",
+              "fontSize": 12,
+              "iconTone": "blue",
+              "color": {},
+              "zIndex": 0
+            }
+          ]
+        },
+        "canvas": {
+          "showGrid": true,
+          "snapToGrid": true,
+          "gridSize": 16,
+          "inlineEditing": false
+        }
+      }
+    }
+  ],
+  "preload": false,
+  "refresh": "",
+  "schemaVersion": 41,
+  "tags": [
+    "topoflow",
+    "exemplo",
+    "modelo"
+  ],
+  "templating": {
+    "list": []
+  },
+  "time": {
+    "from": "now-6h",
+    "to": "now"
+  },
+  "timepicker": {},
+  "timezone": "browser",
+  "title": "TopoFlow — Modelo: Datacenter (com ícones)",
+  "uid": "topoflow-modelo-datacenter",
+  "version": 1,
+  "weekStart": "",
+  "__requires": [
+    {
+      "type": "grafana",
+      "id": "grafana",
+      "name": "Grafana",
+      "version": "12.3.0"
+    },
+    {
+      "type": "panel",
+      "id": "jlcp-topoflow-panel",
+      "name": "TopoFlow",
+      "version": "1.0.0"
+    }
+  ]
+}

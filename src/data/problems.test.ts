@@ -12,6 +12,7 @@ import {
   matchesHost,
   matchesName,
   problemSeverity,
+  problemSince,
 } from './problems';
 
 /**
@@ -120,6 +121,34 @@ describe('problemSeverity', () => {
     expect(problemSeverity({ severity: 'alta' })).toBe(0);
     expect(problemSeverity({ severity: '9' })).toBe(0);
     expect(problemSeverity({ severity: '-1' })).toBe(0);
+  });
+});
+
+/**
+ * O tempo so entra na tela quando o frame sabe dize-lo. Um `lastchange` vazio
+ * virando `0` colocaria "ha 56 anos" ao lado de toda trigger — pior que omitir.
+ */
+describe('problemSince', () => {
+  /**
+   * Regressao: a primeira versao lia so `lastchange`, que existe na resposta da
+   * API do Zabbix e **nao** no objeto que o datasource monta — o tempo nunca
+   * aparecia na tela. Quem chega ate nos e o `timestamp`.
+   */
+  it('lê o `timestamp` que o datasource monta', () => {
+    expect(problemSince({ timestamp: 1_700_000_000 })).toBe(1_700_000_000);
+  });
+
+  it('cai no `lastchange` da trigger crua quando não há `timestamp`', () => {
+    expect(problemSince({ lastchange: '1700000000' })).toBe(1_700_000_000);
+    expect(problemSince({ timestamp: 1_700_000_000, lastchange: '1' })).toBe(1_700_000_000);
+  });
+
+  it('campo ausente, vazio ou sem sentido não vira tempo', () => {
+    expect(problemSince({})).toBeUndefined();
+    expect(problemSince({ lastchange: '' })).toBeUndefined();
+    expect(problemSince({ lastchange: '0' })).toBeUndefined();
+    expect(problemSince({ lastchange: 'ontem' })).toBeUndefined();
+    expect(problemSince({ timestamp: Number.NaN })).toBeUndefined();
   });
 });
 

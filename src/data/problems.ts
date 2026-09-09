@@ -42,6 +42,28 @@ export interface ZabbixProblem {
   severity?: string;
   /** Valor atual da trigger: `'1'` = PROBLEM, `'0'` = OK. */
   value?: string;
+  /**
+   * Instante em que o problema abriu, em **segundos unix**.
+   *
+   * E o que permite a lista dizer "ha 4m". Num NOC, o alarme que acabou de
+   * abrir e o que esta aberto ha tres dias pedem acoes diferentes, e uma lista
+   * sem tempo nao os separa.
+   *
+   * O nome vem do datasource, nao da API do Zabbix: o `joinTriggersWithProblems`
+   * do grafana-zabbix monta o objeto do frame com `timestamp: Number(clock)` —
+   * o clock do **evento** — e **descarta** o `lastchange` que a trigger trazia.
+   * Foi exatamente essa a armadilha: `lastchange` existe na resposta da API,
+   * some no objeto que chega ate nos, e o tempo simplesmente nunca aparecia.
+   */
+  timestamp?: number;
+  /**
+   * O `lastchange` da trigger crua, em segundos unix e como string.
+   *
+   * Nenhum dos dois caminhos de join do datasource o repassa hoje; fica como
+   * fallback para o objeto que chegue sem passar por eles. Custa uma linha e
+   * evita depender de um detalhe interno de um plugin que nao controlamos.
+   */
+  lastchange?: string;
 }
 
 /**
@@ -56,9 +78,7 @@ export interface ZabbixProblem {
 export function isProblemsFrame(frame: DataFrame): boolean {
   const [field] = frame.fields;
 
-  return (
-    field !== undefined && field.type === FieldType.other && field.config.custom?.['type'] === 'problems'
-  );
+  return field !== undefined && field.type === FieldType.other && field.config.custom?.['type'] === 'problems';
 }
 
 /** True quando o painel tem ao menos uma query em Query Mode *Problems*. */
@@ -139,6 +159,18 @@ function isSeverity(value: number): value is Severity {
 export function problemSeverity(problem: ZabbixProblem): Severity {
   const parsed = Number(problem.severity);
   return isSeverity(parsed) ? parsed : 0;
+}
+
+/**
+ * Instante em que o problema abriu, em **segundos** unix.
+ *
+ * `undefined` quando nenhum dos dois campos veio ou o valor nao e um instante —
+ * a lista omite o tempo em vez de exibir "ha 56 anos", que e o que um
+ * `Number('')` viraria depois de somado ao epoch.
+ */
+export function problemSince(problem: ZabbixProblem): number | undefined {
+  const parsed = Number(problem.timestamp ?? problem.lastchange);
+  return Number.isFinite(parsed) && parsed > 0 ? parsed : undefined;
 }
 
 /**

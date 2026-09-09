@@ -1,8 +1,9 @@
 import React from 'react';
-import { css } from '@emotion/css';
+import { css, cx } from '@emotion/css';
 import { GrafanaTheme2, SelectableValue } from '@grafana/data';
 import {
   Button,
+  Checkbox,
   ColorPicker,
   Combobox,
   ComboboxOption,
@@ -12,13 +13,24 @@ import {
   Input,
   Menu,
   useStyles2,
+  useTheme2,
 } from '@grafana/ui';
 
+import { hasStateBinding } from '../data/dimensions';
 import { SEVERITY_LABEL } from '../data/problems';
-import { metricRules, severityRules, sortRules } from '../data/thresholds';
+import {
+  MetricRule,
+  SeverityLadderRow,
+  metricRules,
+  severityLadder,
+  severityRules,
+  sortRules,
+  writeSeverityLadder,
+} from '../data/thresholds';
 import {
   AlertAnimation,
   ColorDimension,
+  ElementAlert,
   ElementRule,
   ElementRuleType,
   ElementThresholds,
@@ -46,6 +58,12 @@ import { FieldLabel } from './FieldLabel';
  *
  * A linha Base grava em `color.fixed` — o mesmo campo de sempre. Nada foi
  * migrado; so mudou onde ele aparece.
+ *
+ * **Este bloco e a unica fonte de cor por metrica do elemento.** O Thresholds do
+ * painel de opcoes do Grafana nao concorre com ele desde 2026-09-02: enquanto
+ * concorria, uma Base escolhida aqui podia ser ignorada em favor de um step
+ * configurado em outra tela, sem nada nesta dizer isso. Ver a cadeia em
+ * `data/elementColor`.
  */
 
 /** Escala usada ao adicionar thresholds em sequencia, do mais leve ao mais grave. */
@@ -55,29 +73,19 @@ const THRESHOLD_COLORS = ['yellow', 'orange', 'red', 'dark-red'];
 const MAPPING_COLOR = 'blue';
 
 /**
- * Os tipos oferecidos dependem do eixo em que o elemento esta.
- *
- * Em Metrica, os cinco que avaliam o valor de um field. Em Trigger, so a
- * severidade — as outras condicoes nao teriam contra o que casar, e oferece-las
- * seria convidar a configurar regra que nunca dispara.
+ * Regra que o usuario adiciona a mao. A severidade fica de fora: no eixo de
+ * Trigger a lista nao e montada regra a regra, e sim uma escada fixa com os seis
+ * niveis do Zabbix (ver `SeverityLadder`).
  */
-const METRIC_RULE_TYPES: Array<{ type: ElementRuleType; label: string; description: string }> = [
+type MetricRuleType = Exclude<ElementRuleType, 'severity'>;
+
+const METRIC_RULE_TYPES: Array<{ type: MetricRuleType; label: string; description: string }> = [
   { type: 'threshold', label: 'Threshold', description: 'A partir de um valor' },
   { type: 'value', label: 'Valor', description: 'Valor exato' },
   { type: 'range', label: 'Faixa', description: 'Entre dois valores' },
   { type: 'regex', label: 'Regex', description: 'Expressão regular' },
   { type: 'special', label: 'Especial', description: 'Nulo, NaN, booleanos' },
 ];
-
-const TRIGGER_RULE_TYPES: Array<{ type: ElementRuleType; label: string; description: string }> = [
-  { type: 'severity', label: 'Severidade', description: 'A partir de uma severidade' },
-];
-
-/** Nomes do Zabbix, na ordem de gravidade. */
-const SEVERITY_OPTIONS: Array<SelectableValue<Severity>> = ([0, 1, 2, 3, 4, 5] as Severity[]).map((severity) => ({
-  value: severity,
-  label: SEVERITY_LABEL[severity],
-}));
 
 /**
  * O "sem animacao" precisa de valor proprio porque o `Combobox` nao aceita
@@ -111,20 +119,32 @@ interface ThresholdsEditorProps {
   /** So para a linha Base, que edita `color.fixed`. O `field` quem escreve e o `StateFieldPicker`. */
   color: ColorDimension;
   thresholds: ElementThresholds | undefined;
+  /**
+   * Campo aposentado do elemento, so de leitura: a escada o exibe e o dobra para
+   * dentro das regras na primeira edicao. Ver `elementAlertSchema`.
+   */
+  alert?: ElementAlert;
+  /** A aresta nao recebe anel de radar; ver `EDGE_CLASS` em `alertAnimation`. */
+  allowRadar?: boolean;
   onColorChange: (next: ColorDimension) => void;
   onThresholdsChange: (next: ElementThresholds | undefined) => void;
+  /** Chamado com `undefined` quando o `alert` legado termina de ser dobrado. */
+  onAlertChange?: (next: ElementAlert | undefined) => void;
 }
 
 export function ThresholdsEditor({
   axis,
   color,
   thresholds,
+  alert,
+  allowRadar = true,
   onColorChange,
   onThresholdsChange,
+  onAlertChange,
 }: ThresholdsEditorProps) {
   const styles = useStyles2(getStyles);
+  const theme = useTheme2();
   const ids = React.useId();
-  const ruleTypes = axis === 'trigger' ? TRIGGER_RULE_TYPES : METRIC_RULE_TYPES;
 
   /**
    * A lista exibida e so a do eixo atual, mas toda escrita devolve **a lista
@@ -134,16 +154,16 @@ export function ThresholdsEditor({
    * propriedade que o binding de trigger tem desde que existe.
    */
   const hidden = axis === 'trigger' ? metricRules(thresholds) : severityRules(thresholds);
-  const rules = axis === 'trigger' ? severityRules(thresholds) : metricRules(thresholds);
+  const rules = metricRules(thresholds);
 
   const writeRules = (next: ElementRule[]) => {
     const all = [...hidden, ...next];
-    // Lista vazia volta a ser "sem regra propria", e o elemento retoma os
-    // thresholds do field — a coexistencia da decisao D8 depende disso.
+    // Lista vazia grava `undefined`, e nao `{ steps: [] }`: e a ausencia de
+    // regra, e e ela que faz o elemento repousar na Base.
     onThresholdsChange(all.length > 0 ? { steps: sortRules(all) } : undefined);
   };
 
-  const addRule = (type: ElementRuleType) => writeRules([...rules, newRule(type, rules)]);
+  const addRule = (type: MetricRuleType) => writeRules([...rules, newRule(type, rules)]);
 
   const patchRule = (index: number, changes: Partial<ElementRule>) =>
     writeRules(rules.map((rule, i) => (i === index ? ({ ...rule, ...changes } as ElementRule) : rule)));
@@ -157,92 +177,110 @@ export function ThresholdsEditor({
    */
   const info =
     axis === 'trigger'
-      ? 'Sem regra própria, o alarme usa as cores de severidade do Zabbix.'
-      : 'Sem regra própria, o elemento segue os thresholds configurados no field.';
+      ? 'Uma cor por severidade do Zabbix. Enquanto não mexer em nenhuma, valem as cores padrão do Zabbix.'
+      : 'As regras daqui são as únicas que pintam o elemento — o Thresholds do painel formata o valor, não a cor. Sem regra, vale a Base.';
 
-  const hint = axis === 'metric' && !color.field ? 'Escolha um campo acima para as regras terem efeito.' : undefined;
+  const hint =
+    axis === 'metric' && !hasStateBinding(color) ? 'Escolha uma métrica acima para as regras terem efeito.' : undefined;
 
   return (
     <Field label={<FieldLabel info={info}>Thresholds</FieldLabel>}>
       <div className={styles.rules}>
-        <Dropdown
-          overlay={
-            <Menu>
-              {ruleTypes.map(({ type, label, description }) => (
-                <Menu.Item key={type} label={label} description={description} onClick={() => addRule(type)} />
-              ))}
-            </Menu>
-          }
-        >
-          <Button variant="secondary" size="sm" icon="plus" fullWidth>
-            Adicionar regra
-          </Button>
-        </Dropdown>
+        {/*
+          Em Trigger nao ha o que adicionar: a lista de severidades do Zabbix e
+          fechada, e as seis linhas ja estao na tela. O botao so faz sentido no
+          eixo onde o usuario inventa as regras.
+        */}
+        {axis === 'metric' && (
+          <Dropdown
+            overlay={
+              <Menu>
+                {METRIC_RULE_TYPES.map(({ type, label, description }) => (
+                  <Menu.Item key={type} label={label} description={description} onClick={() => addRule(type)} />
+                ))}
+              </Menu>
+            }
+          >
+            <Button variant="secondary" size="sm" icon="plus" fullWidth>
+              Adicionar regra
+            </Button>
+          </Dropdown>
+        )}
 
-        {rules.map((rule, index) => (
-          // O indice como chave e seguro aqui: a lista e reordenada a cada
-          // escrita, entao qualquer id estavel divergiria da ordem exibida no
-          // mesmo instante.
-          <div key={index} className={styles.rule}>
-            <ColorPicker color={rule.color} onChange={(next) => patchRule(index, { color: next })} />
+        {axis === 'trigger' && (
+          <SeverityLadder
+            thresholds={thresholds}
+            alert={alert}
+            allowRadar={allowRadar}
+            onChange={(next) => {
+              writeRules(next);
+              // O `alert` acabou de virar coluna das regras; deixa-lo no JSON
+              // seria uma segunda fonte de animacao, invisivel na tela.
+              if (alert) {
+                onAlertChange?.(undefined);
+              }
+            }}
+          />
+        )}
 
-            <div className={styles.condition}>
-              <RuleCondition rule={rule} index={index} onChange={(changes) => patchRule(index, changes)} />
-            </div>
+        {axis === 'metric' &&
+          rules.map((rule, index) => (
+            // O indice como chave e seguro aqui: a lista e reordenada a cada
+            // escrita, entao qualquer id estavel divergiria da ordem exibida no
+            // mesmo instante.
+            <div key={index} className={styles.rule}>
+              <ColorPicker
+                enableNamedColors
+                color={rule.color}
+                onChange={(next) => patchRule(index, { color: next })}
+              />
 
-            <Input
-              className={styles.ruleLabel}
-              value={rule.label ?? ''}
-              placeholder="Rótulo"
-              aria-label={`Texto exibido da regra ${index + 1}`}
-              onChange={(event) => patchRule(index, { label: event.currentTarget.value || undefined })}
-            />
-
-            {/*
-              A animacao e por regra, e nao do elemento: e o que permite `>= 75`
-              pulsar e `> 90` fazer radar no mesmo campo. Tambem responde sozinha
-              a pergunta que travava a extensao para metrica — nem toda regra e
-              problema, e quem separa as que sao e o usuario.
-
-              So no eixo de metrica: em Trigger a animacao e do elemento, para
-              poder animar sem sobrescrever o mapa de cores do Zabbix.
-            */}
-            {axis === 'metric' && (
-              <div className={styles.ruleAnimation}>
-                {/*
-                  Rotulo invisivel, e nao `aria-labelledby` com um texto solto: o
-                  `Combobox` so aceita id, e sem um `<label>` de verdade o
-                  controle fica sem nome acessivel — um leitor de tela anuncia
-                  "combobox" e mais nada, numa linha com quatro controles iguais.
-                */}
-                <label className={styles.srOnly} htmlFor={`${ids}-animation-${index}`}>
-                  {`Animação da regra ${index + 1}`}
-                </label>
-                <Combobox
-                  id={`${ids}-animation-${index}`}
-                  options={RULE_ANIMATION_OPTIONS}
-                  value={('animation' in rule && rule.animation) || NO_ANIMATION}
-                  onChange={(option) =>
-                    patchRule(index, { animation: option.value === NO_ANIMATION ? undefined : option.value })
-                  }
-                />
+              <div className={styles.condition}>
+                <RuleCondition rule={rule} index={index} onChange={(changes) => patchRule(index, changes)} />
               </div>
-            )}
 
-            <IconButton
-              name="trash-alt"
-              tooltip="Remover regra"
-              onClick={() => writeRules(rules.filter((_, i) => i !== index))}
-            />
-          </div>
-        ))}
+              {/*
+                A animacao e por regra, e nao do elemento: e o que permite `>= 75`
+                pulsar e `> 90` fazer radar no mesmo campo. Tambem responde sozinha
+                a pergunta que travava a extensao para metrica — nem toda regra e
+                problema, e quem separa as que sao e o usuario.
+              */}
+              <AnimationPicker
+                id={`${ids}-animation-${index}`}
+                label={`Animação da regra ${index + 1}`}
+                value={rule.animation}
+                allowRadar={allowRadar}
+                onChange={(animation) => patchRule(index, { animation })}
+              />
+
+              <IconButton
+                name="trash-alt"
+                tooltip="Remover regra"
+                onClick={() => writeRules(rules.filter((_, i) => i !== index))}
+              />
+            </div>
+          ))}
 
         {/*
           Base: nao e uma regra, e o que sobra quando nenhuma casa. Fica ao pe
           da lista, sem lixeira, como no editor de thresholds do Grafana.
+
+          Sem cor escolhida, a amostra mostra a **superficie neutra do tema** —
+          que e o que o elemento de fato exibe em repouso —, e nao verde. O
+          verde de antes era um placeholder que o modelo nao guardava: ligar o
+          Background de uma imagem e passar para o modo Estado deixava a placa
+          neutra no canvas enquanto esta linha exibia verde, e a unica forma de
+          faze-los concordar era abrir o seletor e escolher a cor que ja parecia
+          estar escolhida. Verde ainda por cima e a pior cor possivel para um
+          placeholder num NOC: le-se "verificado OK" sem nada ter sido
+          verificado.
         */}
         <div className={styles.base}>
-          <ColorPicker color={color.fixed ?? 'green'} onChange={(fixed) => onColorChange({ ...color, fixed })} />
+          <ColorPicker
+            enableNamedColors
+            color={color.fixed ?? theme.colors.background.secondary}
+            onChange={(fixed) => onColorChange({ ...color, fixed })}
+          />
           <span className={styles.baseLabel}>Base</span>
         </div>
 
@@ -252,8 +290,124 @@ export function ThresholdsEditor({
   );
 }
 
+interface AnimationPickerProps {
+  id: string;
+  /** Nome acessivel do controle; nao aparece na tela. */
+  label: string;
+  value: AlertAnimation | undefined;
+  allowRadar: boolean;
+  onChange: (next: AlertAnimation | undefined) => void;
+}
+
+/**
+ * A coluna de animacao, identica nos dois eixos — que e o ponto: a animacao
+ * pertence a regra que casou, seja ela uma faixa de metrica ou uma severidade.
+ *
+ * O rotulo e um `<label>` de verdade fora da tela, e nao um `aria-labelledby`
+ * com texto solto: o `Combobox` so aceita `id`, e sem isso o controle fica sem
+ * nome acessivel — um leitor de tela anuncia "combobox" e mais nada, numa lista
+ * com seis controles iguais.
+ */
+function AnimationPicker({ id, label, value, allowRadar, onChange }: AnimationPickerProps) {
+  const styles = useStyles2(getStyles);
+  const options = allowRadar ? RULE_ANIMATION_OPTIONS : RULE_ANIMATION_OPTIONS.filter((o) => o.value !== 'radar');
+
+  return (
+    <div className={styles.ruleAnimation}>
+      <label className={styles.srOnly} htmlFor={id}>
+        {label}
+      </label>
+      <Combobox
+        id={id}
+        options={options}
+        value={value ?? NO_ANIMATION}
+        onChange={(option) => onChange(option.value === NO_ANIMATION ? undefined : option.value)}
+      />
+    </div>
+  );
+}
+
+interface SeverityLadderProps {
+  thresholds: ElementThresholds | undefined;
+  alert: ElementAlert | undefined;
+  allowRadar: boolean;
+  /** Recebe **so** as regras de severidade; o `writeRules` do pai junta o resto. */
+  onChange: (next: ElementRule[]) => void;
+}
+
+/**
+ * As seis severidades do Zabbix, cada uma com a sua cor.
+ *
+ * Substitui o "Adicionar regra -> Severidade" que existia aqui. O menu era
+ * tecnicamente completo e praticamente invisivel: um dropdown de uma opcao so,
+ * numa lista que nascia vazia, para configurar um vocabulario **fechado** que o
+ * usuario ja conhece de cor. Quem abria o modo Trigger via um bloco de
+ * thresholds sem nada dentro e concluia — com razao — que ele nao servia para
+ * trigger.
+ *
+ * A escada mostra o mapa inteiro de saida, ja preenchido com as cores padrao do
+ * Zabbix, e a edicao vira o que ela aparenta ser: trocar a cor de uma linha.
+ *
+ * Enquanto ninguem toca em nada, nao ha regra salva e vale o mapa do Zabbix — a
+ * primeira edicao materializa a escada inteira (ver `writeSeverityLadder`), e o
+ * "Restaurar padrao" desfaz isso de uma vez.
+ */
+function SeverityLadder({ thresholds, alert, allowRadar, onChange }: SeverityLadderProps) {
+  const styles = useStyles2(getStyles);
+  const theme = useTheme2();
+  const ids = React.useId();
+  const rows = severityLadder(thresholds, alert);
+  const custom = severityRules(thresholds).length > 0 || alert !== undefined;
+
+  const patch = (severity: Severity, changes: Partial<SeverityLadderRow>) =>
+    // `text.secondary` e o padrao de *Not classified*, o unico nivel sem cor no
+    // mapa do Zabbix; so chega aqui se o usuario editar aquela linha.
+    onChange(writeSeverityLadder(thresholds, severity, changes, theme.colors.text.secondary, alert));
+
+  return (
+    <>
+      {rows.map(({ severity, color, animation, enabled }) => (
+        // A linha desligada continua editavel, so esmaecida: o usuario costuma
+        // desligar e religar o mesmo nivel enquanto ajusta o painel, e desativar
+        // os controles obrigaria a religar antes de trocar a cor.
+        <div key={severity} className={cx(styles.rule, !enabled && styles.ruleOff)}>
+          {/* Governa a linha inteira, entao abre a linha — e a leitura de uma
+              lista de itens que se incluem ou nao. */}
+          <Checkbox
+            value={enabled}
+            aria-label={`Atender ${SEVERITY_LABEL[severity]}`}
+            onChange={(event) => patch(severity, { enabled: event.currentTarget.checked })}
+          />
+
+          <ColorPicker
+            enableNamedColors
+            color={color ?? theme.colors.text.secondary}
+            onChange={(next) => patch(severity, { color: next })}
+          />
+
+          <span className={styles.severityName}>{SEVERITY_LABEL[severity]}</span>
+
+          <AnimationPicker
+            id={`${ids}-animation-${severity}`}
+            label={`Animação de ${SEVERITY_LABEL[severity]}`}
+            value={animation}
+            allowRadar={allowRadar}
+            onChange={(next) => patch(severity, { animation: next })}
+          />
+        </div>
+      ))}
+
+      {custom && (
+        <Button variant="secondary" fill="text" size="sm" icon="history" onClick={() => onChange([])}>
+          Restaurar padrão do Zabbix
+        </Button>
+      )}
+    </>
+  );
+}
+
 interface RuleConditionProps {
-  rule: ElementRule;
+  rule: MetricRule;
   index: number;
   onChange: (changes: Partial<ElementRule>) => void;
 }
@@ -319,16 +473,6 @@ function RuleCondition({ rule, index, onChange }: RuleConditionProps) {
         />
       );
 
-    case 'severity':
-      return (
-        <Combobox
-          options={SEVERITY_OPTIONS as Array<{ value: Severity; label: string }>}
-          value={rule.atLeast}
-          aria-labelledby={`Severidade da regra ${position}`}
-          onChange={(option) => onChange({ atLeast: option.value })}
-        />
-      );
-
     case 'special':
       return (
         <Combobox
@@ -346,7 +490,7 @@ function RuleCondition({ rule, index, onChange }: RuleConditionProps) {
  * degrau de cor adiante, entao clicar tres vezes produz uma escala usavel sem
  * tocar nas cores.
  */
-function newRule(type: ElementRuleType, rules: ElementRule[]): ElementRule {
+function newRule(type: MetricRuleType, rules: ElementRule[]): MetricRule {
   const thresholds = rules.filter((rule) => rule.type === 'threshold');
   const highest = thresholds.reduce((max, rule) => Math.max(max, rule.value), Number.NEGATIVE_INFINITY);
 
@@ -365,11 +509,6 @@ function newRule(type: ElementRuleType, rules: ElementRule[]): ElementRule {
       return { type, pattern: '', color: MAPPING_COLOR };
     case 'special':
       return { type, match: 'null', color: MAPPING_COLOR };
-    // Nasce em *High*, que e onde a maioria das topologias quer o primeiro
-    // alarme visivel, e na cor que o mapa do Zabbix ja usa para esse nivel:
-    // adicionar a regra nao muda nada sozinho, so abre a cor para edicao.
-    case 'severity':
-      return { type, atLeast: 4, color: 'red' };
   }
 }
 
@@ -431,9 +570,28 @@ const getStyles = (theme: GrafanaTheme2) => ({
       minWidth: 0,
     },
   }),
-  ruleLabel: css({
+  /**
+   * O nome da severidade ocupa o lugar da condicao, mas nao e um campo: nao ha o
+   * que escolher ali. `flex-basis` igual ao da condicao mantem as seis linhas
+   * alinhadas com as regras de metrica, e `nowrap` impede que *Not classified*
+   * quebre em duas linhas num painel estreito.
+   */
+  /**
+   * Esmaecida, e nao escondida: o nivel desligado continua na escada porque a
+   * escada e o mapa completo de severidades — sumir com a linha faria parecer
+   * que o Zabbix tem cinco niveis.
+   */
+  ruleOff: css({
+    opacity: 0.55,
+  }),
+  severityName: css({
     flex: '1 1 88px',
     minWidth: 0,
+    color: theme.colors.text.primary,
+    fontSize: theme.typography.bodySmall.fontSize,
+    whiteSpace: 'nowrap',
+    overflow: 'hidden',
+    textOverflow: 'ellipsis',
   }),
   /**
    * Base menor que a do rotulo: o seletor de animacao tem quatro opcoes curtas e

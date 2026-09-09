@@ -4,11 +4,15 @@ import { GrafanaTheme2 } from '@grafana/data';
 import { useStyles2, useTheme2 } from '@grafana/ui';
 import { Handle, NodeProps, Position, useConnection } from '@xyflow/react';
 
+import { stateFieldName } from '../../data/dimensions';
 import { accentColor, resolveElementColor } from '../../data/elementColor';
 import { POINT_NODE_SIZE } from '../../model/sizes';
+import { ActiveTriggers, activeProblems } from '../ActiveTriggers';
 import { alertClass } from '../alertAnimation';
 import { PointFlowNode } from '../flowTypes';
 import { stateFill } from '../stateFill';
+import { ElementHover } from '../ElementHover';
+import { MetricChart } from '../MetricChart';
 import { ACCENT_VAR, HANDLE_SIZE, TRANSITION_FAST, accentVar, alpha, selectionRing } from '../tokens';
 
 const HANDLE_CLASS = 'topo-point-handle';
@@ -21,7 +25,7 @@ const HANDLE_CLASS = 'topo-point-handle';
  * **so a opacidade muda** — crescer o circulo faria a topologia inteira
  * "respirar" ao passar o mouse.
  */
-export function PointNode({ data, selected }: NodeProps<PointFlowNode>) {
+export function PointNode({ data, selected, dragging }: NodeProps<PointFlowNode>) {
   const theme = useTheme2();
   const styles = useStyles2(getStyles);
 
@@ -55,30 +59,54 @@ export function PointNode({ data, selected }: NodeProps<PointFlowNode>) {
   const alerting = alertClass(accent, data.element.alert);
 
   return (
-    <div
-      className={cx(styles.dot, alerting)}
-      // A origem do gesto usa o mesmo halo de selecionado: durante a linkagem
-      // ela e, de fato, o elemento em foco.
-      data-selected={selected || data.link === 'source' || undefined}
-      data-editable={data.editable || undefined}
-      data-connecting={connecting || undefined}
-      data-link={data.link}
-      // A cor entra como custom property para que os tres niveis de halo
-      // vivam em CSS estatico, com `:hover` e `[data-selected]`.
-      style={
-        {
-          borderColor: color,
-          background: fill?.background,
-          color,
-          [ACCENT_VAR]: color,
-        } as React.CSSProperties
+    /* O ponto nao tem badge nem texto: e o unico elemento em que a lista de
+       triggers e a **unica** forma de saber o que alarmou. O titulo vem do host,
+       porque nao ha nome de elemento para exibir. */
+    <ElementHover
+      accent={accent}
+      title={data.element.trigger?.host}
+      editable={data.editable}
+      dragging={dragging}
+      chart={
+        data.element.chart ? (
+          <MetricChart frames={data.frames} field={stateFieldName(data.element.color, data.frames)} />
+        ) : undefined
       }
     >
-      {/* Um handle so: o point e pequeno demais para quatro alvos distintos, e
+      <div
+        className={cx(styles.dot, alerting)}
+        // A origem do gesto usa o mesmo halo de selecionado: durante a linkagem
+        // ela e, de fato, o elemento em foco.
+        data-selected={selected || data.link === 'source' || undefined}
+        data-editable={data.editable || undefined}
+        data-connecting={connecting || undefined}
+        data-link={data.link}
+        // A cor entra como custom property para que os tres niveis de halo
+        // vivam em CSS estatico, com `:hover` e `[data-selected]`.
+        style={
+          {
+            borderColor: color,
+            background: fill?.background,
+            color,
+            [ACCENT_VAR]: color,
+          } as React.CSSProperties
+        }
+      >
+        {/* Um handle so: o point e pequeno demais para quatro alvos distintos, e
           com `ConnectionMode.Loose` um basta. Ele muda de tamanho conforme o
           gesto — ver o comentario de `handle` nos estilos. */}
-      <Handle type="source" position={Position.Right} className={cx(styles.handle, HANDLE_CLASS)} />
-    </div>
+        <Handle type="source" position={Position.Right} className={cx(styles.handle, HANDLE_CLASS)} />
+
+        {/* Filha do circulo, e nao irma: o point nao tem container proprio — o
+            wrapper e do React Flow. Como a lista e `position: absolute` e nao
+            recebe ponteiro, ela sai dos 14px sem afetar o alvo de arraste. */}
+        <ActiveTriggers
+          problems={activeProblems(accent, data.element.trigger)}
+          position={data.element.trigger?.activePosition}
+          display={data.element.trigger?.activeDisplay}
+        />
+      </div>
+    </ElementHover>
   );
 }
 

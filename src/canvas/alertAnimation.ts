@@ -118,24 +118,26 @@ const EDGE_CLASS: Record<AlertAnimation, string> = {
 /**
  * Qual animacao o elemento deve rodar, se alguma.
  *
- * As duas fontes de estado dizem isso de formas diferentes, e a diferenca tem
- * motivo:
+ * Nos dois eixos ela vem da **regra que casou** — a faixa de metrica ou a linha
+ * da escada de severidades —, entao cada uma anima do seu jeito: `>= 75` pulsa e
+ * `> 90` faz radar, *High* pulsa e *Disaster* faz radar. Regra sem animacao nao
+ * mexe nada, que e o default.
  *
- *   - **Metrica**: a animacao vem da **regra que casou**, entao cada faixa anima
- *     do seu jeito. Isso tambem resolve sozinho a pergunta "quando animar" que
- *     travava a extensao para metrica: nem toda regra e problema, e agora quem
- *     decide quais sao e o usuario, marcando so as que importam. Uma regra sem
- *     animacao nao mexe nada, e e o default.
- *   - **Trigger**: vem do `alert` do elemento, porque ali existe um default que
- *     vale preservar (o mapa de cores do Zabbix) e amarrar a animacao a uma
- *     regra obrigaria a definir cor so para poder animar.
+ * Isso tambem responde sozinho a pergunta "quando animar", que e o que travava a
+ * animacao no eixo de metrica: nem toda regra que casa e problema, e quem separa
+ * as que sao e o usuario, marcando so as que importam.
+ *
+ * O `alert` e o campo aposentado do elemento (ver `elementAlertSchema`) e so
+ * entra como ultimo recurso: uma topologia salva antes da escada continua
+ * animando exatamente como animava, ate a primeira edicao da escada, que dobra o
+ * campo para dentro das regras e o apaga.
  */
 export function resolveAlertAnimation(
   accent: ElementColor,
   alert: ElementAlert | undefined
 ): AlertAnimation | undefined {
   if (accent.state === 'trigger') {
-    return alert && accent.severity >= alert.fromSeverity ? alert.animation : undefined;
+    return accent.animation ?? (alert && accent.severity >= alert.fromSeverity ? alert.animation : undefined);
   }
 
   return accent.state === 'threshold' ? accent.animation : undefined;

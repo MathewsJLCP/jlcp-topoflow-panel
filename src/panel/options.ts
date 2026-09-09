@@ -1,6 +1,7 @@
 import { PanelOptionsEditorBuilder } from '@grafana/data';
 
 import { ElementsEditor } from '../editors/ElementsEditor';
+import { ZabbixSourceField } from '../editors/ZabbixSourceField';
 import { defaultCanvas, defaultTopology } from '../model/defaults';
 import { TopoFlowOptions } from '../model/types';
 
@@ -18,6 +19,21 @@ export function addTopoFlowOptions(builder: PanelOptionsEditorBuilder<TopoFlowOp
     category: ['Layer'],
     editor: ElementsEditor,
     defaultValue: defaultTopology,
+  });
+
+  /*
+    Fica **antes** do Canvas na ordem de declaracao porque e a configuracao que
+    vale para o mapa inteiro e destrava o autocomplete dos elementos — quem abre
+    as opcoes pela primeira vez deve tropecar nela, nao procura-la.
+  */
+  builder.addCustomEditor({
+    id: 'zabbix-datasource',
+    path: 'zabbix.datasource',
+    name: 'Datasource do Zabbix',
+    description: 'Usado só pelo editor, para sugerir hosts e triggers. Os dados continuam vindo das queries do painel.',
+    category: ['Zabbix'],
+    editor: ZabbixSourceField,
+    defaultValue: undefined,
   });
 
   builder

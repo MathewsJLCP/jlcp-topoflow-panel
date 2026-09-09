@@ -1,7 +1,7 @@
 import React from 'react';
 import { fireEvent, render, screen } from '@testing-library/react';
 
-import { defaultTopology } from '../model/defaults';
+import { sampleTopology } from '../model/sampleTopology';
 import { TopoEdge, TopoPoint, Topology } from '../model/types';
 import { EdgeForm, PointForm } from './ElementForms';
 
@@ -20,13 +20,13 @@ import { EdgeForm, PointForm } from './ElementForms';
  */
 
 const point: TopoPoint = { id: 'ponto', position: { x: 0, y: 0 }, color: {}, zIndex: 0 };
-const [edge] = defaultTopology.edges;
+const [edge] = sampleTopology.edges;
 
-const TRIGGER_ON = { enabled: true, host: 'AGLIN-FW-STARTI' };
+const TRIGGER_ON = { enabled: true, showActive: true, host: 'AGLIN-FW-STARTI', names: [] };
 
 function setupPoint(overrides: Partial<TopoPoint> = {}) {
   const element: TopoPoint = { ...point, ...overrides };
-  const topology: Topology = { ...defaultTopology, points: [element] };
+  const topology: Topology = { ...sampleTopology, points: [element] };
   const onChange = jest.fn<void, [Topology]>();
 
   render(<PointForm element={element} topology={topology} frames={[]} onChange={onChange} />);
@@ -36,7 +36,7 @@ function setupPoint(overrides: Partial<TopoPoint> = {}) {
 
 function setupEdge(overrides: Partial<TopoEdge> = {}) {
   const element: TopoEdge = { ...edge, ...overrides };
-  const topology: Topology = { ...defaultTopology, edges: [element] };
+  const topology: Topology = { ...sampleTopology, edges: [element] };
   const onChange = jest.fn<void, [Topology]>();
 
   render(<EdgeForm element={element} topology={topology} frames={[]} onChange={onChange} />);
@@ -84,13 +84,12 @@ describe('PointForm — seletor de métrica', () => {
   });
 
   /** O bloco de regras vale nos dois modos; muda o que ele oferece. */
-  it('em modo Trigger, as regras disponíveis são de severidade', () => {
+  it('em modo Trigger, o bloco é a escada de severidades', () => {
     setupPoint({ trigger: TRIGGER_ON });
 
-    fireEvent.click(screen.getByRole('button', { name: /Adicionar regra/ }));
-
-    expect(screen.getByRole('menuitem', { name: /Severidade/ })).toBeInTheDocument();
-    expect(screen.queryByRole('menuitem', { name: /Threshold/ })).not.toBeInTheDocument();
+    expect(screen.getByText('Disaster')).toBeInTheDocument();
+    expect(screen.getByText('Not classified')).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /Adicionar regra/ })).not.toBeInTheDocument();
   });
 });
 
@@ -130,13 +129,12 @@ describe('EdgeForm — seletor de métrica', () => {
   });
 
   /** O bloco de regras vale nos dois modos; muda o que ele oferece. */
-  it('em modo Trigger, as regras disponíveis são de severidade', () => {
+  it('em modo Trigger, o bloco é a escada de severidades', () => {
     setupEdge({ trigger: TRIGGER_ON });
 
-    fireEvent.click(screen.getByRole('button', { name: /Adicionar regra/ }));
-
-    expect(screen.getByRole('menuitem', { name: /Severidade/ })).toBeInTheDocument();
-    expect(screen.queryByRole('menuitem', { name: /Threshold/ })).not.toBeInTheDocument();
+    expect(screen.getByText('Disaster')).toBeInTheDocument();
+    expect(screen.getByText('Not classified')).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /Adicionar regra/ })).not.toBeInTheDocument();
   });
 
   /** Em Trigger não há field a escolher; o aviso de métrica não cabe. */
@@ -146,28 +144,19 @@ describe('EdgeForm — seletor de métrica', () => {
     expect(screen.queryByText(/Escolha um campo acima/)).not.toBeInTheDocument();
   });
 
-  it('a regra de severidade grava a partir de High', () => {
-    const { result } = setupEdge({ trigger: TRIGGER_ON });
-
-    fireEvent.click(screen.getByRole('button', { name: /Adicionar regra/ }));
-    fireEvent.click(screen.getByRole('menuitem', { name: /Severidade/ }));
-
-    expect(result()?.thresholds?.steps).toEqual([{ type: 'severity', atLeast: 4, color: 'red' }]);
-  });
-
   /**
-   * Escrever no eixo de trigger não pode apagar o que foi configurado no de
-   * métrica: alternar os modos sempre foi gratuito.
+   * A escrita da escada em si está coberta em `writeSeverityLadder`; o que só
+   * este nível prova é o destino — que ela pousa na conexão certa, e sem
+   * atropelar o que o eixo de métrica tinha configurado.
    */
-  it('adicionar regra de severidade preserva as regras de métrica', () => {
+  it('restaurar o padrão preserva as regras de métrica da conexão', () => {
     const metrica = { type: 'threshold' as const, value: 90, color: 'orange' };
-    const { result } = setupEdge({ trigger: TRIGGER_ON, thresholds: { steps: [metrica] } });
+    const severidade = { type: 'severity' as const, atLeast: 5 as const, color: 'purple' };
+    const { result } = setupEdge({ trigger: TRIGGER_ON, thresholds: { steps: [metrica, severidade] } });
 
-    fireEvent.click(screen.getByRole('button', { name: /Adicionar regra/ }));
-    fireEvent.click(screen.getByRole('menuitem', { name: /Severidade/ }));
+    fireEvent.click(screen.getByRole('button', { name: /Restaurar padrão do Zabbix/ }));
 
-    expect(result()?.thresholds?.steps).toContainEqual(metrica);
-    expect(result()?.thresholds?.steps).toHaveLength(2);
+    expect(result()?.thresholds?.steps).toEqual([metrica]);
   });
 });
 
@@ -222,44 +211,31 @@ describe('thresholds em Conexão e Point', () => {
 });
 
 /**
- * Bloco B: animacao de alerta. So aparece em modo Trigger — em Metrica a
- * pergunta "quando animar" ainda nao tem resposta.
+ * A animacao deixou de ser um campo do elemento e virou coluna da escada de
+ * severidades. O `alert` salvo continua sendo lido — o que sumiu e o controle
+ * que o escrevia.
  */
 describe('animação de alerta', () => {
-  const toggle = () => screen.getByRole('switch', { name: 'Animação de alerta' });
-
-  it('não aparece em modo Métrica', () => {
-    setupPoint();
-
-    expect(screen.queryByRole('switch', { name: 'Animação de alerta' })).not.toBeInTheDocument();
-  });
-
-  it('nasce desligada num elemento sem alerta', () => {
-    setupPoint({ trigger: TRIGGER_ON, alert: undefined });
-
-    expect(toggle()).not.toBeChecked();
-  });
-
-  it('vem ligada num elemento salvo com alerta', () => {
+  it('não há mais campo de animação do elemento', () => {
     setupPoint({ trigger: TRIGGER_ON, alert: { animation: 'radar', fromSeverity: 4 } });
 
-    expect(toggle()).toBeChecked();
+    expect(screen.queryByRole('switch', { name: 'Animação de alerta' })).not.toBeInTheDocument();
+    expect(screen.queryByText('A partir de')).not.toBeInTheDocument();
   });
 
-  /** Pulsar em qualquer severidade: o efeito mais discreto, ligado por padrão. */
-  it('ligar cria o alerta com o padrão discreto', () => {
-    const { result } = setupPoint({ trigger: TRIGGER_ON, alert: undefined });
+  /** Um elemento salvo com "Radar a partir de High" tem de aparecer assim. */
+  it('o alerta salvo aparece nas linhas da escada que ele alcançava', () => {
+    setupPoint({ trigger: TRIGGER_ON, alert: { animation: 'radar', fromSeverity: 4 } });
 
-    fireEvent.click(toggle());
-
-    expect(result()?.alert).toEqual({ animation: 'pulse', fromSeverity: 0 });
+    expect(screen.getByLabelText('Animação de Disaster')).toHaveValue('Radar');
+    expect(screen.getByLabelText('Animação de High')).toHaveValue('Radar');
+    expect(screen.getByLabelText('Animação de Average')).toHaveValue('Parado');
   });
 
-  it('desligar apaga o objeto inteiro — ausência é o parado', () => {
-    const { result } = setupPoint({ trigger: TRIGGER_ON, alert: { animation: 'pulse', fromSeverity: 0 } });
+  it('a conexão também tem a coluna, uma por severidade', () => {
+    setupEdge({ trigger: TRIGGER_ON });
 
-    fireEvent.click(toggle());
-
-    expect(result()?.alert).toBeUndefined();
+    expect(screen.getByLabelText('Animação de Disaster')).toHaveValue('Parado');
+    expect(screen.getByLabelText('Animação de Not classified')).toHaveValue('Parado');
   });
 });

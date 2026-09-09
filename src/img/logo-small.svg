@@ -1,0 +1,19 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" width="64" height="64">
+  <!-- TopoFlow - variante para tamanho pequeno (16-24px, seletor de visualizacao).
+       Mesmo desenho do logo.svg com tracos engordados e sem as capsulas vazadas,
+       que somem antes de 24px e so sujam a silhueta. -->
+  <defs>
+    <linearGradient id="tf-alarm-s" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#FFB13D"/>
+      <stop offset="1" stop-color="#FF7B2E"/>
+    </linearGradient>
+  </defs>
+  <g fill="none" stroke="#3D71D9" stroke-width="4.6" stroke-linecap="round">
+    <path d="M15 22 V29 Q15 33 19 33 H32"/>
+    <path d="M49 22 V29 Q49 33 45 33 H32"/>
+    <path d="M32 33 V42"/>
+  </g>
+  <rect x="5" y="10" width="20" height="12" rx="4" fill="#3D71D9"/>
+  <rect x="39" y="10" width="20" height="12" rx="4" fill="#3D71D9"/>
+  <rect x="22" y="42" width="20" height="12" rx="4" fill="url(#tf-alarm-s)"/>
+</svg>

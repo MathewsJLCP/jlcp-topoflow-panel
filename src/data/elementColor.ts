@@ -1,19 +1,25 @@
-import { DataFrame, Field, GrafanaTheme2, ThresholdsMode, getActiveThreshold } from '@grafana/data';
+import { DataFrame, GrafanaTheme2 } from '@grafana/data';
 
 import { AlertAnimation, ColorDimension, ElementThresholds, TriggerBinding } from '../model/types';
-import { getLastNotNullValue } from './dimensions';
+import { getLastNotNullValue, stateFieldName } from './dimensions';
 import { Severity } from './problems';
-import { hasOwnThresholds, hasSpecialRule, resolveOwnThreshold, resolveSeverityRule } from './thresholds';
-import { resolveTriggerState } from './triggerState';
+import {
+  hasDisabledSeverity,
+  hasOwnThresholds,
+  hasSpecialRule,
+  isSeverityEnabled,
+  resolveOwnThreshold,
+  resolveSeverityRule,
+} from './thresholds';
+import { ActiveProblem, resolveTriggerState } from './triggerState';
 
 /**
  * Cadeia de precedencia de cor (Anexo A do briefing do Bloco 1).
  *
- *   0.  trigger do Zabbix alarmando              -> estado
- *   1a. threshold proprio do elemento            -> estado
- *   1b. threshold do pipeline nativo do Grafana  -> estado
- *   2.  `color.fixed`                            -> identidade visual
- *   3.  neutro do tema                           -> fallback
+ *   0. trigger do Zabbix alarmando  -> estado
+ *   1. threshold proprio do elemento -> estado
+ *   2. `color.fixed` (a linha Base)  -> identidade visual
+ *   3. neutro do tema                -> fallback
  *
  * Nao existe quinto nivel, e **branco nao e fallback de nada**. Antes deste
  * helper o fallback era `getColorByName('text')`, que resolve para
@@ -26,21 +32,50 @@ import { resolveTriggerState } from './triggerState';
  * o operador nao teria como saber qual esta lendo. Nada e perdido: as duas
  * configuracoes continuam no JSON e voltam a valer ao desligar a flag.
  *
- * Entre 1a e 1b vale a mesma logica de exclusao: o elemento que define regra
- * propria nao consulta mais o field. Sem isso, a cor viria de dois lugares e
- * descobrir de onde exigiria abrir o painel de opcoes do field.
+ * ## O pipeline nativo do Grafana nao pinta elemento (2026-09-02)
+ *
+ * Havia um nivel entre 1 e 2: sem regra propria, o elemento consultava os
+ * thresholds do proprio field — os do painel de opcoes do Grafana. Ele existia
+ * de quando o elemento **nao tinha** bloco de Thresholds proprio, e virou a
+ * armadilha que a propria cadeia dizia querer evitar: a cor vinha de dois
+ * lugares, e o bloco na tela do elemento perdia para uma configuracao que so
+ * aparece em outro painel. Na pratica, uma Base laranja escolhida no elemento
+ * era ignorada em favor do azul do step base do field.
+ *
+ * Hoje o que pinta um elemento e o que esta no bloco dele. Os thresholds do
+ * field seguem valendo para o que sempre foram: **formatar o valor** e colorir o
+ * grafico da metrica (`MetricChart` monta um timeseries nativo, com o pipeline
+ * nativo inteiro). O que eles nao fazem mais e decidir a cor do elemento pelas
+ * costas do editor.
+ *
+ * A consequencia a conhecer: um elemento que dependia do threshold do field para
+ * acender passa a exibir a Base ate ganhar a regra equivalente no proprio bloco.
  *
  * Helper unico de proposito: cada elemento decide apenas em QUAL superficie a
  * cor pousa (A.2), nunca como ela e escolhida. Duplicar a decisao por
  * componente foi o que permitiu a divergencia original.
  */
 export type ElementColor =
-  /** Trigger do Zabbix em PROBLEM. `label` e o nome da severidade. */
-  | { state: 'trigger'; color: string; severity: Severity; label: string }
   /**
-   * Threshold resolveu. `label` so existe quando o step foi nomeado, e
-   * `animation` so quando a regra do elemento pediu movimento — o pipeline
-   * nativo do Grafana nao tem esse campo, entao a cor vinda dele nunca anima.
+   * Trigger do Zabbix em PROBLEM. `label` e o nome da severidade, e `animation`
+   * so existe quando a linha da escada que casou pediu movimento.
+   *
+   * `problems` traz **todas** as triggers alarmando, e nao so a que definiu a
+   * cor: cor e severidade respondem "o quao ruim esta", a lista responde "o que
+   * esta ruim". Sem ela, um elemento vermelho e um elemento vermelho por quinze
+   * motivos sao indistinguiveis na tela.
+   */
+  | {
+      state: 'trigger';
+      color: string;
+      severity: Severity;
+      label: string;
+      problems: ActiveProblem[];
+      animation?: AlertAnimation;
+    }
+  /**
+   * Threshold resolveu. `label` so existe quando a regra foi nomeada, e
+   * `animation` so quando ela pediu movimento.
    */
   | { state: 'threshold'; color: string; label?: string; animation?: AlertAnimation }
   /** Binding configurado, sem dado que sirva. Distinto de saudavel (A.4). */
@@ -89,12 +124,18 @@ export function resolveElementColor(
 ): ElementColor {
   const { trigger, thresholds } = sources;
 
-  const alarm = resolveTriggerState(trigger, frames, theme);
+  /**
+   * O filtro so e montado quando ha o que filtrar: sem severidade desligada, a
+   * escada inteira aceita e um predicado a mais so custaria uma chamada por
+   * problema, em todo elemento de toda topologia.
+   */
+  const accepts = hasDisabledSeverity(thresholds) ? (s: Severity) => isSeverityEnabled(thresholds, s) : undefined;
+  const alarm = resolveTriggerState(trigger, frames, theme, accepts);
   if (alarm) {
     /**
-     * Regra propria de severidade vence o mapa do Zabbix — mesma logica do
-     * nivel 1a em relacao ao 1b: quem escreveu regra para aquele elemento tem
-     * autoridade sobre ele.
+     * Regra propria de severidade vence o mapa do Zabbix — a mesma logica que
+     * tirou o pipeline nativo da cadeia: quem escreveu regra para aquele
+     * elemento tem autoridade sobre ele.
      *
      * O rotulo da regra e opcional; sem ele fica o nome da severidade, que e o
      * que o badge sempre mostrou. Trocar a cor nao deveria custar o nome do
@@ -107,6 +148,10 @@ export function resolveElementColor(
         color: theme.visualization.getColorByName(rule.color),
         severity: alarm.severity,
         label: rule.label || alarm.label,
+        // A regra propria manda na cor e no rotulo do estado; ela nao tem
+        // opiniao sobre quais triggers estao abertas.
+        problems: alarm.problems,
+        animation: rule.animation,
       };
     }
 
@@ -116,8 +161,13 @@ export function resolveElementColor(
   // Vinculo de trigger ligado desliga o nivel 1: sem isto, um elemento com
   // trigger OK voltaria a ser pintado pela metrica e a precedencia so valeria
   // durante o alarme — comportamento que muda sozinho conforme o Zabbix.
-  if (dim.field && !trigger?.enabled) {
-    const hit = getLastNotNullValue(frames, dim.field);
+  // `stateFieldName` e nao `dim.field`: a serie pode ter sido escolhida por
+  // host+item no catalogo do Zabbix, e so ele sabe traduzir isso para o nome que
+  // o frame usa.
+  const fieldName = stateFieldName(dim, frames);
+
+  if (fieldName && !trigger?.enabled) {
+    const hit = getLastNotNullValue(frames, fieldName);
 
     // Field ausente das series: nao ha valor nenhum a avaliar. Nao cai para
     // `fixed` nem para verde — sem dado precisa ser visivelmente diferente de
@@ -135,9 +185,10 @@ export function resolveElementColor(
     }
 
     if (hasOwnThresholds(thresholds)) {
-      // 1a. Regra do elemento. Nenhuma regra ativa significa "nao casou com
-      // nada" — sem estado —, e nao "consulte o field": a regra propria e a
-      // autoridade sobre aquele elemento.
+      // 1. Regra do elemento — a unica fonte de estado por metrica. Nenhuma
+      // regra ativa significa "nao casou com nada", e nao "consulte o field":
+      // abaixo de todas as regras o elemento esta em repouso, e repouso e a
+      // Base.
       const rule = resolveOwnThreshold(thresholds, hit.value);
       if (rule) {
         return {
@@ -154,15 +205,6 @@ export function resolveElementColor(
       if (semDado) {
         return { state: 'nodata' };
       }
-    } else if (hit.field.display && hasCustomThresholds(hit.field)) {
-      // 1b. Pipeline nativo, para quem nao definiu regra propria. O guard em
-      // `display` e o que prova ao compilador que o caminho de "sem dado" ja
-      // saiu daqui — so uma regra `special` chega ate aqui sem valor util, e
-      // ela implica regra propria, tratada no ramo acima.
-      const display = hit.field.display(hit.value);
-      if (display.color) {
-        return { state: 'threshold', color: display.color, label: thresholdLabel(hit.field, hit.value) };
-      }
     }
 
     // Binding resolve mas nao ha regra de threshold definida: o elemento nao
@@ -174,36 +216,4 @@ export function resolveElementColor(
   }
 
   return { state: 'neutral' };
-}
-
-/**
- * True quando o usuario definiu pelo menos um step alem do base.
- *
- * O step base e o unico com `value === -Infinity` (o Grafana o injeta em
- * `applyFieldOverrides` quando falta), entao contar os steps de valor finito
- * separa "tem regra" de "so tem o default".
- *
- * Sem esse corte, um field vinculado herdaria a cor do step base — verde — e
- * todo no com binding nasceria verde sem regra nenhuma configurada. Num NOC
- * verde significa "verificado OK"; verde por omissao e mentira operacional. No
- * instante em que o usuario cria o primeiro step, o comportamento volta a ser
- * 100% nativo do Grafana.
- */
-function hasCustomThresholds(field: Field): boolean {
-  return Boolean(field.config.thresholds?.steps.some((step) => Number.isFinite(step.value)));
-}
-
-/**
- * Rotulo do badge: so existe se o usuario nomeou o step (campo `state`).
- *
- * Restrito ao modo absoluto porque no modo percentual o step ativo depende do
- * min/max do field, que `getActiveThreshold` nao recebe. A cor continua certa
- * nos dois modos — ela vem de `field.display`, nao daqui.
- */
-function thresholdLabel(field: Field, value: unknown): string | undefined {
-  const thresholds = field.config.thresholds;
-  if (typeof value !== 'number' || thresholds?.mode !== ThresholdsMode.Absolute) {
-    return undefined;
-  }
-  return getActiveThreshold(value, thresholds.steps).state;
 }

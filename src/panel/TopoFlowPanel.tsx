@@ -7,8 +7,17 @@ import { TopologyCanvas } from '../canvas/TopologyCanvas';
 import { parseTopoFlowOptions } from '../model/parse';
 import { TopoFlowOptions, Topology } from '../model/types';
 
-export function TopoFlowPanel({ options, data, width, height, onOptionsChange }: PanelProps<TopoFlowOptions>) {
-  const { options: parsed, issues } = useMemo(() => parseTopoFlowOptions(options), [options]);
+export function TopoFlowPanel({
+  options,
+  data,
+  width,
+  height,
+  title,
+  timeRange,
+  timeZone,
+  onOptionsChange,
+}: PanelProps<TopoFlowOptions>) {
+  const { options: parsed, issues, topologyInvalid } = useMemo(() => parseTopoFlowOptions(options), [options]);
 
   /**
    * `getFieldDisplayName` recalcula a cada chamada e pode desambiguar diferente
@@ -21,9 +30,22 @@ export function TopoFlowPanel({ options, data, width, height, onOptionsChange }:
     return data.series;
   }, [data.series]);
 
+  /**
+   * O canvas so escreve quando o que ele desenha **e** o que esta salvo.
+   *
+   * Com a topologia corrompida, `parsed.topology` e o default vazio: gravar a
+   * partir dele apagaria o desenho do usuario por causa de um campo fora do
+   * schema, e sem aviso nenhum — o dashboard nao sabe distinguir esta escrita de
+   * qualquer outra. Melhor um painel que mostra o erro e nao deixa mexer.
+   */
   const handleTopologyChange = useCallback(
-    (topology: Topology) => onOptionsChange({ ...parsed, topology }),
-    [onOptionsChange, parsed]
+    (topology: Topology) => {
+      if (topologyInvalid) {
+        return;
+      }
+      onOptionsChange({ ...parsed, topology });
+    },
+    [onOptionsChange, parsed, topologyInvalid]
   );
 
   /**
@@ -48,12 +70,19 @@ export function TopoFlowPanel({ options, data, width, height, onOptionsChange }:
    * graca e dispensa qualquer sincronia: entrar e sair do editor sempre
    * re-renderiza o painel.
    */
-  const editable = locationService.getSearchObject().editPanel !== undefined || parsed.canvas.inlineEditing;
+  const editable =
+    !topologyInvalid && (locationService.getSearchObject().editPanel !== undefined || parsed.canvas.inlineEditing);
 
   return (
     <>
       {issues.length > 0 && (
         <Alert severity="warning" title="Opções inválidas, usando defaults">
+          {topologyInvalid && (
+            <p>
+              A topologia salva continua no JSON do painel e <strong>não será sobrescrita</strong>: a edição fica
+              desligada até o problema abaixo ser corrigido em <em>Panel JSON</em>.
+            </p>
+          )}
           <ul>
             {issues.map((issue) => (
               <li key={issue}>{issue}</li>
@@ -69,6 +98,11 @@ export function TopoFlowPanel({ options, data, width, height, onOptionsChange }:
         editable={editable}
         width={width}
         height={height}
+        // So o screenshot usa: e o nome do arquivo baixado.
+        title={title}
+        // O grafico de hover desenha nesta janela — a mesma do dashboard.
+        timeRange={timeRange}
+        timeZone={timeZone}
         onChange={handleTopologyChange}
       />
     </>

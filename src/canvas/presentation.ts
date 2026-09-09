@@ -10,10 +10,3 @@ import { TextDimension } from '../model/types';
 export function fixedText(dim: TextDimension): string {
   return dim.mode === 'fixed' ? (dim.fixed ?? '') : '';
 }
-
-/**
- * A resolucao do icone mudou de casa: vive em `canvas/icons` junto da
- * biblioteca, porque quem conhece as chaves validas e ela. Ate o Bloco 3 os
- * icones vinham do `@grafana/ui`, que nao tem nenhum ativo de rede.
- */
-export { resolveTopoIcon } from './icons';

@@ -1,7 +1,7 @@
 import { z } from 'zod';
 
 import { defaultCanvas, defaultTopology } from './defaults';
-import { SCHEMA_VERSION, canvasSchema, topologySchema } from './schema';
+import { SCHEMA_VERSION, canvasSchema, topologySchema, zabbixOptionsSchema } from './schema';
 import { TopoFlowOptions } from './types';
 
 /**
@@ -17,6 +17,16 @@ export interface ParsedOptions {
    * salvo e nao validou — secao ausente nao entra aqui, ver `parseSection`.
    */
   issues: string[];
+  /**
+   * A topologia salva existia e **nao validou**: `options.topology` e o default,
+   * e nao o que o usuario desenhou.
+   *
+   * Quem escreve precisa saber disto. Sem a flag, o painel desenhava o default
+   * e a primeira interacao no canvas gravava esse default por cima da topologia
+   * salva — um arraste sem querer, e o trabalho do usuario ia embora porque um
+   * unico campo do JSON estava fora do schema.
+   */
+  topologyInvalid: boolean;
 }
 
 /**
@@ -32,15 +42,26 @@ export function parseTopoFlowOptions(raw: unknown): ParsedOptions {
   const issues: string[] = [];
 
   const topology = parseSection('topology', topologySchema, source.topology, defaultTopology, issues);
+  const topologyInvalid = issues.length > 0;
   const canvas = parseSection('canvas', canvasSchema, source.canvas, defaultCanvas, issues);
+  /*
+    Precisa passar por aqui mesmo o painel nao consultando o Zabbix: o objeto que
+    sai desta funcao e o que o canvas devolve ao dashboard em `onOptionsChange`
+    (ver `TopoFlowPanel`). Uma secao que o parse nao conhece simplesmente **some
+    do JSON** no primeiro arraste — sem erro, sem aviso, e com o usuario
+    reconfigurando o datasource achando que "nao salvou".
+  */
+  const zabbix = parseSection('zabbix', zabbixOptionsSchema.optional(), source.zabbix, undefined, issues);
 
   return {
+    topologyInvalid,
     options: {
       // Carimbamos a versao corrente. Migracoes entre versoes de schema entram
       // aqui quando SCHEMA_VERSION passar de 1.
       schemaVersion: SCHEMA_VERSION,
       topology,
       canvas,
+      zabbix,
     },
     issues,
   };
@@ -53,13 +74,7 @@ export function parseTopoFlowOptions(raw: unknown): ParsedOptions {
  * de entrada, e o default e a resposta certa em silencio. Ja um valor presente
  * que nao valida significa dado perdido, e o usuario precisa saber.
  */
-function parseSection<T>(
-  name: string,
-  schema: z.ZodType<T>,
-  value: unknown,
-  fallback: T,
-  issues: string[]
-): T {
+function parseSection<T>(name: string, schema: z.ZodType<T>, value: unknown, fallback: T, issues: string[]): T {
   if (value === undefined) {
     return fallback;
   }

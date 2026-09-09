@@ -2,7 +2,7 @@ import { DataFrame, Field, FieldType, createTheme, toDataFrame } from '@grafana/
 
 import { TriggerBinding } from '../model/types';
 import { ZabbixProblem } from './problems';
-import { resolveTriggerState, severityColor } from './triggerState';
+import { UNNAMED_TRIGGER, resolveTriggerState, severityColor } from './triggerState';
 
 const theme = createTheme();
 
@@ -30,6 +30,8 @@ const ICMP: ZabbixProblem = {
 const binding = (overrides: Partial<TriggerBinding> = {}): TriggerBinding => ({
   enabled: true,
   host: HOST,
+  names: [],
+  showActive: true,
   ...overrides,
 });
 
@@ -52,6 +54,15 @@ describe('resolveTriggerState — trigger alarmando', () => {
       color: theme.visualization.getColorByName('red'),
       severity: 4,
       label: 'High',
+      problems: [
+        {
+          name: 'Unavailable by ICMP ping',
+          severity: 4,
+          label: 'High',
+          color: theme.visualization.getColorByName('red'),
+          since: undefined,
+        },
+      ],
     });
   });
 
@@ -82,7 +93,9 @@ describe('resolveTriggerState — multiplas triggers ativas', () => {
   ];
 
   it('usa a severidade maxima, independente da ordem no frame', () => {
-    expect(resolveTriggerState(binding(), [problemsFrame(problems)], theme)).toEqual({
+    const accent = resolveTriggerState(binding(), [problemsFrame(problems)], theme);
+
+    expect(accent).toMatchObject({
       color: theme.visualization.getColorByName('dark-red'),
       severity: 5,
       label: 'Disaster',
@@ -101,6 +114,87 @@ describe('resolveTriggerState — multiplas triggers ativas', () => {
   });
 });
 
+/**
+ * A lista e a resposta a "qual trigger caiu?". Ate aqui o dado existia no frame
+ * e morria dentro do `maxSeverity`: o elemento sabia dizer o quao ruim estava,
+ * nunca o que estava ruim.
+ */
+describe('resolveTriggerState — lista de problemas ativos', () => {
+  const problems: ZabbixProblem[] = [
+    { hosts: [{ name: HOST }], name: 'Warning qualquer', severity: '2', value: '1' },
+    { hosts: [{ name: HOST }], name: 'Disaster', severity: '5', value: '1' },
+    { hosts: [{ name: HOST }], name: 'Average', severity: '3', value: '1' },
+  ];
+
+  it('traz todas as triggers em PROBLEM, da mais grave para a mais branda', () => {
+    const accent = resolveTriggerState(binding(), [problemsFrame(problems)], theme);
+
+    expect(accent?.problems.map((problem) => [problem.name, problem.severity])).toEqual([
+      ['Disaster', 5],
+      ['Average', 3],
+      ['Warning qualquer', 2],
+    ]);
+  });
+
+  /**
+   * Desempate estatico de proposito: por horario, a lista se reorganizaria a
+   * cada refresh do painel, debaixo do olho de quem esta lendo.
+   */
+  it('empate de severidade desempata pelo nome', () => {
+    const empate: ZabbixProblem[] = [
+      { hosts: [{ name: HOST }], name: 'Memory usage', severity: '4', value: '1' },
+      { hosts: [{ name: HOST }], name: 'CPU load', severity: '4', value: '1' },
+    ];
+
+    const accent = resolveTriggerState(binding(), [problemsFrame(empate)], theme);
+
+    expect(accent?.problems.map((problem) => problem.name)).toEqual(['CPU load', 'Memory usage']);
+  });
+
+  it('cada linha ja vem com a cor e o nome da severidade resolvidos', () => {
+    const accent = resolveTriggerState(binding(), [problemsFrame([ICMP])], theme);
+
+    expect(accent?.problems[0]).toMatchObject({
+      label: 'High',
+      color: theme.visualization.getColorByName('red'),
+    });
+  });
+
+  /** Um problema sem descricao continua sendo um problema — nao pode sair em branco. */
+  it('trigger sem descrição ganha um nome legível', () => {
+    const anonima: ZabbixProblem = { hosts: [{ name: HOST }], name: '  ', severity: '4', value: '1' };
+
+    expect(resolveTriggerState(binding(), [problemsFrame([anonima])], theme)?.problems[0].name).toBe(UNNAMED_TRIGGER);
+  });
+
+  it('o `timestamp` do frame vira o instante de abertura, quando existe', () => {
+    const comTempo: ZabbixProblem = { ...ICMP, timestamp: 1_700_000_000 };
+
+    const accent = resolveTriggerState(binding(), [problemsFrame([comTempo, ICMP])], theme);
+
+    expect(accent?.problems.map((problem) => problem.since)).toEqual([1_700_000_000, undefined]);
+  });
+
+  /**
+   * A lista e o mesmo conjunto que decide a cor: o que o filtro de nome ou o
+   * `value: '0'` tira do calculo tem de sair tambem da tela, senao o painel
+   * mostraria uma trigger que nao esta pintando nada.
+   */
+  it('respeita os mesmos filtros que decidem a cor', () => {
+    const comResolvida: ZabbixProblem[] = [
+      ...problems,
+      { hosts: [{ name: HOST }], name: 'Ja normalizou', severity: '5', value: '0' },
+      { hosts: [{ name: 'OUTRO-HOST' }], name: 'De outro host', severity: '5', value: '1' },
+    ];
+
+    const todas = resolveTriggerState(binding(), [problemsFrame(comResolvida)], theme);
+    expect(todas?.problems).toHaveLength(3);
+
+    const so = resolveTriggerState(binding({ names: ['Average'] }), [problemsFrame(comResolvida)], theme);
+    expect(so?.problems.map((problem) => problem.name)).toEqual(['Average']);
+  });
+});
+
 describe('resolveTriggerState — filtro por nome de trigger', () => {
   const problems: ZabbixProblem[] = [
     ICMP,
@@ -108,20 +202,69 @@ describe('resolveTriggerState — filtro por nome de trigger', () => {
   ];
 
   it('restringe a trigger escolhida', () => {
-    const so = binding({ name: 'Unavailable by ICMP ping' });
+    const so = binding({ names: ['Unavailable by ICMP ping'] });
 
     expect(resolveTriggerState(so, [problemsFrame(problems)], theme)?.severity).toBe(4);
   });
 
-  it('nome vazio ou so espaco significa qualquer trigger do host', () => {
-    expect(resolveTriggerState(binding({ name: '' }), [problemsFrame(problems)], theme)?.severity).toBe(5);
-    expect(resolveTriggerState(binding({ name: '   ' }), [problemsFrame(problems)], theme)?.severity).toBe(5);
+  it('lista vazia, ou so com branco, significa qualquer trigger do host', () => {
+    expect(resolveTriggerState(binding({ names: [] }), [problemsFrame(problems)], theme)?.severity).toBe(5);
+    expect(resolveTriggerState(binding({ names: [''] }), [problemsFrame(problems)], theme)?.severity).toBe(5);
+    expect(resolveTriggerState(binding({ names: ['   '] }), [problemsFrame(problems)], theme)?.severity).toBe(5);
   });
 
   it('nome sem correspondencia nao acende', () => {
-    const nenhuma = binding({ name: 'trigger que nao existe' });
+    const nenhuma = binding({ names: ['trigger que nao existe'] });
 
     expect(resolveTriggerState(nenhuma, [problemsFrame(problems)], theme)).toBeUndefined();
+  });
+});
+
+/**
+ * Varias triggers no mesmo vinculo. A relacao e **OU**: o elemento acende com
+ * qualquer uma delas, e a severidade que pinta e a maior entre as que estao
+ * alarmando naquele instante.
+ */
+describe('resolveTriggerState — mais de uma trigger no vinculo', () => {
+  const problems: ZabbixProblem[] = [
+    ICMP,
+    { hosts: [{ name: HOST }], name: 'Zabbix agent is not available', severity: '5', value: '1' },
+    { hosts: [{ name: HOST }], name: 'Fora da lista', severity: '5', value: '1' },
+  ];
+  const frames = [problemsFrame(problems)];
+
+  it('acende com qualquer uma das escolhidas', () => {
+    const so = binding({ names: ['Unavailable by ICMP ping', 'trigger que nao existe'] });
+
+    expect(resolveTriggerState(so, frames, theme)?.severity).toBe(4);
+  });
+
+  it('a severidade e a maior entre as escolhidas que estao alarmando', () => {
+    const duas = binding({ names: ['Unavailable by ICMP ping', 'Zabbix agent is not available'] });
+
+    expect(resolveTriggerState(duas, frames, theme)?.severity).toBe(5);
+  });
+
+  it('lista todas as escolhidas em PROBLEM, e nenhuma de fora da lista', () => {
+    const duas = binding({ names: ['Unavailable by ICMP ping', 'Zabbix agent is not available'] });
+
+    expect(resolveTriggerState(duas, frames, theme)?.problems.map((problem) => problem.name)).toEqual([
+      'Zabbix agent is not available',
+      'Unavailable by ICMP ping',
+    ]);
+  });
+
+  /** Rascunho do editor: a linha em branco nao pode alargar o vinculo. */
+  it('linha em branco no meio da lista e ignorada, e nao abrange o host', () => {
+    const comBranco = binding({ names: ['Unavailable by ICMP ping', '  '] });
+
+    expect(resolveTriggerState(comBranco, frames, theme)?.problems).toHaveLength(1);
+  });
+
+  it('nenhuma das escolhidas alarmando deixa o elemento sem estado', () => {
+    const nenhuma = binding({ names: ['nao existe', 'tambem nao'] });
+
+    expect(resolveTriggerState(nenhuma, frames, theme)).toBeUndefined();
   });
 });
 

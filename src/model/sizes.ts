@@ -33,3 +33,22 @@ export const POSTIT_DEFAULT = { width: 250, height: 170, minWidth: 160, minHeigh
  * Arestas ja salvas guardam a propria espessura e nao mudam sozinhas.
  */
 export const DEFAULT_EDGE_WIDTH = 2;
+
+/**
+ * Caixa da imagem. Quadrada por padrao porque o caso dominante e icone de
+ * fabricante ou logo — e um retangulo largo obrigaria a redimensionar toda vez.
+ *
+ * O minimo e pequeno de proposito: 24px ainda e um alvo clicavel, e ha topologia
+ * que usa a imagem como marcador ao lado do no, nao como figura.
+ */
+export const IMAGE_DEFAULT = {
+  width: 96,
+  height: 96,
+  minWidth: 24,
+  minHeight: 24,
+  /**
+   * A legenda nasce menor que o texto do no (14px): ela acompanha a figura, nao
+   * a substitui. Configuravel por elemento — este e so o ponto de partida.
+   */
+  fontSize: 12,
+};

@@ -1,7 +1,7 @@
 import { DataFrame } from '@grafana/data';
 import { Edge, Node } from '@xyflow/react';
 
-import { TopoEdge, TopoNode, TopoPoint, TopoPostit, TopoText } from '../model/types';
+import { TopoEdge, TopoImage, TopoNode, TopoPoint, TopoPostit, TopoText } from '../model/types';
 
 /**
  * Ponte entre o modelo e o React Flow.
@@ -37,21 +37,41 @@ export type PointNodeData = {
   editable: boolean;
   link?: LinkRole;
 };
-export type TextNodeData = { element: TopoText; frames: DataFrame[] };
+/**
+ * O texto nao conecta e nao redimensiona, mas recebe `editable` desde que ganhou
+ * drill-down: e a flag que decide se o clique navega ou seleciona.
+ */
+export type TextNodeData = { element: TopoText; frames: DataFrame[]; editable: boolean };
 /**
  * Postit nao recebe `frames`: e estatico por decisao do PRD. Recebe `editable`
  * porque a alca de redimensionamento so existe em modo de edicao.
  */
 export type PostitNodeData = { element: TopoPostit; editable: boolean };
+/**
+ * A imagem recebe as tres coisas: `frames` pela legenda com metrica e pelo
+ * estado da placa, `editable` pela alca de redimensionamento, e `link` porque
+ * ela conecta como no e point.
+ */
+export type ImageNodeData = {
+  element: TopoImage;
+  frames: DataFrame[];
+  editable: boolean;
+  link?: LinkRole;
+};
 
 export type DeviceFlowNode = Node<DeviceNodeData, 'deviceNode'>;
 export type PointFlowNode = Node<PointNodeData, 'pointNode'>;
 export type PostitFlowNode = Node<PostitNodeData, 'postitNode'>;
 export type TextFlowNode = Node<TextNodeData, 'textNode'>;
+export type ImageFlowNode = Node<ImageNodeData, 'imageNode'>;
 
-export type TopoFlowNode = DeviceFlowNode | PointFlowNode | PostitFlowNode | TextFlowNode;
+export type TopoFlowNode = DeviceFlowNode | PointFlowNode | PostitFlowNode | TextFlowNode | ImageFlowNode;
 
-export type TopoFlowEdgeData = { element: TopoEdge; frames: DataFrame[] };
+/**
+ * `editable` chega ate a aresta pelo mesmo motivo que chega ate os nos: e o que
+ * cala o painel de triggers em modo de edicao, onde o rotulo e alca de selecao.
+ */
+export type TopoFlowEdgeData = { element: TopoEdge; frames: DataFrame[]; editable: boolean };
 export type TopoFlowEdge = Edge<TopoFlowEdgeData, 'topoEdge'>;
 
 /**
@@ -80,7 +100,7 @@ export const POSTIT_Z_OFFSET = -100_000;
 export const EDGE_Z_INDEX = 0;
 
 /**
- * Nos, points e textos comecam em 1. O reordenador numera a partir de 0, entao
+ * Nos, points, textos e imagens comecam em 1. O reordenador numera a partir de 0, entao
  * sem este deslocamento o elemento mais ao fundo empataria com as arestas.
  */
 export const NODE_Z_OFFSET = 1;

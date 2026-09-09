@@ -1,6 +1,7 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { css } from '@emotion/css';
-import { DataFrame, GrafanaTheme2 } from '@grafana/data';
+import { DataFrame, GrafanaTheme2, TimeRange } from '@grafana/data';
+import { TimeZone } from '@grafana/schema';
 import { useStyles2, useTheme2, usePanelContext } from '@grafana/ui';
 import {
   Background,
@@ -37,6 +38,8 @@ import { CanvasOptions, ElementKind, Topology } from '../model/types';
 import { TopoInstanceState } from '../panel/instanceState';
 import { CanvasContextMenu, MenuState } from './CanvasContextMenu';
 import { GhostConnection } from './GhostConnection';
+import { ScreenshotButton } from './ScreenshotButton';
+import { TopoTime, TopoTimeContext } from './timeContext';
 import { edgeTypes } from './edges';
 import { LinkRole, TopoFlowEdge, TopoFlowNode } from './flowTypes';
 import { nodeTypes } from './nodes';
@@ -44,8 +47,35 @@ import { toFlowEdges, toFlowNodes } from './useFlowElements';
 
 import '@xyflow/react/dist/style.css';
 
-/** Escrita em `panel.options` so depois que o gesto de arraste esfria. */
-const POSITION_COMMIT_DELAY_MS = 200;
+/**
+ * Escrita em `panel.options` so depois que o gesto de arraste esfria.
+ *
+ * O numero e um equilibrio entre duas perdas. Curto demais e cada gesto vira
+ * varias escritas em `options` — o que o debounce existe para evitar, ja que a
+ * alca de resize emite dezenas de mudancas por arraste. Longo demais e a janela
+ * em que o commit ainda nao aconteceu: se o painel desmontar dentro dela
+ * (fechar o editor, salvar o dashboard, trocar de painel), o `clearTimeout` do
+ * cleanup descarta o gesto e o elemento volta para onde estava.
+ *
+ * 80ms fecha essa janela para algo que o usuario nao alcanca entre soltar o
+ * mouse e clicar em outra coisa, e continua muito acima da cadencia de um
+ * gesto continuo — os eventos de arraste chegam a cada frame (~16ms), entao o
+ * timer so dispara depois que o movimento de fato parou. Era 200ms.
+ *
+ * A janela nao fecha por completo: o commit e assincrono por construcao. O que
+ * some no cleanup do unmount e sempre no maximo este intervalo.
+ */
+const POSITION_COMMIT_DELAY_MS = 80;
+
+/**
+ * Tipos de no cujo tamanho e um atributo salvo. Os demais tem tamanho derivado
+ * (o texto, do `fontSize`; o point, da constante) e persistir a medicao do
+ * navegador neles gravaria em `options` um numero que ninguem pediu.
+ */
+const RESIZABLE_TYPES = new Set(['postitNode', 'imageNode']);
+
+/** Referencia estavel: um array novo a cada render reiniciaria a publicacao. */
+const EMPTY_SELECTION: string[] = [];
 
 export interface TopologyCanvasProps {
   topology: Topology;
@@ -54,6 +84,11 @@ export interface TopologyCanvasProps {
   editable: boolean;
   width: number;
   height: number;
+  /** Titulo do painel. So o screenshot usa: e o nome do arquivo baixado. */
+  title?: string;
+  /** Janela de tempo do dashboard, para o grafico de hover. Ver `timeContext`. */
+  timeRange: TimeRange;
+  timeZone: TimeZone;
   onChange: (next: Topology) => void;
 }
 
@@ -67,13 +102,30 @@ export function TopologyCanvas(props: TopologyCanvasProps) {
   );
 }
 
-function CanvasInner({ topology, frames, canvas, editable, width, height, onChange }: TopologyCanvasProps) {
+function CanvasInner({
+  topology,
+  frames,
+  canvas,
+  editable,
+  width,
+  height,
+  title,
+  timeRange,
+  timeZone,
+  onChange,
+}: TopologyCanvasProps) {
   const theme = useTheme2();
   const styles = useStyles2(getStyles);
   const { screenToFlowPosition, getInternalNode, setCenter, getZoom } = useReactFlow();
   const { onInstanceStateChange } = usePanelContext();
 
   const [menu, setMenu] = useState<MenuState | undefined>();
+
+  /**
+   * O container deste painel. O screenshot procura o viewport a partir daqui, e
+   * nao no documento: um dashboard com dois TopoFlow tem dois viewports.
+   */
+  const wrapperRef = useRef<HTMLDivElement>(null);
 
   /**
    * Modo Linkar. Vive no estado local, e nao na topologia, porque um gesto pela
@@ -85,7 +137,7 @@ function CanvasInner({ topology, frames, canvas, editable, width, height, onChan
   const [cursor, setCursor] = useState<XYPosition | undefined>();
 
   const [nodes, setNodes] = useState<TopoFlowNode[]>(() => toFlowNodes(topology, frames, editable));
-  const [edges, setEdges] = useState<TopoFlowEdge[]>(() => toFlowEdges(topology, frames));
+  const [edges, setEdges] = useState<TopoFlowEdge[]>(() => toFlowEdges(topology, frames, editable));
 
   /**
    * `options.topology` e a fonte da verdade, mas durante um arraste o React
@@ -105,15 +157,18 @@ function CanvasInner({ topology, frames, canvas, editable, width, height, onChan
       return;
     }
     appliedRevision.current = revision;
-    setNodes(toFlowNodes(topology, frames, editable));
 
     // A selecao e aplicada aqui, e nao logo apos o `connect`, porque este
     // efeito reconstroi as arestas do zero e apagaria qualquer selecao posta
     // antes dele.
     const selectedId = pendingEdgeSelection.current;
     pendingEdgeSelection.current = undefined;
-    setEdges(
-      toFlowEdges(topology, frames).map((edge) => (edge.id === selectedId ? { ...edge, selected: true } : edge))
+
+    setNodes((current) => keepSelection(toFlowNodes(topology, frames, editable), current));
+    setEdges((current) =>
+      keepSelection(toFlowEdges(topology, frames, editable), current).map((edge) =>
+        edge.id === selectedId ? { ...edge, selected: true } : edge
+      )
     );
   }, [revision, topology, frames, editable]);
 
@@ -122,13 +177,19 @@ function CanvasInner({ topology, frames, canvas, editable, width, height, onChan
    * frames no render (em vez de guardar no estado e sincronizar por efeito)
    * evita a cascata de renders e mantem selecao e posicao em voo intactas.
    */
+  /** Objeto novo a cada render reiniciaria todo consumidor do contexto. */
+  const tempo = useMemo<TopoTime>(() => ({ timeRange, timeZone }), [timeRange, timeZone]);
+
   const nodesWithFrames = useMemo(
     () => withNodeData(nodes, frames, editable, linking?.sourceId, topology),
     [nodes, frames, editable, linking, topology]
   );
+  // `editable` viaja junto com os frames pelo mesmo motivo que viaja nos nos: o
+  // efeito de ressincronia nao roda quando so o modo de edicao muda, e sem isto
+  // a aresta ficaria com a flag congelada na montagem.
   const edgesWithFrames = useMemo(
-    () => edges.map((edge) => (edge.data ? { ...edge, data: { ...edge.data, frames } } : edge)),
-    [edges, frames]
+    () => edges.map((edge) => (edge.data ? { ...edge, data: { ...edge.data, frames, editable } } : edge)),
+    [edges, frames, editable]
   );
 
   // Lidos dentro do timer de commit, que dispara depois do render. Sincronizar
@@ -144,48 +205,69 @@ function CanvasInner({ topology, frames, canvas, editable, width, height, onChan
   useEffect(() => () => clearTimeout(commitTimer.current), []);
 
   /**
-   * Arraste: o React Flow ja esta desenhando o resultado, entao marcamos a
-   * revisao como aplicada para o efeito acima nao reconstruir os nos no meio do
-   * gesto — o que faria o elemento pular de volta.
+   * Geometria que o React Flow ja esta desenhando e que ainda nao foi para
+   * `options`. `'size'` implica `'position'` — arrastar a alca da esquerda ou do
+   * topo **move** o no, e so o tamanho deixaria o retangulo saltando de volta.
    */
-  const schedulePositionCommit = useCallback(() => {
-    clearTimeout(commitTimer.current);
-    commitTimer.current = setTimeout(() => {
-      const updates = nodesRef.current.map((node) => ({ id: node.id, position: node.position }));
-      const next = moveElements(topologyRef.current, updates);
-      appliedRevision.current = JSON.stringify(next);
-      onChange(next);
-    }, POSITION_COMMIT_DELAY_MS);
-  }, [onChange]);
+  const pending = useRef<'position' | 'size' | undefined>();
 
   /**
-   * Redimensionamento do postit. Mesmo debounce do arraste, e pelo mesmo motivo:
-   * a alca emite dezenas de mudancas por gesto e cada uma reescreveria `options`.
+   * Aplica sobre `base` o gesto pendente e cancela o timer.
    *
-   * Grava posicao junto porque arrastar a alca da esquerda ou do topo **move** o
-   * no: so o tamanho deixaria o retangulo saltando de volta ao soltar.
+   * Existe porque o commit e debounced: entre o fim do arraste e o disparo do
+   * timer ha uma janela em que qualquer outra acao (excluir, duplicar,
+   * conectar, criar) roda sobre `topologyRef.current`, que ainda nao conhece a
+   * posicao nova. Antes, `mutate` simplesmente cancelava o timer — e o arraste
+   * era **perdido**, com o elemento saltando de volta para onde estava.
    */
-  const scheduleSizeCommit = useCallback(() => {
-    clearTimeout(commitTimer.current);
-    commitTimer.current = setTimeout(() => {
-      let next = topologyRef.current;
+  const flushPending = useCallback((base: Topology): Topology => {
+    const gesture = pending.current;
+    if (!gesture) {
+      return base;
+    }
 
+    clearTimeout(commitTimer.current);
+    pending.current = undefined;
+
+    let next = base;
+    if (gesture === 'size') {
       for (const node of nodesRef.current) {
-        if (node.type !== 'postitNode' || !node.width || !node.height) {
+        if (!RESIZABLE_TYPES.has(node.type ?? '') || !node.width || !node.height) {
           continue;
         }
         next = resizeElement(next, node.id, { width: node.width, height: node.height });
       }
+    }
 
-      next = moveElements(
-        next,
-        nodesRef.current.map((node) => ({ id: node.id, position: node.position }))
-      );
+    return moveElements(
+      next,
+      nodesRef.current.map((node) => ({ id: node.id, position: node.position }))
+    );
+  }, []);
 
-      appliedRevision.current = JSON.stringify(next);
-      onChange(next);
-    }, POSITION_COMMIT_DELAY_MS);
-  }, [onChange]);
+  /**
+   * Arraste e redimensionamento: o React Flow ja esta desenhando o resultado,
+   * entao marcamos a revisao como aplicada para o efeito acima nao reconstruir
+   * os nos no meio do gesto — o que faria o elemento pular de volta.
+   *
+   * O debounce e o que impede a alca de reescrever `options` a cada uma das
+   * dezenas de mudancas que um unico gesto emite.
+   */
+  const scheduleCommit = useCallback(
+    (gesture: 'position' | 'size') => {
+      // Um arraste que chegue depois de um resize nao rebaixa o commit: as duas
+      // dimensoes do mesmo gesto precisam viajar juntas.
+      pending.current = pending.current === 'size' ? 'size' : gesture;
+
+      clearTimeout(commitTimer.current);
+      commitTimer.current = setTimeout(() => {
+        const next = flushPending(topologyRef.current);
+        appliedRevision.current = JSON.stringify(next);
+        onChange(next);
+      }, POSITION_COMMIT_DELAY_MS);
+    },
+    [flushPending, onChange]
+  );
 
   const onNodesChange = useCallback(
     (changes: Array<NodeChange<TopoFlowNode>>) => {
@@ -193,7 +275,7 @@ function CanvasInner({ topology, frames, canvas, editable, width, height, onChan
 
       // Selecao nao vai para `options`: e estado de UI.
       if (changes.some((change) => change.type === 'position')) {
-        schedulePositionCommit();
+        scheduleCommit('position');
       }
 
       /**
@@ -207,10 +289,10 @@ function CanvasInner({ topology, frames, canvas, editable, width, height, onChan
        * aquela dimensao um atributo do no. So esse vira topologia.
        */
       if (changes.some((change) => change.type === 'dimensions' && change.setAttributes)) {
-        scheduleSizeCommit();
+        scheduleCommit('size');
       }
     },
-    [schedulePositionCommit, scheduleSizeCommit]
+    [scheduleCommit]
   );
 
   /**
@@ -239,10 +321,11 @@ function CanvasInner({ topology, frames, canvas, editable, width, height, onChan
   const mutate = useCallback(
     (fn: (current: Topology) => Topology) => {
       setMenu(undefined);
-      clearTimeout(commitTimer.current);
-      onChange(fn(topologyRef.current));
+      // `flushPending` e nao `clearTimeout`: um arraste ainda nao commitado
+      // entra na mesma escrita, em vez de ser descartado.
+      onChange(fn(flushPending(topologyRef.current)));
     },
-    [onChange]
+    [flushPending, onChange]
   );
 
   const cancelLinking = useCallback(() => {
@@ -300,12 +383,24 @@ function CanvasInner({ topology, frames, canvas, editable, width, height, onChan
   );
 
   const onNodesDelete = useCallback(
-    (deleted: TopoFlowNode[]) => mutate((current) => removeElements(current, deleted.map((node) => node.id))),
+    (deleted: TopoFlowNode[]) =>
+      mutate((current) =>
+        removeElements(
+          current,
+          deleted.map((node) => node.id)
+        )
+      ),
     [mutate]
   );
 
   const onEdgesDelete = useCallback(
-    (deleted: TopoFlowEdge[]) => mutate((current) => removeElements(current, deleted.map((edge) => edge.id))),
+    (deleted: TopoFlowEdge[]) =>
+      mutate((current) =>
+        removeElements(
+          current,
+          deleted.map((edge) => edge.id)
+        )
+      ),
     [mutate]
   );
 
@@ -419,10 +514,23 @@ function CanvasInner({ topology, frames, canvas, editable, width, height, onChan
 
   /* --- Sincronia com o painel de Layers (`instanceState`) ------------------ */
 
-  const selectedId = useMemo(
-    () => nodes.find((node) => node.selected)?.id ?? edges.find((edge) => edge.selected)?.id,
+  /**
+   * Tudo o que esta selecionado, nos e arestas.
+   *
+   * A chave de texto existe para dar **identidade estavel** ao array: `nodes` e
+   * `edges` mudam de referencia a cada quadro de um arraste, e um array novo a
+   * cada mudanca republicaria o `instanceState` o gesto inteiro — o painel de
+   * opcoes re-renderizando 60 vezes por segundo para dizer a mesma coisa.
+   */
+  const selectedKey = useMemo(
+    () =>
+      [
+        ...nodes.filter((node) => node.selected).map((node) => node.id),
+        ...edges.filter((edge) => edge.selected).map((edge) => edge.id),
+      ].join('\u0000'),
     [nodes, edges]
   );
+  const selectedIds = useMemo(() => (selectedKey ? selectedKey.split('\u0000') : EMPTY_SELECTION), [selectedKey]);
 
   /**
    * Traz o elemento para o centro da area visivel, preservando o zoom atual.
@@ -434,8 +542,7 @@ function CanvasInner({ topology, frames, canvas, editable, width, height, onChan
    */
   const revealElement = useCallback(
     (id: string) => {
-      const target =
-        centerOfNode(getInternalNode(id)) ?? edgeMidpoint(topologyRef.current, id, getInternalNode);
+      const target = centerOfNode(getInternalNode(id)) ?? edgeMidpoint(topologyRef.current, id, getInternalNode);
 
       if (target) {
         setCenter(target.x, target.y, { zoom: getZoom(), duration: 300 });
@@ -461,70 +568,132 @@ function CanvasInner({ topology, frames, canvas, editable, width, height, onChan
   });
 
   useEffect(() => {
-    const state: TopoInstanceState = { selected: selectedId, select: selectFromLayer };
+    const state: TopoInstanceState = { selected: selectedIds, select: selectFromLayer };
     publishRef.current?.(state);
-  }, [selectedId, selectFromLayer]);
+  }, [selectedIds, selectFromLayer]);
+
+  /**
+   * Topologia sem nenhum elemento. Arestas nao entram na conta: elas exigem
+   * duas pontas, entao nao existe topologia so de arestas.
+   */
+  const vazia =
+    topology.nodes.length === 0 &&
+    topology.points.length === 0 &&
+    topology.postits.length === 0 &&
+    topology.texts.length === 0 &&
+    topology.images.length === 0;
 
   return (
-    <div
-      className={styles.wrapper}
-      style={{ width, height }}
-      data-linking={linking ? true : undefined}
-      onMouseMove={onMouseMove}
-    >
-      <ReactFlow<TopoFlowNode, TopoFlowEdge>
-        nodes={nodesWithFrames}
-        edges={edgesWithFrames}
-        nodeTypes={nodeTypes}
-        edgeTypes={edgeTypes}
-        onNodesChange={onNodesChange}
-        onEdgesChange={onEdgesChange}
-        onNodesDelete={onNodesDelete}
-        onEdgesDelete={onEdgesDelete}
-        onConnect={onConnect}
-        onNodeClick={onNodeClick}
-        onPaneContextMenu={editable ? openPaneMenu : preventNativeMenu}
-        onNodeContextMenu={editable ? openNodeMenu : preventNativeMenu}
-        onEdgeContextMenu={editable ? openEdgeMenu : preventNativeMenu}
-        onPaneClick={onPaneClick}
-        // Durante a linkagem o arraste e a selecao por area saem do caminho: o
-        // gesto em curso e apontar um alvo, nao mover a cena.
-        nodesDraggable={editable && !linking}
-        selectionKeyCode={linking ? null : undefined}
-        nodesConnectable={editable}
-        elementsSelectable={editable}
-        edgesFocusable={editable}
-        connectionMode={ConnectionMode.Loose}
-        // Default do React Flow e `true`, o que reescreve o zIndex do no ao
-        // seleciona-lo e quebra a ordem de camadas que `useFlowElements` monta.
-        elevateNodesOnSelect={false}
-        deleteKeyCode={editable ? ['Delete', 'Backspace'] : null}
-        snapToGrid={canvas.snapToGrid}
-        snapGrid={[canvas.gridSize, canvas.gridSize]}
-        colorMode={theme.isDark ? 'dark' : 'light'}
-        proOptions={{ hideAttribution: true }}
-        fitView
+    /* O provider fica **fora** do `<ReactFlow>` para alcancar tambem o que e
+       portalizado a partir dos nos — o painel de hover do `Tooltip` nasce no
+       final do body, mas o React o mantem nesta arvore de contexto. */
+    <TopoTimeContext.Provider value={tempo}>
+      <div
+        ref={wrapperRef}
+        className={styles.wrapper}
+        style={{ width, height }}
+        data-linking={linking ? true : undefined}
+        onMouseMove={onMouseMove}
       >
-        {canvas.showGrid && <Background variant={BackgroundVariant.Dots} gap={canvas.gridSize} size={1} />}
-        <Controls showInteractive={false} />
+        <ReactFlow<TopoFlowNode, TopoFlowEdge>
+          nodes={nodesWithFrames}
+          edges={edgesWithFrames}
+          nodeTypes={nodeTypes}
+          edgeTypes={edgeTypes}
+          onNodesChange={onNodesChange}
+          onEdgesChange={onEdgesChange}
+          onNodesDelete={onNodesDelete}
+          onEdgesDelete={onEdgesDelete}
+          onConnect={onConnect}
+          onNodeClick={onNodeClick}
+          onPaneContextMenu={editable ? openPaneMenu : preventNativeMenu}
+          onNodeContextMenu={editable ? openNodeMenu : preventNativeMenu}
+          onEdgeContextMenu={editable ? openEdgeMenu : preventNativeMenu}
+          onPaneClick={onPaneClick}
+          // Durante a linkagem o arraste e a selecao por area saem do caminho: o
+          // gesto em curso e apontar um alvo, nao mover a cena.
+          nodesDraggable={editable && !linking}
+          selectionKeyCode={linking ? null : undefined}
+          nodesConnectable={editable}
+          elementsSelectable={editable}
+          edgesFocusable={editable}
+          connectionMode={ConnectionMode.Loose}
+          // Default do React Flow e `true`, o que reescreve o zIndex do no ao
+          // seleciona-lo e quebra a ordem de camadas que `useFlowElements` monta.
+          elevateNodesOnSelect={false}
+          deleteKeyCode={editable ? ['Delete', 'Backspace'] : null}
+          snapToGrid={canvas.snapToGrid}
+          snapGrid={[canvas.gridSize, canvas.gridSize]}
+          colorMode={theme.isDark ? 'dark' : 'light'}
+          proOptions={{ hideAttribution: true }}
+          fitView
+        >
+          {canvas.showGrid && <Background variant={BackgroundVariant.Dots} gap={canvas.gridSize} size={1} />}
+          <Controls showInteractive={false}>
+            {/* Filho do `Controls`, entao entra depois dos botoes nativos — logo
+              abaixo do *Fit view*, que e o ultimo com `showInteractive` off. */}
+            <ScreenshotButton wrapperRef={wrapperRef} title={title} />
+          </Controls>
 
-        {ghostFrom && cursor && <GhostConnection from={ghostFrom} to={cursor} />}
-      </ReactFlow>
+          {ghostFrom && cursor && <GhostConnection from={ghostFrom} to={cursor} />}
+        </ReactFlow>
 
-      {menu && (
-        <CanvasContextMenu
-          state={menu}
-          onClose={() => setMenu(undefined)}
-          onAdd={handleAdd}
-          onLink={handleLink}
-          onDuplicate={handleDuplicate}
-          onDelete={handleDelete}
-          onReorder={handleReorder}
-          onReverse={handleReverse}
-        />
-      )}
-    </div>
+        {/*
+          Painel recem-adicionado: a topologia nasce vazia (ver
+          `model/defaults.ts`) e a tela nao tem nada que diga como comecar. O
+          gesto de criar elemento e o clique direito, que ninguem descobre
+          olhando para uma grade em branco.
+
+          So em modo de edicao: em modo de visualizacao um canvas vazio e um
+          canvas vazio, e a dica ensinaria um gesto que ali nao funciona. E
+          `pointerEvents: 'none'` porque o alvo do clique direito e o canvas
+          atras dela — a dica nao pode ficar no caminho do que ela ensina.
+        */}
+        {editable && vazia && (
+          <div className={styles.hint}>
+            <p>Clique com o botão direito no canvas para adicionar elementos.</p>
+            <p>Ou use o botão “Adicionar elemento” no painel de opções, à direita.</p>
+          </div>
+        )}
+
+        {menu && (
+          <CanvasContextMenu
+            state={menu}
+            onClose={() => setMenu(undefined)}
+            onAdd={handleAdd}
+            onLink={handleLink}
+            onDuplicate={handleDuplicate}
+            onDelete={handleDelete}
+            onReorder={handleReorder}
+            onReverse={handleReverse}
+          />
+        )}
+      </div>
+    </TopoTimeContext.Provider>
   );
+}
+
+/**
+ * Reconstroi a cena preservando o que estava selecionado.
+ *
+ * O efeito de ressincronia monta os nos e arestas do zero a partir da
+ * topologia, e `toFlowNodes`/`toFlowEdges` nao conhecem selecao — ela e estado
+ * de UI e nunca foi para `options`. Sem este passo, **toda escrita apagaria a
+ * selecao**: o caso que expos isso foi a edicao em massa, onde mudar o estilo de
+ * quatro conexoes desfazia a selecao e obrigava a refaze-la para o campo
+ * seguinte. Mas o incomodo ja existia no caminho de um elemento so — editar um
+ * no pelo Layer o desmarcava no canvas.
+ *
+ * Casa por id, e nao por posicao: entre as duas listas pode ter entrado ou
+ * saido elemento, e o indice diria respeito a outro.
+ */
+export function keepSelection<T extends { id: string; selected?: boolean }>(next: T[], previous: T[]): T[] {
+  const selected = new Set(previous.filter((item) => item.selected).map((item) => item.id));
+  if (selected.size === 0) {
+    return next;
+  }
+
+  return next.map((item) => (selected.has(item.id) ? { ...item, selected: true } : item));
 }
 
 /** Em modo View nao ha menu, mas o do browser tambem nao deve aparecer. */
@@ -567,7 +736,7 @@ function centerOfNode(node: ReturnType<ReturnType<typeof useReactFlow>['getInter
  * sendo o dele. Postits ficam de fora — sao estaticos por decisao do PRD, e nao
  * sao alvo de conexao.
  */
-function withNodeData(
+export function withNodeData(
   nodes: TopoFlowNode[],
   frames: DataFrame[],
   editable: boolean,
@@ -593,7 +762,25 @@ function withNodeData(
       case 'pointNode':
         return { ...node, data: { ...node.data, frames, editable, link: roleOf(node.id) } };
       case 'textNode':
-        return { ...node, data: { ...node.data, frames } };
+        return { ...node, data: { ...node.data, frames, editable } };
+      /**
+       * A imagem ficou **de fora** desta funcao ate aqui, e caia no `default`
+       * abaixo — que devolve o no intacto. O efeito era a imagem congelar os
+       * frames da montagem: legenda com `${metrica}` e placa em modo Estado
+       * paravam no tempo, e so voltavam a andar quando alguma outra coisa
+       * mudava a topologia ou a pagina era recarregada.
+       *
+       * Era o "cache" relatado: um value mapping recem-criado (`1` -> `UP`)
+       * vive em `field.display`, que chega em frames novos; sem eles, a legenda
+       * continuava exibindo o valor cru de antes do mapeamento.
+       *
+       * `editable` e `link` vinham pelo mesmo caminho e sofriam do mesmo mal —
+       * a alca de redimensionamento nao aparecia ao entrar em modo de edicao, e
+       * a imagem nunca se realcava como alvo valido no modo Linkar, embora
+       * `canConnect` a aceite.
+       */
+      case 'imageNode':
+        return { ...node, data: { ...node.data, frames, editable, link: roleOf(node.id) } };
       // Postit nao recebe `frames`, mas recebe `editable`: e o que faz a alca de
       // redimensionamento aparecer e sumir ao alternar o modo de edicao. Vindo
       // so de `toFlowNodes`, a flag ficaria congelada — aquele efeito nao roda
@@ -607,6 +794,25 @@ function withNodeData(
 }
 
 const getStyles = (theme: GrafanaTheme2) => ({
+  hint: css({
+    position: 'absolute',
+    inset: 0,
+    display: 'flex',
+    flexDirection: 'column',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: theme.spacing(0.5),
+    pointerEvents: 'none',
+    textAlign: 'center',
+    padding: theme.spacing(2),
+    color: theme.colors.text.secondary,
+    ...theme.typography.bodySmall,
+
+    '& p': {
+      margin: 0,
+    },
+  }),
+
   wrapper: css({
     // O React Flow mede o container; `100%` dentro de um painel redimensionavel
     // rende zero na primeira medicao (risco listado no §10 do PRD).
@@ -620,6 +826,21 @@ const getStyles = (theme: GrafanaTheme2) => ({
     // destoa do resto do painel.
     '& .react-flow__background': {
       color: theme.colors.border.weak,
+    },
+
+    /**
+     * Durante o screenshot, tudo congela no estado de repouso.
+     *
+     * O `blink` desce ate opacidade 0.45 e as ondas do radar comecam em 0.55 e
+     * terminam em 0. A captura serializa os estilos **computados** no instante
+     * em que acontece, entao sem isto a foto sairia com o elemento alarmado
+     * meio apagado — justamente o elemento por causa do qual alguem tira o
+     * screenshot. Parada, cada animacao volta ao seu valor de base: o pulse a
+     * `scale(1)`, o blink a opacidade cheia, e os aneis do radar a opacidade
+     * zero, que num quadro parado nao querem dizer nada mesmo.
+     */
+    '&[data-capturing] *': {
+      animation: 'none !important',
     },
 
     // Enquanto se aponta um alvo, o cursor diz o que o gesto espera. Postits e

@@ -1,5 +1,5 @@
 import { ElementColor } from '../data/elementColor';
-import { ElementAlert, Severity } from '../model/types';
+import { AlertAnimation, ElementAlert, Severity } from '../model/types';
 import { alertClass, edgeAlertClass, isAlerting, resolveAlertAnimation } from './alertAnimation';
 
 /**
@@ -7,14 +7,50 @@ import { alertClass, edgeAlertClass, isAlerting, resolveAlertAnimation } from '.
  * painel nao quebra, so deixa de avisar — ou avisa quando nao devia.
  */
 
+/** A lista de problemas nao participa da decisao de animar; entra so por ser
+ *  obrigatoria no accent — sem ela o alarme nao existiria. */
+const problemas = (severity: Severity) => [
+  { name: 'Unavailable by ICMP ping', severity, label: 'qualquer', color: '#f00' },
+];
+
 const alarme = (severity: Severity): ElementColor => ({
   state: 'trigger',
   color: '#f00',
   severity,
   label: 'qualquer',
+  problems: problemas(severity),
 });
 
 const alerta = (fromSeverity: Severity): ElementAlert => ({ animation: 'pulse', fromSeverity });
+
+/**
+ * O caminho de hoje: a animação vem da linha da escada de severidades que casou,
+ * e chega aqui dentro do próprio accent. O `alert` do elemento é o campo
+ * aposentado, coberto no bloco `isAlerting` logo abaixo.
+ */
+describe('animação vinda da linha da severidade', () => {
+  const alarmeAnimado = (severity: Severity, animation: AlertAnimation): ElementColor => ({
+    state: 'trigger',
+    color: '#f00',
+    severity,
+    label: 'qualquer',
+    problems: problemas(severity),
+    animation,
+  });
+
+  it('a animação da severidade que casou é a que roda', () => {
+    expect(resolveAlertAnimation(alarmeAnimado(5, 'radar'), undefined)).toBe('radar');
+  });
+
+  it('severidade sem animação própria fica parada', () => {
+    expect(resolveAlertAnimation(alarme(5), undefined)).toBeUndefined();
+  });
+
+  /** Escada configurada manda; o campo antigo é só o fallback de quem não a editou. */
+  it('vence o alerta aposentado do elemento', () => {
+    expect(resolveAlertAnimation(alarmeAnimado(5, 'radar'), alerta(0))).toBe('radar');
+  });
+});
 
 describe('isAlerting', () => {
   it('sem configuração de alerta, nada se mexe', () => {
@@ -39,11 +75,7 @@ describe('isAlerting', () => {
   });
 
   it('estado sem alarme não anima, mesmo com alerta configurado', () => {
-    const outros: ElementColor[] = [
-      { state: 'fixed', color: '#00f' },
-      { state: 'nodata' },
-      { state: 'neutral' },
-    ];
+    const outros: ElementColor[] = [{ state: 'fixed', color: '#00f' }, { state: 'nodata' }, { state: 'neutral' }];
 
     for (const accent of outros) {
       expect(isAlerting(accent, alerta(0))).toBe(false);

@@ -9,7 +9,11 @@ describe('stateFill', () => {
   it('preenche os estados que carregam cor', () => {
     const red = theme.visualization.getColorByName('red');
 
-    expect(stateFill({ state: 'trigger', color: red, severity: 4, label: 'High' }, theme)?.background).toBe(red);
+    const problems = [{ name: 'Unavailable by ICMP ping', severity: 4 as const, label: 'High', color: red }];
+
+    expect(stateFill({ state: 'trigger', color: red, severity: 4, label: 'High', problems }, theme)?.background).toBe(
+      red
+    );
     expect(stateFill({ state: 'threshold', color: red }, theme)?.background).toBe(red);
     expect(stateFill({ state: 'fixed', color: red }, theme)?.background).toBe(red);
   });

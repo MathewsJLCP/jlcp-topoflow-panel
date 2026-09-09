@@ -11,68 +11,71 @@ export function useFlowElements(
   editable: boolean
 ): { nodes: TopoFlowNode[]; edges: TopoFlowEdge[] } {
   return useMemo(
-    () => ({ nodes: toFlowNodes(topology, frames, editable), edges: toFlowEdges(topology, frames) }),
+    () => ({ nodes: toFlowNodes(topology, frames, editable), edges: toFlowEdges(topology, frames, editable) }),
     [topology, frames, editable]
   );
 }
 
 export function toFlowNodes(topology: Topology, frames: DataFrame[], editable: boolean): TopoFlowNode[] {
   return [
-    ...topology.postits.map(
-      (element): TopoFlowNode => ({
-        id: element.id,
-        type: 'postitNode',
-        position: element.position,
-        data: { element, editable },
-        zIndex: POSTIT_Z_OFFSET + element.zIndex,
-        // `width`/`height` do no, e nao `style`: sao os atributos que o
-        // `NodeResizer` escreve ao arrastar a alca. Em `style` a dimensao
-        // inline venceria a do resize e o postit nao mudaria de tamanho.
-        width: element.size.width,
-        height: element.size.height,
-      })
-    ),
-    ...topology.nodes.map(
-      (element): TopoFlowNode => ({
-        id: element.id,
-        type: 'deviceNode',
-        position: element.position,
-        data: { element, frames, editable },
-        zIndex: element.zIndex + NODE_Z_OFFSET,
-        // `minHeight`, nao `height`: `size.height` e piso, e o card cresce
-        // quando o titulo quebra em varias linhas. Com altura fixa o nome
-        // seria truncado, que era o desvio N4.
-        style: { width: element.size.width, minHeight: element.size.height },
-      })
-    ),
-    ...topology.points.map(
-      (element): TopoFlowNode => ({
-        id: element.id,
-        type: 'pointNode',
-        position: element.position,
-        data: { element, frames, editable },
-        zIndex: element.zIndex + NODE_Z_OFFSET,
-      })
-    ),
-    ...topology.texts.map(
-      (element): TopoFlowNode => ({
-        id: element.id,
-        type: 'textNode',
-        position: element.position,
-        data: { element, frames },
-        zIndex: element.zIndex + NODE_Z_OFFSET,
-      })
-    ),
+    ...topology.postits.map((element): TopoFlowNode => ({
+      id: element.id,
+      type: 'postitNode',
+      position: element.position,
+      data: { element, editable },
+      zIndex: POSTIT_Z_OFFSET + element.zIndex,
+      // `width`/`height` do no, e nao `style`: sao os atributos que o
+      // `NodeResizer` escreve ao arrastar a alca. Em `style` a dimensao
+      // inline venceria a do resize e o postit nao mudaria de tamanho.
+      width: element.size.width,
+      height: element.size.height,
+    })),
+    ...topology.nodes.map((element): TopoFlowNode => ({
+      id: element.id,
+      type: 'deviceNode',
+      position: element.position,
+      data: { element, frames, editable },
+      zIndex: element.zIndex + NODE_Z_OFFSET,
+      // `minHeight`, nao `height`: `size.height` e piso, e o card cresce
+      // quando o titulo quebra em varias linhas. Com altura fixa o nome
+      // seria truncado, que era o desvio N4.
+      style: { width: element.size.width, minHeight: element.size.height },
+    })),
+    ...topology.points.map((element): TopoFlowNode => ({
+      id: element.id,
+      type: 'pointNode',
+      position: element.position,
+      data: { element, frames, editable },
+      zIndex: element.zIndex + NODE_Z_OFFSET,
+    })),
+    ...topology.texts.map((element): TopoFlowNode => ({
+      id: element.id,
+      type: 'textNode',
+      position: element.position,
+      data: { element, frames, editable },
+      zIndex: element.zIndex + NODE_Z_OFFSET,
+    })),
+    ...topology.images.map((element): TopoFlowNode => ({
+      id: element.id,
+      type: 'imageNode',
+      position: element.position,
+      data: { element, frames, editable },
+      zIndex: element.zIndex + NODE_Z_OFFSET,
+      // `width`/`height` como no postit, e nao `style`: sao os atributos que o
+      // `NodeResizer` escreve ao arrastar a alca.
+      width: element.size.width,
+      height: element.size.height,
+    })),
   ];
 }
 
-export function toFlowEdges(topology: Topology, frames: DataFrame[]): TopoFlowEdge[] {
+export function toFlowEdges(topology: Topology, frames: DataFrame[], editable: boolean): TopoFlowEdge[] {
   return topology.edges.map((element) => ({
     id: element.id,
     type: 'topoEdge',
     source: element.source,
     target: element.target,
-    data: { element, frames },
+    data: { element, frames, editable },
     zIndex: EDGE_Z_INDEX,
   }));
 }

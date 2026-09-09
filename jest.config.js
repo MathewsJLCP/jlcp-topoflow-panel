@@ -2,7 +2,14 @@
 // generally used by snapshots, but can affect specific tests
 process.env.TZ = 'UTC';
 
+const base = require('./.config/jest.config');
+
 module.exports = {
   // Jest configuration provided by Grafana scaffolding
-  ...require('./.config/jest.config'),
+  ...base,
+  transform: {
+    ...base.transform,
+    // Imagens importadas viram o nome do arquivo — ver `jest-file-transform.js`.
+    '^.+\\.(png|jpe?g|gif|webp)$': require.resolve('./jest-file-transform.js'),
+  },
 };

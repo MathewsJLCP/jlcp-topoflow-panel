@@ -1,7 +1,7 @@
 import React from 'react';
 import { fireEvent, render, screen } from '@testing-library/react';
 
-import { defaultTopology } from '../model/defaults';
+import { sampleTopology } from '../model/sampleTopology';
 import { TopoNode, Topology } from '../model/types';
 import { NodeForm } from './ElementForms';
 
@@ -11,11 +11,11 @@ import { NodeForm } from './ElementForms';
  * controles e do Grafana; o que e nosso e o que sai no `onChange`.
  */
 
-const [node] = defaultTopology.nodes;
+const [node] = sampleTopology.nodes;
 
 function setup(overrides: Partial<TopoNode> = {}) {
   const element: TopoNode = { ...node, ...overrides };
-  const topology: Topology = { ...defaultTopology, nodes: [element], edges: [] };
+  const topology: Topology = { ...sampleTopology, nodes: [element], edges: [] };
   const onChange = jest.fn<void, [Topology]>();
 
   render(<NodeForm element={element} topology={topology} frames={[]} onChange={onChange} />);
@@ -80,19 +80,19 @@ describe('NodeForm — valor exibido', () => {
   it('nasce desligado num nó sem métrica', () => {
     setup({ value: undefined });
 
-    expect(toggle('Valor exibido')).not.toBeChecked();
+    expect(toggle('Exibir valor')).not.toBeChecked();
   });
 
   it('o rótulo não aparece duas vezes quando o campo está ligado', () => {
     setup({ value: { field: 'cpu' } });
 
-    expect(screen.getAllByText('Valor exibido')).toHaveLength(1);
+    expect(screen.getAllByText('Exibir valor')).toHaveLength(1);
   });
 
   it('ligar cria o vínculo ainda sem field', () => {
     const { result } = setup({ value: undefined });
 
-    fireEvent.click(toggle('Valor exibido'));
+    fireEvent.click(toggle('Exibir valor'));
 
     expect(result()?.value).toEqual({});
   });
@@ -100,8 +100,8 @@ describe('NodeForm — valor exibido', () => {
   it('desligar apaga o vínculo inteiro, não só o field', () => {
     const { result } = setup({ value: { field: 'cpu' } });
 
-    expect(toggle('Valor exibido')).toBeChecked();
-    fireEvent.click(toggle('Valor exibido'));
+    expect(toggle('Exibir valor')).toBeChecked();
+    fireEvent.click(toggle('Exibir valor'));
 
     expect(result()?.value).toBeUndefined();
   });
@@ -135,19 +135,26 @@ describe('NodeForm — exibir ícone', () => {
 });
 
 /**
- * Bloco 4: a grade de dez botoes virou dropdown. O valor persistido nao mudou —
- * continua sendo a chave de `canvas/icons` em `presentation.icon` —, entao o que
- * estes casos protegem e justamente isso: nenhuma migracao, nenhum icone salvo
- * deixando de ser reconhecido.
+ * O dropdown virou um navegador com pastas, busca e grade — mas o que estes
+ * casos protegem continua sendo o mesmo: a chave salva em `presentation.icon`
+ * atravessa todas as mudancas de UI, sem migracao e sem icone deixando de ser
+ * reconhecido.
  */
 describe('NodeForm — ícone', () => {
   const campo = () => screen.getByLabelText('Ícone');
-  const abrirMenu = () => fireEvent.keyDown(campo(), { key: 'ArrowDown' });
+  const abrirMenu = () => fireEvent.click(campo());
 
   const comIcone = (icon: string | undefined) => ({ presentation: { ...node.presentation, icon } });
 
+  /** Chave curta: o formato de tudo que foi salvo antes de existirem pastas. */
   it('o ícone salvo aparece selecionado ao reabrir', () => {
     setup(comIcone('switch'));
+
+    expect(screen.getByText('Switch')).toBeInTheDocument();
+  });
+
+  it('a chave com pack também aparece selecionada', () => {
+    setup(comIcone('classic/switch'));
 
     expect(screen.getByText('Switch')).toBeInTheDocument();
   });
@@ -169,19 +176,51 @@ describe('NodeForm — ícone', () => {
     const { result } = setup(comIcone(undefined));
 
     abrirMenu();
-    fireEvent.click(screen.getByText('Load balancer'));
+    fireEvent.click(screen.getByRole('option', { name: 'Roteador' }));
 
-    expect(result()?.presentation.icon).toBe('load-balancer');
+    // A chave canônica, com o pack: é ela que endereça o ícone agora que há
+    // mais de uma pasta. As chaves curtas já salvas continuam sendo lidas.
+    expect(result()?.presentation.icon).toBe('topoflow/router');
+  });
+
+  it('trocar de pasta e escolher grava a chave daquela pasta', () => {
+    const { result } = setup(comIcone(undefined));
+
+    abrirMenu();
+    fireEvent.click(screen.getByRole('button', { name: /Clássicos/ }));
+    fireEvent.click(screen.getByRole('option', { name: 'Load balancer' }));
+
+    expect(result()?.presentation.icon).toBe('classic/load-balancer');
   });
 
   it('a busca filtra por nome', () => {
     setup(comIcone(undefined));
 
     abrirMenu();
-    fireEvent.change(campo(), { target: { value: 'fire' } });
+    fireEvent.change(screen.getByPlaceholderText(/Buscar por nome/), { target: { value: 'fire' } });
 
-    expect(screen.getByText('Firewall')).toBeInTheDocument();
-    expect(screen.queryByText('Roteador')).not.toBeInTheDocument();
+    expect(screen.getByRole('option', { name: 'Firewall' })).toBeInTheDocument();
+    expect(screen.queryByRole('option', { name: 'Roteador' })).not.toBeInTheDocument();
+  });
+
+  /** O navegador so existe depois do clique: o painel de opcoes tem 300px. */
+  it('a grade só aparece ao abrir o seletor', () => {
+    setup(comIcone(undefined));
+
+    expect(screen.queryByRole('option', { name: 'Firewall' })).not.toBeInTheDocument();
+
+    abrirMenu();
+
+    expect(screen.getByRole('option', { name: 'Firewall' })).toBeInTheDocument();
+  });
+
+  it('escolher fecha o navegador', () => {
+    setup(comIcone(undefined));
+
+    abrirMenu();
+    fireEvent.click(screen.getByRole('option', { name: 'Servidor' }));
+
+    expect(screen.queryByRole('option', { name: 'Firewall' })).not.toBeInTheDocument();
   });
 });
 
@@ -192,17 +231,27 @@ describe('NodeForm — thresholds do elemento', () => {
     fireEvent.click(screen.getByRole('menuitem', { name: new RegExp(tipo) }));
   };
 
-  it('sem campo escolhido, o corpo avisa que as regras não teriam efeito', () => {
+  it('sem métrica escolhida, o corpo avisa que as regras não teriam efeito', () => {
     setup({ thresholds: undefined, color: {} });
 
-    expect(screen.getByText(/Escolha um campo acima/)).toBeInTheDocument();
+    expect(screen.getByText(/Escolha uma métrica acima/)).toBeInTheDocument();
   });
 
-  /** Com campo escolhido não há nada a corrigir, e o corpo fica calado. */
+  /** Com métrica escolhida não há nada a corrigir, e o corpo fica calado. */
   it('com campo escolhido, o corpo não avisa nada', () => {
     setup({ thresholds: undefined, color: { field: 'cpu' } });
 
-    expect(screen.queryByText(/Escolha um campo acima/)).not.toBeInTheDocument();
+    expect(screen.queryByText(/Escolha uma métrica acima/)).not.toBeInTheDocument();
+  });
+
+  /**
+   * O vínculo por host+item vale tanto quanto o por field: as regras têm o que
+   * avaliar, mesmo que a série ainda não esteja nas queries do painel.
+   */
+  it('com host e item escolhidos, o corpo também não avisa', () => {
+    setup({ thresholds: undefined, color: { metric: { host: 'AGLIN-FW', item: 'CPU utilization' } } });
+
+    expect(screen.queryByText(/Escolha uma métrica acima/)).not.toBeInTheDocument();
   });
 
   it('a cor de repouso aparece como a linha Base, ao pé da lista', () => {
@@ -235,7 +284,7 @@ describe('NodeForm — thresholds do elemento', () => {
     expect(valores).toEqual([80, 70]);
   });
 
-  /** Voltar a zero regras devolve o elemento ao pipeline nativo (D8). */
+  /** Voltar a zero regras devolve o elemento a Base — nao a `{ steps: [] }`. */
   it('remover a última regra apaga o objeto inteiro', () => {
     const { result } = setup({
       thresholds: { steps: [{ type: 'threshold' as const, value: 90, color: 'red' }] },
@@ -253,9 +302,7 @@ describe('NodeForm — thresholds do elemento', () => {
 
     fireEvent.change(screen.getByLabelText('Valor da regra 1'), { target: { value: '95' } });
 
-    expect(result()?.thresholds?.steps).toEqual([
-      { type: 'threshold', value: 95, color: 'red', label: 'crítico' },
-    ]);
+    expect(result()?.thresholds?.steps).toEqual([{ type: 'threshold', value: 95, color: 'red', label: 'crítico' }]);
   });
 
   it('o seletor de métrica continua acima das regras', () => {
@@ -322,16 +369,16 @@ describe('NodeForm — tipos de regra vindos do Value mappings', () => {
     expect(screen.getByLabelText('Valor da regra 2')).toBeInTheDocument();
   });
 
-  it('o texto exibido é o mesmo campo para todos os tipos', () => {
-    const { result } = setup({
-      thresholds: { steps: [{ type: 'value' as const, match: '200', color: 'green' }] },
-    });
+  /**
+   * O campo de rótulo saiu da linha da regra. O que ele escrevia continua no
+   * schema e continua sendo lido pelo badge — o que não existe mais é o
+   * controle.
+   */
+  it('a regra não tem mais campo de texto exibido', () => {
+    setup({ thresholds: { steps: [{ type: 'value' as const, match: '200', color: 'green' }] } });
 
-    fireEvent.change(screen.getByLabelText('Texto exibido da regra 1'), { target: { value: 'UP' } });
-
-    expect(result()?.thresholds?.steps).toEqual([
-      { type: 'value', match: '200', color: 'green', label: 'UP' },
-    ]);
+    expect(screen.queryByLabelText('Texto exibido da regra 1')).not.toBeInTheDocument();
+    expect(screen.getByLabelText('Animação da regra 1')).toBeInTheDocument();
   });
 });
 
@@ -342,15 +389,16 @@ describe('NodeForm — tipos de regra vindos do Value mappings', () => {
  */
 describe('NodeForm — thresholds com fonte em Trigger', () => {
   it('o seletor de métrica sai da tela, o bloco de regras fica', () => {
-    setup({ trigger: { enabled: true, host: 'AGLIN-FW-STARTI' } });
+    setup({ trigger: { enabled: true, showActive: true, host: 'AGLIN-FW-STARTI', names: [] } });
 
     expect(screen.queryByText('Campo')).not.toBeInTheDocument();
-    expect(screen.getByRole('button', { name: /Adicionar regra/ })).toBeInTheDocument();
+    // Em Trigger o bloco é a escada de severidades, não uma lista a montar.
+    expect(screen.getByText('Disaster')).toBeInTheDocument();
     expect(screen.getByText('Base')).toBeInTheDocument();
   });
 
   it('com o vínculo desligado, o bloco volta', () => {
-    setup({ trigger: { enabled: false, host: 'AGLIN-FW-STARTI' } });
+    setup({ trigger: { enabled: false, showActive: true, host: 'AGLIN-FW-STARTI', names: [] } });
 
     expect(screen.getByText('Campo')).toBeInTheDocument();
   });

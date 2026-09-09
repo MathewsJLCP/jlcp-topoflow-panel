@@ -4,13 +4,13 @@
   "name": "TopoFlow",
   "id": "jlcp-topoflow-panel",
   "info": {
-    "keywords": ["panel"],
-    "description": "",
+    "keywords": ["panel", "topology", "network", "map", "zabbix", "noc", "diagram"],
+    "description": "Mapas de topologia editáveis: desenhe a rede no dashboard e vincule cada elemento a uma métrica ou a uma trigger do Zabbix.",
     "author": {
       "name": "Matheus-Jlcp"
     },
     "logos": {
-      "small": "img/logo.svg",
+      "small": "img/logo-small.svg",
       "large": "img/logo.svg"
     },
     "links": [],

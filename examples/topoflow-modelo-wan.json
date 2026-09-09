@@ -1,0 +1,961 @@
+{
+  "annotations": {
+    "list": []
+  },
+  "editable": true,
+  "fiscalYearStartMonth": 0,
+  "graphTooltip": 0,
+  "links": [],
+  "panels": [
+    {
+      "type": "jlcp-topoflow-panel",
+      "title": "Malha WAN — matriz e filiais",
+      "id": 1,
+      "gridPos": {
+        "h": 24,
+        "w": 24,
+        "x": 0,
+        "y": 0
+      },
+      "transparent": true,
+      "fieldConfig": {
+        "defaults": {},
+        "overrides": []
+      },
+      "targets": [],
+      "options": {
+        "schemaVersion": 1,
+        "topology": {
+          "nodes": [
+            {
+              "id": "core1",
+              "position": {
+                "x": 864,
+                "y": 328
+              },
+              "size": {
+                "width": 176,
+                "height": 46
+              },
+              "presentation": {
+                "showIcon": false,
+                "primaryText": {
+                  "mode": "fixed",
+                  "fixed": "WAN-CORE-01"
+                },
+                "secondaryText": {
+                  "mode": "fixed",
+                  "fixed": "192.168.100.1"
+                }
+              },
+              "color": {},
+              "zIndex": 1
+            },
+            {
+              "id": "core2",
+              "position": {
+                "x": 864,
+                "y": 472
+              },
+              "size": {
+                "width": 176,
+                "height": 46
+              },
+              "presentation": {
+                "showIcon": false,
+                "primaryText": {
+                  "mode": "fixed",
+                  "fixed": "WAN-CORE-02"
+                },
+                "secondaryText": {
+                  "mode": "fixed",
+                  "fixed": "192.168.100.2"
+                }
+              },
+              "color": {},
+              "zIndex": 1
+            },
+            {
+              "id": "nor1-rtr",
+              "position": {
+                "x": 392,
+                "y": 160
+              },
+              "size": {
+                "width": 176,
+                "height": 46
+              },
+              "presentation": {
+                "showIcon": false,
+                "primaryText": {
+                  "mode": "fixed",
+                  "fixed": "FIL-NOR-01-RTR"
+                },
+                "secondaryText": {
+                  "mode": "fixed",
+                  "fixed": "192.168.101.1"
+                }
+              },
+              "color": {},
+              "zIndex": 1
+            },
+            {
+              "id": "nor1-sw",
+              "position": {
+                "x": 64,
+                "y": 160
+              },
+              "size": {
+                "width": 176,
+                "height": 46
+              },
+              "presentation": {
+                "showIcon": false,
+                "primaryText": {
+                  "mode": "fixed",
+                  "fixed": "FIL-NOR-01-SW"
+                },
+                "secondaryText": {
+                  "mode": "fixed",
+                  "fixed": "192.168.101.2"
+                }
+              },
+              "color": {},
+              "zIndex": 1
+            },
+            {
+              "id": "nor1-end",
+              "position": {
+                "x": 64,
+                "y": 256
+              },
+              "size": {
+                "width": 176,
+                "height": 46
+              },
+              "presentation": {
+                "showIcon": false,
+                "primaryText": {
+                  "mode": "fixed",
+                  "fixed": "FIL-NOR-01-SRV"
+                },
+                "secondaryText": {
+                  "mode": "fixed",
+                  "fixed": "192.168.101.10"
+                }
+              },
+              "color": {},
+              "zIndex": 1
+            },
+            {
+              "id": "nor2-rtr",
+              "position": {
+                "x": 392,
+                "y": 400
+              },
+              "size": {
+                "width": 176,
+                "height": 46
+              },
+              "presentation": {
+                "showIcon": false,
+                "primaryText": {
+                  "mode": "fixed",
+                  "fixed": "FIL-NOR-02-RTR"
+                },
+                "secondaryText": {
+                  "mode": "fixed",
+                  "fixed": "192.168.102.1"
+                }
+              },
+              "color": {},
+              "zIndex": 1
+            },
+            {
+              "id": "nor2-sw",
+              "position": {
+                "x": 64,
+                "y": 400
+              },
+              "size": {
+                "width": 176,
+                "height": 46
+              },
+              "presentation": {
+                "showIcon": false,
+                "primaryText": {
+                  "mode": "fixed",
+                  "fixed": "FIL-NOR-02-SW"
+                },
+                "secondaryText": {
+                  "mode": "fixed",
+                  "fixed": "192.168.102.2"
+                }
+              },
+              "color": {},
+              "zIndex": 1
+            },
+            {
+              "id": "nor2-end",
+              "position": {
+                "x": 64,
+                "y": 496
+              },
+              "size": {
+                "width": 176,
+                "height": 46
+              },
+              "presentation": {
+                "showIcon": false,
+                "primaryText": {
+                  "mode": "fixed",
+                  "fixed": "FIL-NOR-02-AP"
+                },
+                "secondaryText": {
+                  "mode": "fixed",
+                  "fixed": "192.168.102.20"
+                }
+              },
+              "color": {},
+              "zIndex": 1
+            },
+            {
+              "id": "nor3-rtr",
+              "position": {
+                "x": 392,
+                "y": 640
+              },
+              "size": {
+                "width": 176,
+                "height": 46
+              },
+              "presentation": {
+                "showIcon": false,
+                "primaryText": {
+                  "mode": "fixed",
+                  "fixed": "FIL-NOR-03-RTR"
+                },
+                "secondaryText": {
+                  "mode": "fixed",
+                  "fixed": "192.168.103.1 · OFFLINE"
+                }
+              },
+              "color": {
+                "fixed": "red"
+              },
+              "zIndex": 1
+            },
+            {
+              "id": "nor3-sw",
+              "position": {
+                "x": 64,
+                "y": 640
+              },
+              "size": {
+                "width": 176,
+                "height": 46
+              },
+              "presentation": {
+                "showIcon": false,
+                "primaryText": {
+                  "mode": "fixed",
+                  "fixed": "FIL-NOR-03-SW"
+                },
+                "secondaryText": {
+                  "mode": "fixed",
+                  "fixed": "192.168.103.2"
+                }
+              },
+              "color": {},
+              "zIndex": 1
+            },
+            {
+              "id": "nor3-end",
+              "position": {
+                "x": 64,
+                "y": 736
+              },
+              "size": {
+                "width": 176,
+                "height": 46
+              },
+              "presentation": {
+                "showIcon": false,
+                "primaryText": {
+                  "mode": "fixed",
+                  "fixed": "FIL-NOR-03-CAM"
+                },
+                "secondaryText": {
+                  "mode": "fixed",
+                  "fixed": "192.168.103.30"
+                }
+              },
+              "color": {},
+              "zIndex": 1
+            },
+            {
+              "id": "sul1-rtr",
+              "position": {
+                "x": 1352,
+                "y": 160
+              },
+              "size": {
+                "width": 176,
+                "height": 46
+              },
+              "presentation": {
+                "showIcon": false,
+                "primaryText": {
+                  "mode": "fixed",
+                  "fixed": "FIL-SUL-01-RTR"
+                },
+                "secondaryText": {
+                  "mode": "fixed",
+                  "fixed": "192.168.201.1"
+                }
+              },
+              "color": {},
+              "zIndex": 1
+            },
+            {
+              "id": "sul1-sw",
+              "position": {
+                "x": 1672,
+                "y": 160
+              },
+              "size": {
+                "width": 176,
+                "height": 46
+              },
+              "presentation": {
+                "showIcon": false,
+                "primaryText": {
+                  "mode": "fixed",
+                  "fixed": "FIL-SUL-01-SW"
+                },
+                "secondaryText": {
+                  "mode": "fixed",
+                  "fixed": "192.168.201.2"
+                }
+              },
+              "color": {},
+              "zIndex": 1
+            },
+            {
+              "id": "sul1-end",
+              "position": {
+                "x": 1672,
+                "y": 256
+              },
+              "size": {
+                "width": 176,
+                "height": 46
+              },
+              "presentation": {
+                "showIcon": false,
+                "primaryText": {
+                  "mode": "fixed",
+                  "fixed": "FIL-SUL-01-SRV"
+                },
+                "secondaryText": {
+                  "mode": "fixed",
+                  "fixed": "192.168.201.10"
+                }
+              },
+              "color": {},
+              "zIndex": 1
+            },
+            {
+              "id": "sul2-rtr",
+              "position": {
+                "x": 1352,
+                "y": 400
+              },
+              "size": {
+                "width": 176,
+                "height": 46
+              },
+              "presentation": {
+                "showIcon": false,
+                "primaryText": {
+                  "mode": "fixed",
+                  "fixed": "FIL-SUL-02-RTR"
+                },
+                "secondaryText": {
+                  "mode": "fixed",
+                  "fixed": "192.168.202.1 · LENTO"
+                }
+              },
+              "color": {
+                "fixed": "orange"
+              },
+              "zIndex": 1
+            },
+            {
+              "id": "sul2-sw",
+              "position": {
+                "x": 1672,
+                "y": 400
+              },
+              "size": {
+                "width": 176,
+                "height": 46
+              },
+              "presentation": {
+                "showIcon": false,
+                "primaryText": {
+                  "mode": "fixed",
+                  "fixed": "FIL-SUL-02-SW"
+                },
+                "secondaryText": {
+                  "mode": "fixed",
+                  "fixed": "192.168.202.2"
+                }
+              },
+              "color": {},
+              "zIndex": 1
+            },
+            {
+              "id": "sul2-end",
+              "position": {
+                "x": 1672,
+                "y": 496
+              },
+              "size": {
+                "width": 176,
+                "height": 46
+              },
+              "presentation": {
+                "showIcon": false,
+                "primaryText": {
+                  "mode": "fixed",
+                  "fixed": "FIL-SUL-02-AP"
+                },
+                "secondaryText": {
+                  "mode": "fixed",
+                  "fixed": "192.168.202.20"
+                }
+              },
+              "color": {},
+              "zIndex": 1
+            },
+            {
+              "id": "sul3-rtr",
+              "position": {
+                "x": 1352,
+                "y": 640
+              },
+              "size": {
+                "width": 176,
+                "height": 46
+              },
+              "presentation": {
+                "showIcon": false,
+                "primaryText": {
+                  "mode": "fixed",
+                  "fixed": "FIL-SUL-03-RTR"
+                },
+                "secondaryText": {
+                  "mode": "fixed",
+                  "fixed": "192.168.203.1"
+                }
+              },
+              "color": {},
+              "zIndex": 1
+            },
+            {
+              "id": "sul3-sw",
+              "position": {
+                "x": 1672,
+                "y": 640
+              },
+              "size": {
+                "width": 176,
+                "height": 46
+              },
+              "presentation": {
+                "showIcon": false,
+                "primaryText": {
+                  "mode": "fixed",
+                  "fixed": "FIL-SUL-03-SW"
+                },
+                "secondaryText": {
+                  "mode": "fixed",
+                  "fixed": "192.168.203.2"
+                }
+              },
+              "color": {},
+              "zIndex": 1
+            },
+            {
+              "id": "sul3-end",
+              "position": {
+                "x": 1672,
+                "y": 736
+              },
+              "size": {
+                "width": 176,
+                "height": 46
+              },
+              "presentation": {
+                "showIcon": false,
+                "primaryText": {
+                  "mode": "fixed",
+                  "fixed": "FIL-SUL-03-CAM"
+                },
+                "secondaryText": {
+                  "mode": "fixed",
+                  "fixed": "192.168.203.30"
+                }
+              },
+              "color": {},
+              "zIndex": 1
+            }
+          ],
+          "edges": [
+            {
+              "id": "e-core",
+              "source": "core1",
+              "target": "core2",
+              "style": "solid",
+              "shape": "straight",
+              "color": {
+                "fixed": "semi-dark-blue"
+              },
+              "width": 3,
+              "animation": "none",
+              "label": "Trunk · 10 Gbps"
+            },
+            {
+              "id": "e-nor1-lan",
+              "source": "nor1-rtr",
+              "target": "nor1-sw",
+              "style": "solid",
+              "shape": "straight",
+              "color": {
+                "fixed": "semi-dark-blue"
+              },
+              "width": 2,
+              "animation": "none",
+              "label": "LAN · 1 Gbps"
+            },
+            {
+              "id": "e-nor1-end",
+              "source": "nor1-sw",
+              "target": "nor1-end",
+              "style": "solid",
+              "shape": "straight",
+              "color": {
+                "fixed": "semi-dark-blue"
+              },
+              "width": 2,
+              "animation": "none"
+            },
+            {
+              "id": "e-nor1-wan",
+              "source": "nor1-rtr",
+              "target": "core1",
+              "style": "solid",
+              "shape": "straight",
+              "color": {
+                "fixed": "semi-dark-blue"
+              },
+              "width": 2,
+              "animation": "none",
+              "label": "MPLS · 200 Mbps"
+            },
+            {
+              "id": "e-nor2-lan",
+              "source": "nor2-rtr",
+              "target": "nor2-sw",
+              "style": "solid",
+              "shape": "straight",
+              "color": {
+                "fixed": "semi-dark-blue"
+              },
+              "width": 2,
+              "animation": "none",
+              "label": "LAN · 1 Gbps"
+            },
+            {
+              "id": "e-nor2-end",
+              "source": "nor2-sw",
+              "target": "nor2-end",
+              "style": "solid",
+              "shape": "straight",
+              "color": {
+                "fixed": "semi-dark-blue"
+              },
+              "width": 2,
+              "animation": "none"
+            },
+            {
+              "id": "e-nor2-wan",
+              "source": "nor2-rtr",
+              "target": "core1",
+              "style": "solid",
+              "shape": "straight",
+              "color": {
+                "fixed": "semi-dark-blue"
+              },
+              "width": 2,
+              "animation": "none",
+              "label": "MPLS · 100 Mbps"
+            },
+            {
+              "id": "e-nor3-lan",
+              "source": "nor3-rtr",
+              "target": "nor3-sw",
+              "style": "solid",
+              "shape": "straight",
+              "color": {
+                "fixed": "semi-dark-blue"
+              },
+              "width": 2,
+              "animation": "none",
+              "label": "LAN · 1 Gbps"
+            },
+            {
+              "id": "e-nor3-end",
+              "source": "nor3-sw",
+              "target": "nor3-end",
+              "style": "solid",
+              "shape": "straight",
+              "color": {
+                "fixed": "semi-dark-blue"
+              },
+              "width": 2,
+              "animation": "none"
+            },
+            {
+              "id": "e-nor3-wan",
+              "source": "nor3-rtr",
+              "target": "core1",
+              "style": "dashed",
+              "shape": "straight",
+              "color": {
+                "fixed": "red"
+              },
+              "width": 3,
+              "animation": "none",
+              "label": "Sem resposta"
+            },
+            {
+              "id": "e-sul1-lan",
+              "source": "sul1-rtr",
+              "target": "sul1-sw",
+              "style": "solid",
+              "shape": "straight",
+              "color": {
+                "fixed": "semi-dark-blue"
+              },
+              "width": 2,
+              "animation": "none",
+              "label": "LAN · 1 Gbps"
+            },
+            {
+              "id": "e-sul1-end",
+              "source": "sul1-sw",
+              "target": "sul1-end",
+              "style": "solid",
+              "shape": "straight",
+              "color": {
+                "fixed": "semi-dark-blue"
+              },
+              "width": 2,
+              "animation": "none"
+            },
+            {
+              "id": "e-sul1-wan",
+              "source": "sul1-rtr",
+              "target": "core2",
+              "style": "solid",
+              "shape": "straight",
+              "color": {
+                "fixed": "semi-dark-blue"
+              },
+              "width": 2,
+              "animation": "none",
+              "label": "MPLS · 200 Mbps"
+            },
+            {
+              "id": "e-sul2-lan",
+              "source": "sul2-rtr",
+              "target": "sul2-sw",
+              "style": "solid",
+              "shape": "straight",
+              "color": {
+                "fixed": "semi-dark-blue"
+              },
+              "width": 2,
+              "animation": "none",
+              "label": "LAN · 1 Gbps"
+            },
+            {
+              "id": "e-sul2-end",
+              "source": "sul2-sw",
+              "target": "sul2-end",
+              "style": "solid",
+              "shape": "straight",
+              "color": {
+                "fixed": "semi-dark-blue"
+              },
+              "width": 2,
+              "animation": "none"
+            },
+            {
+              "id": "e-sul2-wan",
+              "source": "sul2-rtr",
+              "target": "core2",
+              "style": "solid",
+              "shape": "straight",
+              "color": {
+                "fixed": "orange"
+              },
+              "width": 2,
+              "animation": "none",
+              "label": "Latência 180 ms"
+            },
+            {
+              "id": "e-sul3-lan",
+              "source": "sul3-rtr",
+              "target": "sul3-sw",
+              "style": "solid",
+              "shape": "straight",
+              "color": {
+                "fixed": "semi-dark-blue"
+              },
+              "width": 2,
+              "animation": "none",
+              "label": "LAN · 1 Gbps"
+            },
+            {
+              "id": "e-sul3-end",
+              "source": "sul3-sw",
+              "target": "sul3-end",
+              "style": "solid",
+              "shape": "straight",
+              "color": {
+                "fixed": "semi-dark-blue"
+              },
+              "width": 2,
+              "animation": "none"
+            },
+            {
+              "id": "e-sul3-wan",
+              "source": "sul3-rtr",
+              "target": "core2",
+              "style": "dashed",
+              "shape": "straight",
+              "color": {
+                "fixed": "semi-dark-blue"
+              },
+              "width": 2,
+              "animation": "none",
+              "label": "LTE · backup"
+            }
+          ],
+          "points": [
+            {
+              "id": "p-leg-ok",
+              "position": {
+                "x": 32,
+                "y": 860
+              },
+              "color": {
+                "fixed": "blue"
+              },
+              "zIndex": 1
+            },
+            {
+              "id": "p-leg-warn",
+              "position": {
+                "x": 232,
+                "y": 860
+              },
+              "color": {
+                "fixed": "orange"
+              },
+              "zIndex": 1
+            },
+            {
+              "id": "p-leg-crit",
+              "position": {
+                "x": 432,
+                "y": 860
+              },
+              "color": {
+                "fixed": "red"
+              },
+              "zIndex": 1
+            }
+          ],
+          "postits": [
+            {
+              "id": "z-norte",
+              "position": {
+                "x": 32,
+                "y": 96
+              },
+              "size": {
+                "width": 608,
+                "height": 728
+              },
+              "title": "FILIAIS — NORTE",
+              "titlePosition": "top-left",
+              "color": "blue",
+              "opacity": 0.08,
+              "borderStyle": "solid",
+              "borderWidth": 2,
+              "zIndex": 0
+            },
+            {
+              "id": "z-core",
+              "position": {
+                "x": 768,
+                "y": 248
+              },
+              "size": {
+                "width": 360,
+                "height": 328
+              },
+              "title": "NÚCLEO WAN",
+              "titlePosition": "top-right",
+              "color": "green",
+              "opacity": 0.1,
+              "borderStyle": "solid",
+              "borderWidth": 2,
+              "zIndex": 0
+            },
+            {
+              "id": "z-sul",
+              "position": {
+                "x": 1264,
+                "y": 96
+              },
+              "size": {
+                "width": 608,
+                "height": 728
+              },
+              "title": "FILIAIS — SUL",
+              "titlePosition": "top-left",
+              "color": "purple",
+              "opacity": 0.08,
+              "borderStyle": "solid",
+              "borderWidth": 2,
+              "zIndex": 0
+            }
+          ],
+          "texts": [
+            {
+              "id": "t-titulo",
+              "position": {
+                "x": 32,
+                "y": 32
+              },
+              "content": {
+                "mode": "fixed",
+                "fixed": "MALHA WAN — MATRIZ E FILIAIS"
+              },
+              "color": {
+                "fixed": "text"
+              },
+              "fontSize": 22,
+              "zIndex": 2
+            },
+            {
+              "id": "t-leg-ok",
+              "position": {
+                "x": 58,
+                "y": 856
+              },
+              "content": {
+                "mode": "fixed",
+                "fixed": "Operacional"
+              },
+              "color": {
+                "fixed": "text-secondary"
+              },
+              "fontSize": 14,
+              "zIndex": 2
+            },
+            {
+              "id": "t-leg-warn",
+              "position": {
+                "x": 258,
+                "y": 856
+              },
+              "content": {
+                "mode": "fixed",
+                "fixed": "Degradado"
+              },
+              "color": {
+                "fixed": "text-secondary"
+              },
+              "fontSize": 14,
+              "zIndex": 2
+            },
+            {
+              "id": "t-leg-crit",
+              "position": {
+                "x": 458,
+                "y": 856
+              },
+              "content": {
+                "mode": "fixed",
+                "fixed": "Crítico"
+              },
+              "color": {
+                "fixed": "text-secondary"
+              },
+              "fontSize": 14,
+              "zIndex": 2
+            }
+          ],
+          "images": []
+        },
+        "canvas": {
+          "showGrid": true,
+          "snapToGrid": true,
+          "gridSize": 16,
+          "inlineEditing": false
+        }
+      }
+    }
+  ],
+  "preload": false,
+  "refresh": "",
+  "schemaVersion": 41,
+  "tags": [
+    "topoflow",
+    "exemplo",
+    "modelo"
+  ],
+  "templating": {
+    "list": []
+  },
+  "time": {
+    "from": "now-6h",
+    "to": "now"
+  },
+  "timepicker": {},
+  "timezone": "browser",
+  "title": "TopoFlow — Modelo: Malha WAN (só nós)",
+  "uid": "topoflow-modelo-wan",
+  "version": 1,
+  "weekStart": "",
+  "__requires": [
+    {
+      "type": "grafana",
+      "id": "grafana",
+      "name": "Grafana",
+      "version": "12.3.0"
+    },
+    {
+      "type": "panel",
+      "id": "jlcp-topoflow-panel",
+      "name": "TopoFlow",
+      "version": "1.0.0"
+    }
+  ]
+}

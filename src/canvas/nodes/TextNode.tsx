@@ -7,6 +7,7 @@ import { NodeProps } from '@xyflow/react';
 import { resolveText } from '../../data/dimensions';
 import { accentColor, resolveElementColor } from '../../data/elementColor';
 import { TextBackground } from '../../model/types';
+import { DrilldownSurface } from '../DrilldownSurface';
 import { TextFlowNode } from '../flowTypes';
 import { alpha, selectionRing } from '../tokens';
 
@@ -25,7 +26,7 @@ import { alpha, selectionRing } from '../tokens';
 export function TextNode({ data, selected }: NodeProps<TextFlowNode>) {
   const theme = useTheme2();
   const styles = useStyles2(getStyles);
-  const { element, frames } = data;
+  const { element, frames, editable } = data;
 
   const accent = resolveElementColor({ fixed: element.color.fixed }, frames, theme);
   const color = accentColor(accent) ?? theme.colors.text.primary;
@@ -33,12 +34,16 @@ export function TextNode({ data, selected }: NodeProps<TextFlowNode>) {
   const background = textBackground(element.background, theme);
 
   return (
-    <div
+    /* O proprio glifo e a superficie do drill-down: o Texto nao tem card nem
+       caixa, e envolve-lo numa so para receber o clique mudaria o elemento. */
+    <DrilldownSurface
+      drilldown={element.drilldown}
+      editable={editable}
       className={cx(styles.text, selected && styles.selected)}
       style={{ color, fontSize: element.fontSize, background }}
     >
       {resolveText(element.content, frames)}
-    </div>
+    </DrilldownSurface>
   );
 }
 

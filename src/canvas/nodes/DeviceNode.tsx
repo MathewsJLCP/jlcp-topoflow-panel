@@ -4,12 +4,18 @@ import { DisplayValue, GrafanaTheme2 } from '@grafana/data';
 import { useStyles2, useTheme2 } from '@grafana/ui';
 import { Handle, HandleType, NodeProps, Position } from '@xyflow/react';
 
-import { formatDisplayValue, resolveDisplayValue, resolveText } from '../../data/dimensions';
+import { formatDisplayValue, resolveDisplayValue, resolveText, stateFieldName } from '../../data/dimensions';
 import { ElementColor, resolveElementColor } from '../../data/elementColor';
 import { DeviceFlowNode } from '../flowTypes';
-import { TopoIcon, resolveTopoIcon } from '../icons';
+import { ResolvedIcon, TopoIcon, resolveIcon } from '../../icons';
 import { alertClass } from '../alertAnimation';
-import { stateFill } from '../stateFill';
+import { iconTone } from '../iconTone';
+import { StateFill, stateFill } from '../stateFill';
+import { ActiveTriggers, activeProblems } from '../ActiveTriggers';
+import { DrilldownSurface } from '../DrilldownSurface';
+import { MetricChart } from '../MetricChart';
+import { hasDrilldown } from '../drilldown';
+import { ElementHover } from '../ElementHover';
 import { HANDLE_SIZE, ICON_BOX_SIZE, ICON_SIZE, TRANSITION_FAST, alpha } from '../tokens';
 
 /** Ganchos estaveis para os seletores: o nome do Emotion muda entre builds. */
@@ -43,7 +49,7 @@ const NO_DATA_LABEL = 'no data';
  * o card preenchido, texto, icone, capsula e badge derivam todos de `fill.text`
  * — nenhum deles pode mais assumir que o fundo e escuro.
  */
-export function DeviceNode({ data, selected }: NodeProps<DeviceFlowNode>) {
+export function DeviceNode({ data, selected, dragging }: NodeProps<DeviceFlowNode>) {
   const theme = useTheme2();
   const styles = useStyles2(getStyles);
   const { element, frames, editable } = data;
@@ -63,8 +69,12 @@ export function DeviceNode({ data, selected }: NodeProps<DeviceFlowNode>) {
   const iconColor =
     fill?.text ?? (accent.state === 'nodata' ? theme.colors.text.disabled : theme.colors.text.secondary);
 
+  const icon = resolveIcon(element.presentation.icon);
+  // A figura nao pode ser tingida, mas troca de arquivo conforme o estado.
+  const tone = iconTone(accent, element.presentation.iconTone, theme);
+
   const display = resolveDisplayValue(frames, element.value?.field);
-  // A presenca de `value` e o toggle "Valor exibido"; `value.field` e so a
+  // A presenca de `value` e o toggle "Exibir valor"; `value.field` e so a
   // metrica escolhida dentro dele. Quem decide se ha texto no badge e o toggle.
   const badge = resolveBadge(accent, theme, element.value !== undefined, display);
   // Sobre um card preenchido, qualquer cor propria do badge disputa com o fundo
@@ -74,73 +84,91 @@ export function DeviceNode({ data, selected }: NodeProps<DeviceFlowNode>) {
 
   return (
     <div className={styles.root} data-editable={editable || undefined} data-link={data.link}>
-      {/* A origem do gesto usa o mesmo tratamento de selecionado: durante a
-          linkagem ela e, de fato, o elemento em foco. */}
-      <div
-        className={cx(
-          styles.card,
-          CARD_CLASS,
-          (selected || data.link === 'source') && styles.cardSelected,
-          alertClass(accent, element.alert)
-        )}
-        // Inline e nao classe porque a cor vem do dado. Nao toca em `border` de
-        // proposito: e da borda que saem o hover e o anel de selecao, e um
-        // estilo inline venceria as duas classes.
-        //
-        // `color` alimenta o `currentColor` dos aneis do radar: eles saem na cor
-        // do estado que estao anunciando, e nao na cor de texto herdada.
-        style={fill ? { background: fill.background, color: fill.background } : undefined}
+      {/* O card e o gatilho do painel de triggers: e a superficie inteira do no,
+          e o badge sozinho seria um alvo de 40x14 num telao. E, pelo mesmo
+          motivo, e tambem a superficie do drill-down. */}
+      <ElementHover
+        accent={accent}
+        title={primary}
+        editable={editable}
+        linked={hasDrilldown(element.drilldown)}
+        dragging={dragging}
+        chart={
+          element.chart ? <MetricChart frames={frames} field={stateFieldName(element.color, frames)} /> : undefined
+        }
       >
-        {/* Sem icone, a capsula tambem sai — uma caixa vazia no lugar dele
+        {/* A origem do gesto usa o mesmo tratamento de selecionado: durante a
+            linkagem ela e, de fato, o elemento em foco. */}
+        <DrilldownSurface
+          drilldown={element.drilldown}
+          editable={editable}
+          className={cx(
+            styles.card,
+            CARD_CLASS,
+            (selected || data.link === 'source') && styles.cardSelected,
+            alertClass(accent, element.alert)
+          )}
+          // Inline e nao classe porque a cor vem do dado. Nao toca em `border` de
+          // proposito: e da borda que saem o hover e o anel de selecao, e um
+          // estilo inline venceria as duas classes.
+          //
+          // `color` alimenta o `currentColor` dos aneis do radar: eles saem na cor
+          // do estado que estao anunciando, e nao na cor de texto herdada.
+          style={fill ? { background: fill.background, color: fill.background } : undefined}
+        >
+          {/* Sem icone, a capsula tambem sai — uma caixa vazia no lugar dele
             deixaria o texto desalinhado por um motivo invisivel. */}
-        {element.presentation.showIcon && (
-          <span
-            className={styles.iconBox}
-            style={
-              fill
-                ? { background: alpha(fill.text, 0.15), boxShadow: `inset 0 0 0 1px ${alpha(fill.text, 0.25)}` }
-                : undefined
-            }
-          >
-            <TopoIcon name={resolveTopoIcon(element.presentation.icon)} size={ICON_SIZE} style={{ color: iconColor }} />
-          </span>
-        )}
+          {element.presentation.showIcon && (
+            <span className={styles.iconBox} style={capsule(icon, fill, theme)}>
+              <TopoIcon icon={icon} tone={tone} size={ICON_SIZE} style={{ color: iconColor }} />
+            </span>
+          )}
 
-        <div className={styles.textBlock}>
-          <div className={styles.primary} style={fill ? { color: fill.text } : undefined}>
-            {primary}
-          </div>
-          {/* A hierarquia entre primario e secundario e mantida por opacidade
+          <div className={styles.textBlock}>
+            <div className={styles.primary} style={fill ? { color: fill.text } : undefined}>
+              {primary}
+            </div>
+            {/* A hierarquia entre primario e secundario e mantida por opacidade
               sobre a mesma cor de contraste, e nao por `text.secondary`, que so
               tem contraste garantido sobre o fundo neutro do tema. */}
-          {secondary && (
-            <div className={styles.secondary} style={fill ? { color: alpha(fill.text, 0.8) } : undefined}>
-              {secondary}
-            </div>
+            {secondary && (
+              <div className={styles.secondary} style={fill ? { color: alpha(fill.text, 0.8) } : undefined}>
+                {secondary}
+              </div>
+            )}
+          </div>
+
+          {badge && badgeColor && badge.label && (
+            <span
+              className={styles.badge}
+              style={{
+                color: badgeColor,
+                background: alpha(badgeColor, 0.15),
+                borderColor: alpha(badgeColor, 0.35),
+              }}
+            >
+              {badge.label}
+            </span>
           )}
-        </div>
 
-        {badge && badgeColor && badge.label && (
-          <span
-            className={styles.badge}
-            style={{
-              color: badgeColor,
-              background: alpha(badgeColor, 0.15),
-              borderColor: alpha(badgeColor, 0.35),
-            }}
-          >
-            {badge.label}
-          </span>
-        )}
-
-        {/* Estado colorido sem texto: um dot basta, e uma pilula vazia so
+          {/* Estado colorido sem texto: um dot basta, e uma pilula vazia so
             ocuparia o canto sem dizer nada. Com o card preenchido nem o dot se
             justifica — ele existia para dizer "ha estado aqui", e o card
             inteiro ja diz isso em 180x60. */}
-        {badge && badgeColor && !badge.label && !fill && (
-          <span className={styles.badgeDot} style={{ background: badgeColor }} />
-        )}
-      </div>
+          {badge && badgeColor && !badge.label && !fill && (
+            <span className={styles.badgeDot} style={{ background: badgeColor }} />
+          )}
+        </DrilldownSurface>
+      </ElementHover>
+
+      {/* Irma do card, e nao filha: dentro dele as linhas roubariam altura do
+          titulo. Fora, o card fica intacto e a lista transborda para baixo. */}
+      <ActiveTriggers
+        problems={activeProblems(accent, element.trigger)}
+        position={element.trigger?.activePosition}
+        display={element.trigger?.activeDisplay}
+        width={element.size.width}
+      />
 
       {/* Fora do card de proposito: o card sobe 1px no hover, e handles ali
           dentro subiriam junto, deslocando o alvo de conexao sob o ponteiro. */}
@@ -158,32 +186,64 @@ export function DeviceNode({ data, selected }: NodeProps<DeviceFlowNode>) {
 }
 
 /**
+ * Superficie da capsula do icone.
+ *
+ * O glifo divide a cor do card: a capsula e um vinco claro sobre o fundo do
+ * estado, e o desenho por cima sai no token de contraste. E o tratamento que
+ * existe desde que o card inteiro passou a se pintar.
+ *
+ * A **figura** nao tem essa saida. Arte colorida nao herda cor, entao sobre um
+ * card vermelho ela disputa com o fundo — um icone azul do Zabbix num alarme
+ * Disaster se le como sujeira, nao como equipamento. Ela ganha entao uma placa
+ * opaca no fundo neutro do tema: a mesma decisao ja tomada no elemento Imagem,
+ * onde a cor do estado pousa **atras** da arte e nunca nela.
+ */
+function capsule(
+  icon: ResolvedIcon,
+  fill: StateFill | undefined,
+  theme: GrafanaTheme2
+): React.CSSProperties | undefined {
+  if (icon.art.kind === 'image') {
+    return {
+      background: theme.colors.background.primary,
+      boxShadow: `inset 0 0 0 1px ${theme.colors.border.weak}`,
+    };
+  }
+
+  return fill
+    ? { background: alpha(fill.text, 0.15), boxShadow: `inset 0 0 0 1px ${alpha(fill.text, 0.25)}` }
+    : undefined;
+}
+
+/**
  * Conteudo do badge, em ordem de precedencia:
  *
- *   1. trigger alarmando        -> o nome da severidade (`HIGH`, `DISASTER`)
- *   2. binding de cor sem dado  -> `NO DATA` em `text.disabled`
- *   3. estado com valor exibido -> o texto da regra, ou o valor formatado
- *   4. estado sem valor exibido -> rotulo vazio
- *   5. valor exibido sem estado -> o valor formatado
+ *   1. binding de cor sem dado  -> `NO DATA` em `text.disabled`
+ *   2. estado com valor exibido -> o texto da regra, ou o valor formatado
+ *   3. estado sem valor exibido -> rotulo vazio
+ *   4. valor exibido sem estado -> o valor formatado
  *
  * Quem decide como um rotulo vazio aparece e o `DeviceNode`: com o card neutro
  * vira um dot, com o card preenchido nao vira nada. A cor devolvida aqui e a do
  * estado, tambem sujeita a troca pelo token de contraste quando ha fill — este
  * helper responde pelo **conteudo** do badge, nao pela superficie onde ele pousa.
  *
- * **`showValue` governa os itens 3 e 5.** O texto de uma regra e o texto do
+ * **`showValue` governa os itens 2 e 4.** O texto de uma regra e o texto do
  * valor: e o que o Value mappings do Grafana chama de *display text*, e serve
  * para substituir o numero por uma palavra (`200` -> `UP`). Com o valor
  * desligado nao ha o que substituir, entao a regra continua pintando o no mas
  * nao escreve nada — quem sinaliza o estado ali e a cor.
  *
- * Trigger e `no data` ficam fora dessa regra de proposito: nenhum dos dois e o
- * valor da metrica. Sao avisos sobre o proprio vinculo, e some-los junto com o
- * numero esconderia justamente o que o operador precisa ver.
+ * **A trigger nao escreve mais aqui.** O badge chegou a exibir a severidade
+ * (`HIGH`, `DISASTER`) por ser o unico texto de estado que o no tinha; com a
+ * lista de triggers ativas embaixo do elemento, aquilo virou um segundo lugar
+ * dizendo pior a mesma coisa — e ainda ocupava o badge, que o usuario liga para
+ * ver a **metrica**. Hoje o modo trigger cai nas mesmas regras dos demais: com
+ * "Exibir valor" ligado o badge mostra o valor, e sem ele nao mostra nada.
  *
- * A trigger tambem **substitui** a metrica em vez de disputar espaco com ela:
- * com a trigger no comando, o numero da CPU ao lado da severidade sugeriria que
- * os dois pintam o no.
+ * `no data` continua fora dessa regra: nao e o valor da metrica, e sim um aviso
+ * sobre o proprio vinculo — some-lo junto com o numero esconderia justamente o
+ * que o operador precisa ver.
  */
 export function resolveBadge(
   accent: ElementColor,
@@ -191,10 +251,6 @@ export function resolveBadge(
   showValue: boolean,
   display: DisplayValue | undefined
 ): { color: string; label: string } | undefined {
-  if (accent.state === 'trigger') {
-    return { color: accent.color, label: accent.label };
-  }
-
   if (accent.state === 'nodata') {
     return { color: theme.colors.text.disabled, label: NO_DATA_LABEL };
   }

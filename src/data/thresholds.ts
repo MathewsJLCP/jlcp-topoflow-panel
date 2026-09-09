@@ -1,4 +1,5 @@
-import { ElementRule, ElementThresholds, Severity, SpecialMatch } from '../model/types';
+import { AlertAnimation, ElementAlert, ElementRule, ElementThresholds, Severity, SpecialMatch } from '../model/types';
+import { SEVERITY_COLOR } from './problems';
 
 /**
  * Avaliacao das regras de estado do elemento (decisoes D8 e a fusao do Bloco
@@ -19,6 +20,9 @@ const isSeverity = (rule: ElementRule): rule is SeverityRule => rule.type === 's
 
 type SeverityRule = Extract<ElementRule, { type: 'severity' }>;
 
+/** Tudo que nao e severidade: as regras avaliadas contra o valor de um field. */
+export type MetricRule = Exclude<ElementRule, { type: 'severity' }>;
+
 /**
  * A lista guarda regras de **dois eixos** que nunca competem.
  *
@@ -30,8 +34,8 @@ type SeverityRule = Extract<ElementRule, { type: 'severity' }>;
  * Sem essa separacao, uma regra `>= 90` casaria com uma severidade 5 e um
  * elemento em Disaster sairia pintado por uma regra de CPU.
  */
-export function metricRules(thresholds: ElementThresholds | undefined): ElementRule[] {
-  return (thresholds?.steps ?? []).filter((rule) => !isSeverity(rule));
+export function metricRules(thresholds: ElementThresholds | undefined): MetricRule[] {
+  return (thresholds?.steps ?? []).filter((rule): rule is MetricRule => !isSeverity(rule));
 }
 
 export function severityRules(thresholds: ElementThresholds | undefined): SeverityRule[] {
@@ -42,10 +46,10 @@ export function severityRules(thresholds: ElementThresholds | undefined): Severi
  * True quando o usuario definiu ao menos uma regra **de metrica**.
  *
  * Conta so o eixo de metrica de proposito: e este booleano que decide se o
- * elemento abandona o pipeline nativo do Grafana. Contando tambem as de
- * severidade, um elemento que so configurou cores de trigger perderia os
- * thresholds do field ao voltar para o modo Metrica — sem nunca ter definido
- * uma regra de metrica sequer.
+ * elemento tem estado por metrica. Contando tambem as de severidade, um
+ * elemento que so configurou cores de trigger nasceria com "regra de metrica"
+ * ao voltar para o modo Metrica — e a primeira regra de severidade acabaria
+ * decidindo o que acontece num eixo onde ela nao e avaliada.
  */
 export function hasOwnThresholds(thresholds: ElementThresholds | undefined): boolean {
   return metricRules(thresholds).length > 0;
@@ -171,6 +175,101 @@ export function resolveSeverityRule(
 }
 
 /**
+ * A escada de severidades, da mais grave para a mais branda.
+ *
+ * A ordem e a mesma da tela e a mesma da avaliacao (`sortRules`), e nao por
+ * coincidencia: e a unica ordem em que a lista se le como "quem ganha primeiro".
+ */
+export const SEVERITY_LADDER: Severity[] = [5, 4, 3, 2, 1, 0];
+
+export interface SeverityLadderRow {
+  severity: Severity;
+  /**
+   * Cor que aquele nivel exibe hoje — de uma regra propria ou, na falta dela, do
+   * mapa do Zabbix. `undefined` so acontece em *Not classified*, cujo padrao e
+   * `text.secondary`: um token do tema, e nao um nome de cor do Grafana, entao
+   * quem tem o tema em maos e que o traduz (ver `SEVERITY_COLOR`).
+   */
+  color?: string;
+  animation?: AlertAnimation;
+  /**
+   * Nao ha mais campo para edita-lo — o badge mostra o nome da severidade —, mas
+   * o que ja foi salvo continua valendo e viaja junto nas reescritas.
+   */
+  label?: string;
+  /** Ligada, o nivel acende o elemento; desligada, ele fica na Base. */
+  enabled: boolean;
+}
+
+/**
+ * O que cada severidade exibe hoje, nivel a nivel.
+ *
+ * Passa por `resolveSeverityRule` em vez de procurar a regra de `atLeast` exato
+ * porque a lista pode ter vindo do editor antigo, onde uma regra so — `a partir
+ * de High` — pintava High **e** Disaster. A escada precisa mostrar a cor que o
+ * elemento realmente teria em cada nivel, e nao so as linhas que existem no
+ * JSON; senao configuracao salva apareceria como "sem cor" na tela nova.
+ *
+ * `alert` e o campo aposentado do elemento (ver `elementAlertSchema`). Pelo mesmo
+ * motivo ele entra aqui: um elemento salvo com "Pulsar a partir de High" tem de
+ * aparecer como *Pulsar* nas linhas High e Disaster, e nao como escada parada —
+ * a animacao esta configurada, so nao mais naquele lugar.
+ */
+export function severityLadder(thresholds: ElementThresholds | undefined, alert?: ElementAlert): SeverityLadderRow[] {
+  return SEVERITY_LADDER.map((severity) => {
+    const rule = resolveSeverityRule(thresholds, severity);
+    const legacy = alert && severity >= alert.fromSeverity ? alert.animation : undefined;
+
+    return {
+      severity,
+      color: rule?.color ?? SEVERITY_COLOR[severity],
+      animation: rule?.animation ?? legacy,
+      label: rule?.label,
+      // Ausente e ligada: e o que faz toda escada ja salva continuar acendendo.
+      enabled: rule?.enabled !== false,
+    };
+  });
+}
+
+/**
+ * Edita **um** nivel da escada e devolve a escada inteira como regras.
+ *
+ * Materializar os seis niveis a cada escrita nao e desperdicio, e o que da a
+ * escada a semantica que ela aparenta ter. As regras sao "a partir de", e uma
+ * lista esparsa mente: com so `Average = roxo` salvo, um alarme *Disaster*
+ * casaria com ela (5 >= 3) e sairia roxo, embora a linha *Disaster* na tela
+ * mostrasse vermelho. Com os seis niveis presentes, o mais alto sempre casa
+ * primeiro e cada linha passa a valer exatamente para a sua severidade.
+ *
+ * `fallback` e a cor a gravar quando o nivel editado ainda nao tem nenhuma — de
+ * novo, so *Not classified*, e so quando o usuario mexe nele de proposito.
+ * Nenhum outro nivel entra sem cor: sem regra, e o mapa do Zabbix que vale.
+ */
+export function writeSeverityLadder(
+  thresholds: ElementThresholds | undefined,
+  severity: Severity,
+  changes: Partial<Omit<SeverityLadderRow, 'severity'>>,
+  fallback: string,
+  alert?: ElementAlert
+): SeverityRule[] {
+  return severityLadder(thresholds, alert)
+    .map((row) =>
+      row.severity === severity ? { ...row, ...changes, color: changes.color ?? row.color ?? fallback } : row
+    )
+    .filter((row): row is SeverityLadderRow & { color: string } => row.color !== undefined)
+    .map(({ severity: atLeast, color, animation, label, enabled }) => ({
+      type: 'severity',
+      atLeast,
+      color,
+      ...(animation ? { animation } : {}),
+      ...(label ? { label } : {}),
+      // So grava o que foge do padrao: uma escada inteira com `enabled: true`
+      // encheria o JSON do dashboard para dizer o que o silencio ja diz.
+      ...(enabled ? {} : { enabled: false }),
+    }));
+}
+
+/**
  * True quando ha regra capaz de casar com valor ausente ou NaN.
  *
  * A cadeia de cor precisa saber disto **antes** de decidir por `nodata`: um
@@ -179,4 +278,21 @@ export function resolveSeverityRule(
  */
 export function hasSpecialRule(thresholds: ElementThresholds | undefined): boolean {
   return (thresholds?.steps ?? []).some((rule) => rule.type === 'special');
+}
+
+/**
+ * As severidades que o elemento **atende**.
+ *
+ * Consultada antes de a cor ser decidida, e nao depois: um alarme de severidade
+ * desligada nao pode acender o elemento nem entrar na contagem, senao o card
+ * ficaria na Base enquanto a lista embaixo dele anunciaria tres problemas — dois
+ * lugares contando historias diferentes sobre o mesmo elemento.
+ */
+export function isSeverityEnabled(thresholds: ElementThresholds | undefined, severity: Severity): boolean {
+  return resolveSeverityRule(thresholds, severity)?.enabled !== false;
+}
+
+/** True quando alguma severidade foi desligada — evita filtrar a toa. */
+export function hasDisabledSeverity(thresholds: ElementThresholds | undefined): boolean {
+  return severityRules(thresholds).some((rule) => rule.enabled === false);
 }

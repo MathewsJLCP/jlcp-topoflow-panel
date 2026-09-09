@@ -111,12 +111,21 @@
                 }
               },
               "color": {
-                "fixed": "text",
+                "fixed": "green",
                 "field": "CPU utilization srv-app-01"
               },
               "zIndex": 0,
               "value": {
                 "field": "CPU utilization srv-app-01"
+              },
+              "thresholds": {
+                "steps": [
+                  {
+                    "type": "threshold",
+                    "value": 85,
+                    "color": "red"
+                  }
+                ]
               }
             },
             {
@@ -140,7 +149,7 @@
                 }
               },
               "color": {
-                "fixed": "text",
+                "fixed": "purple",
                 "field": "CPU utilization srv-db-01"
               },
               "zIndex": 0,
@@ -194,12 +203,21 @@
                 }
               },
               "color": {
-                "fixed": "text",
+                "fixed": "orange",
                 "field": "Trigger status"
               },
               "zIndex": 0,
               "value": {
                 "field": "Trigger status"
+              },
+              "thresholds": {
+                "steps": [
+                  {
+                    "type": "value",
+                    "match": "1",
+                    "color": "green"
+                  }
+                ]
               }
             }
           ],
@@ -235,7 +253,7 @@
           }
         }
       ],
-      "title": "TopoFlow \u2014 v\u00ednculo de dados",
+      "title": "TopoFlow — vínculo de dados",
       "type": "jlcp-topoflow-panel"
     }
   ],

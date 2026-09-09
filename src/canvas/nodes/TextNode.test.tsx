@@ -23,9 +23,9 @@ const text: TopoText = {
   zIndex: 0,
 };
 
-function renderText(overrides: Partial<TopoText> = {}) {
+function renderText(overrides: Partial<TopoText> = {}, editable = false) {
   const props = {
-    data: { element: { ...text, ...overrides }, frames: [] },
+    data: { element: { ...text, ...overrides }, frames: [], editable },
     selected: false,
   } as unknown as NodeProps<TextFlowNode>;
 
@@ -97,5 +97,38 @@ describe('TextNode — sem fonte de estado', () => {
     // Sem `fixed`, os dois caem no mesmo neutro do tema — o field não desvia
     // a cor para lugar nenhum.
     expect(comField.style.color).toBe(semNada.style.color);
+  });
+});
+
+/**
+ * O Texto e o unico dos tres elementos com drill-down que renderiza fora do
+ * `ReactFlowProvider`, entao e aqui que a ligacao entre o modelo e a tag de fato
+ * se verifica ponta a ponta. A mecanica do `<a>` em si esta em
+ * `DrilldownSurface.test.tsx`; o que se fixa aqui e que o campo do elemento
+ * chega la.
+ */
+describe('TextNode — drill-down', () => {
+  it('sem link, o texto continua um div', () => {
+    expect(renderText().tagName).toBe('DIV');
+  });
+
+  it('com link, o próprio glifo vira a âncora', () => {
+    const el = renderText({ drilldown: { url: '/d/uid/detalhe' } });
+
+    expect(el.tagName).toBe('A');
+    expect(el).toHaveAttribute('href', '/d/uid/detalhe');
+    expect(el).toHaveTextContent('Núcleo');
+  });
+
+  /** No editor o clique seleciona o elemento; navegar tiraria o usuário dali. */
+  it('em modo de edição o link não existe', () => {
+    expect(renderText({ drilldown: { url: '/d/uid/detalhe' } }, true).tagName).toBe('DIV');
+  });
+
+  /** A cor do texto continua sendo a do elemento, não o azul de link do browser. */
+  it('a âncora não repinta o texto', () => {
+    const el = renderText({ drilldown: { url: '/d/uid' }, color: { fixed: 'red' } });
+
+    expect(el.style.color).not.toBe('');
   });
 });

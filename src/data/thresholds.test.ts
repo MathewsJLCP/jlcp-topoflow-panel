@@ -5,8 +5,12 @@ import {
   metricRules,
   resolveOwnThreshold,
   resolveSeverityRule,
+  hasDisabledSeverity,
+  isSeverityEnabled,
+  severityLadder,
   severityRules,
   sortRules,
+  writeSeverityLadder,
 } from './thresholds';
 
 const rules = (...steps: ElementRule[]): ElementThresholds => ({ steps });
@@ -244,5 +248,218 @@ describe('separação dos dois eixos', () => {
     const alta = { type: 'severity' as const, atLeast: 5 as Severity, color: 'dark-red' };
 
     expect(sortRules([baixa, alta])).toEqual([alta, baixa]);
+  });
+});
+
+/**
+ * A escada é a tela do modo Trigger: seis níveis, uma cor cada. O que estes
+ * casos protegem é a promessa que ela faz — a linha que está na tela é a que
+ * pinta aquela severidade, e nenhuma outra.
+ */
+describe('severityLadder', () => {
+  it('sem regra, mostra o mapa padrão do Zabbix, do mais grave ao mais brando', () => {
+    expect(severityLadder(undefined)).toEqual([
+      { severity: 5, color: 'dark-red', label: undefined, animation: undefined, enabled: true },
+      { severity: 4, color: 'red', label: undefined, animation: undefined, enabled: true },
+      { severity: 3, color: 'orange', label: undefined, animation: undefined, enabled: true },
+      { severity: 2, color: 'yellow', label: undefined, animation: undefined, enabled: true },
+      { severity: 1, color: 'blue', label: undefined, animation: undefined, enabled: true },
+      // Not classified não tem cor no mapa: o padrão dele é um token do tema.
+      { severity: 0, color: undefined, label: undefined, animation: undefined, enabled: true },
+    ]);
+  });
+
+  it('a regra própria substitui o padrão no nível dela', () => {
+    const rows = severityLadder({ steps: [{ type: 'severity', atLeast: 5, color: 'purple', label: 'CRÍTICO' }] });
+
+    expect(rows[0]).toMatchObject({ severity: 5, color: 'purple', label: 'CRÍTICO' });
+    expect(rows[1]).toMatchObject({ severity: 4, color: 'red', label: undefined });
+  });
+
+  /**
+   * Configuração feita no editor antigo, onde uma regra só cobria dela para
+   * cima. A escada tem que mostrar a cor que o elemento **teria** em cada nível,
+   * senão o que já está salvo apareceria como se não existisse.
+   */
+  it('regra `a partir de` pinta também os níveis acima dela', () => {
+    const rows = severityLadder({ steps: [{ type: 'severity', atLeast: 4, color: 'purple' }] });
+
+    expect(rows.map((row) => row.color)).toEqual(['purple', 'purple', 'orange', 'yellow', 'blue', undefined]);
+  });
+
+  it('a animação da regra aparece na linha dela', () => {
+    const rows = severityLadder({ steps: [{ type: 'severity', atLeast: 5, color: 'purple', animation: 'radar' }] });
+
+    expect(rows.map((row) => row.animation)).toEqual(['radar', undefined, undefined, undefined, undefined, undefined]);
+  });
+
+  /**
+   * O campo `alert` do elemento foi aposentado, mas o que ele configurava não
+   * some da tela: "Radar a partir de High" reaparece como Radar nas duas linhas
+   * que ele alcançava.
+   */
+  it('o alerta aposentado aparece nas linhas que alcançava', () => {
+    const rows = severityLadder(undefined, { animation: 'radar', fromSeverity: 4 });
+
+    expect(rows.map((row) => row.animation)).toEqual(['radar', 'radar', undefined, undefined, undefined, undefined]);
+  });
+
+  it('a animação da regra vence o alerta aposentado', () => {
+    const steps: ElementRule[] = [{ type: 'severity', atLeast: 5, color: 'purple', animation: 'pulse' }];
+    const rows = severityLadder({ steps }, { animation: 'radar', fromSeverity: 0 });
+
+    expect(rows[0].animation).toBe('pulse');
+    expect(rows[1].animation).toBe('radar');
+  });
+});
+
+describe('writeSeverityLadder', () => {
+  const NEUTRO = '#8e8e8e';
+
+  /**
+   * O ponto inteiro da materialização: sem os níveis acima gravados, um alarme
+   * *Disaster* casaria com a regra de *Average* (5 >= 3) e sairia roxo — cor que
+   * nenhuma linha da tela mostra.
+   */
+  it('editar um nível grava a escada inteira', () => {
+    const rules = writeSeverityLadder(undefined, 3, { color: 'purple' }, NEUTRO);
+
+    expect(rules).toEqual([
+      { type: 'severity', atLeast: 5, color: 'dark-red' },
+      { type: 'severity', atLeast: 4, color: 'red' },
+      { type: 'severity', atLeast: 3, color: 'purple' },
+      { type: 'severity', atLeast: 2, color: 'yellow' },
+      { type: 'severity', atLeast: 1, color: 'blue' },
+    ]);
+    expect(resolveSeverityRule({ steps: rules }, 5)?.color).toBe('dark-red');
+    expect(resolveSeverityRule({ steps: rules }, 3)?.color).toBe('purple');
+  });
+
+  /**
+   * *Not classified* não tem cor no mapa do Zabbix, e entrar sem ser chamado
+   * mudaria o padrão de quem nunca olhou para aquela linha.
+   */
+  it('Not classified só entra quando é ele o editado', () => {
+    expect(writeSeverityLadder(undefined, 5, { color: 'purple' }, NEUTRO).some((r) => r.atLeast === 0)).toBe(false);
+
+    expect(writeSeverityLadder(undefined, 0, { color: 'purple' }, NEUTRO).at(-1)).toEqual({
+      type: 'severity',
+      atLeast: 0,
+      color: 'purple',
+    });
+  });
+
+  it('editar o rótulo de Not classified sem cor cai no neutro do tema', () => {
+    expect(writeSeverityLadder(undefined, 0, { label: 'DESCONHECIDO' }, NEUTRO).at(-1)).toEqual({
+      type: 'severity',
+      atLeast: 0,
+      color: NEUTRO,
+      label: 'DESCONHECIDO',
+    });
+  });
+
+  it('editar a cor preserva o rótulo, e apagar o rótulo o remove', () => {
+    const steps = writeSeverityLadder(undefined, 5, { color: 'purple', label: 'CRÍTICO' }, NEUTRO);
+
+    expect(writeSeverityLadder({ steps }, 5, { color: 'blue' }, NEUTRO)[0]).toEqual({
+      type: 'severity',
+      atLeast: 5,
+      color: 'blue',
+      label: 'CRÍTICO',
+    });
+    expect(writeSeverityLadder({ steps }, 5, { label: undefined }, NEUTRO)[0]).toEqual({
+      type: 'severity',
+      atLeast: 5,
+      color: 'purple',
+    });
+  });
+
+  it('a animação entra como coluna da linha, igual à cor', () => {
+    const rules = writeSeverityLadder(undefined, 5, { animation: 'radar' }, NEUTRO);
+
+    expect(rules[0]).toEqual({ type: 'severity', atLeast: 5, color: 'dark-red', animation: 'radar' });
+    expect(rules[1]).toEqual({ type: 'severity', atLeast: 4, color: 'red' });
+  });
+
+  /** Editar a escada é o que dobra o campo aposentado para dentro das regras. */
+  it('materializa o alerta aposentado junto, nos níveis que ele alcançava', () => {
+    const rules = writeSeverityLadder(undefined, 3, { color: 'purple' }, NEUTRO, {
+      animation: 'pulse',
+      fromSeverity: 4,
+    });
+
+    expect(rules).toEqual([
+      { type: 'severity', atLeast: 5, color: 'dark-red', animation: 'pulse' },
+      { type: 'severity', atLeast: 4, color: 'red', animation: 'pulse' },
+      { type: 'severity', atLeast: 3, color: 'purple' },
+      { type: 'severity', atLeast: 2, color: 'yellow' },
+      { type: 'severity', atLeast: 1, color: 'blue' },
+    ]);
+  });
+
+  it('não devolve regra de métrica nenhuma — quem as preserva é o editor', () => {
+    const steps: ElementRule[] = [{ type: 'threshold', value: 90, color: 'orange' }];
+
+    expect(writeSeverityLadder({ steps }, 5, { color: 'purple' }, NEUTRO).every((r) => r.type === 'severity')).toBe(
+      true
+    );
+  });
+});
+
+/**
+ * Severidade desligada: o elemento ignora aquele nivel e fica na Base. Serve
+ * para o ruido conhecido — um parque cheio de *Information* que ninguem atende
+ * deixaria o mapa inteiro aceso, e mapa sempre aceso nao avisa nada.
+ */
+describe('isSeverityEnabled', () => {
+  it('sem regra nenhuma, toda severidade atende', () => {
+    for (const s of [0, 1, 2, 3, 4, 5] as const) {
+      expect(isSeverityEnabled(undefined, s)).toBe(true);
+    }
+  });
+
+  it('só o nível desligado para de atender', () => {
+    const escada: ElementThresholds = {
+      steps: [
+        { type: 'severity', atLeast: 5, color: 'dark-red' },
+        { type: 'severity', atLeast: 1, color: 'blue', enabled: false },
+      ],
+    };
+
+    expect(isSeverityEnabled(escada, 1)).toBe(false);
+    expect(isSeverityEnabled(escada, 5)).toBe(true);
+  });
+
+  /** `enabled` ausente é ligado: é o que faz toda escada já salva continuar acendendo. */
+  it('regra sem a flag continua atendendo', () => {
+    expect(isSeverityEnabled({ steps: [{ type: 'severity', atLeast: 3, color: 'orange' }] }, 3)).toBe(true);
+  });
+});
+
+describe('hasDisabledSeverity', () => {
+  it('distingue escada intacta de escada com nível desligado', () => {
+    expect(hasDisabledSeverity(undefined)).toBe(false);
+    expect(hasDisabledSeverity({ steps: [{ type: 'severity', atLeast: 3, color: 'orange' }] })).toBe(false);
+    expect(hasDisabledSeverity({ steps: [{ type: 'severity', atLeast: 3, color: 'orange', enabled: false }] })).toBe(
+      true
+    );
+  });
+});
+
+describe('writeSeverityLadder — nível desligado', () => {
+  it('grava `enabled: false` só no nível desligado', () => {
+    const escrita = writeSeverityLadder(undefined, 1, { enabled: false }, '#888');
+
+    expect(escrita.find((rule) => rule.atLeast === 1)?.enabled).toBe(false);
+    // Os demais não carregam a flag: o silêncio já significa ligado, e gravá-la
+    // nos seis encheria o JSON do dashboard sem dizer nada novo.
+    expect(escrita.filter((rule) => 'enabled' in rule)).toHaveLength(1);
+  });
+
+  it('religar apaga a flag em vez de gravar `true`', () => {
+    const desligada = writeSeverityLadder(undefined, 1, { enabled: false }, '#888');
+    const religada = writeSeverityLadder({ steps: desligada }, 1, { enabled: true }, '#888');
+
+    expect(religada.some((rule) => 'enabled' in rule)).toBe(false);
   });
 });

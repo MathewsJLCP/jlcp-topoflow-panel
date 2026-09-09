@@ -1,4 +1,4 @@
-import { defaultTopology } from './defaults';
+import { sampleTopology } from './sampleTopology';
 import {
   addElement,
   canConnect,
@@ -11,30 +11,32 @@ import {
   reorderElement,
   reverseEdge,
   updateEdge,
+  updateEdges,
+  updatePoints,
 } from './mutations';
 import { topologySchema } from './schema';
-import { ElementKind, Topology } from './types';
-import { DEFAULT_EDGE_WIDTH } from './sizes';
+import { ElementKind, TopoEdge, TopoPoint, Topology } from './types';
+import { DEFAULT_EDGE_WIDTH, IMAGE_DEFAULT } from './sizes';
 
-const kinds: ElementKind[] = ['node', 'point', 'postit', 'text'];
+const kinds: ElementKind[] = ['node', 'point', 'postit', 'text', 'image'];
 
 describe('addElement', () => {
   it.each(kinds)('cria um %s na posicao pedida', (kind) => {
-    const next = addElement(defaultTopology, kind, { x: 10, y: 20 });
-    const created = allElements(next).find((item) => !allElements(defaultTopology).some((old) => old.id === item.id));
+    const next = addElement(sampleTopology, kind, { x: 10, y: 20 });
+    const created = allElements(next).find((item) => !allElements(sampleTopology).some((old) => old.id === item.id));
 
     expect(created?.position).toEqual({ x: 10, y: 20 });
   });
 
   it('nasce na frente dos existentes', () => {
-    const next = addElement(defaultTopology, 'node', { x: 0, y: 0 });
+    const next = addElement(sampleTopology, 'node', { x: 0, y: 0 });
     const zIndexes = allElements(next).map((item) => item.zIndex);
 
     expect(Math.max(...zIndexes)).toBe(next.nodes[next.nodes.length - 1].zIndex);
   });
 
   it('nao reaproveita id de elemento existente, mesmo de outro tipo', () => {
-    let topology = defaultTopology;
+    let topology = sampleTopology;
     for (let i = 0; i < 5; i++) {
       topology = addElement(topology, 'node', { x: i, y: i });
     }
@@ -44,7 +46,7 @@ describe('addElement', () => {
   });
 
   it('produz uma topologia que passa pelo schema', () => {
-    const next = kinds.reduce((acc, kind) => addElement(acc, kind, { x: 0, y: 0 }), defaultTopology);
+    const next = kinds.reduce((acc, kind) => addElement(acc, kind, { x: 0, y: 0 }), sampleTopology);
     expect(topologySchema.safeParse(next).success).toBe(true);
   });
 });
@@ -52,22 +54,22 @@ describe('addElement', () => {
 describe('removeElements', () => {
   it('remove o elemento e as arestas que dependiam dele', () => {
     // 'edge-router' e origem das duas arestas do exemplo.
-    const next = removeElements(defaultTopology, ['edge-router']);
+    const next = removeElements(sampleTopology, ['edge-router']);
 
     expect(next.nodes.map((n) => n.id)).not.toContain('edge-router');
     expect(next.edges).toHaveLength(0);
   });
 
   it('preserva arestas nao relacionadas', () => {
-    const next = removeElements(defaultTopology, ['app-server']);
+    const next = removeElements(sampleTopology, ['app-server']);
     expect(next.edges.map((e) => e.id)).toEqual(['edge-router__db-server']);
   });
 });
 
 describe('duplicateElement', () => {
   it('copia com id novo e deslocamento', () => {
-    const next = duplicateElement(defaultTopology, 'app-server');
-    const original = defaultTopology.nodes.find((n) => n.id === 'app-server')!;
+    const next = duplicateElement(sampleTopology, 'app-server');
+    const original = sampleTopology.nodes.find((n) => n.id === 'app-server')!;
     const copy = next.nodes[next.nodes.length - 1];
 
     expect(copy.id).not.toBe(original.id);
@@ -76,18 +78,18 @@ describe('duplicateElement', () => {
   });
 
   it('nao herda as arestas do original', () => {
-    const next = duplicateElement(defaultTopology, 'app-server');
-    expect(next.edges).toEqual(defaultTopology.edges);
+    const next = duplicateElement(sampleTopology, 'app-server');
+    expect(next.edges).toEqual(sampleTopology.edges);
   });
 
   it('ignora id inexistente', () => {
-    expect(duplicateElement(defaultTopology, 'nao-existe')).toBe(defaultTopology);
+    expect(duplicateElement(sampleTopology, 'nao-existe')).toBe(sampleTopology);
   });
 });
 
 describe('moveElements', () => {
   it('atualiza posicoes de tipos diferentes de uma vez', () => {
-    const next = moveElements(defaultTopology, [
+    const next = moveElements(sampleTopology, [
       { id: 'app-server', position: { x: 1, y: 2 } },
       { id: 'datacenter', position: { x: 3, y: 4 } },
       { id: 'titulo', position: { x: 5, y: 6 } },
@@ -99,7 +101,7 @@ describe('moveElements', () => {
   });
 
   it('devolve a mesma referencia quando nao ha o que mover', () => {
-    expect(moveElements(defaultTopology, [])).toBe(defaultTopology);
+    expect(moveElements(sampleTopology, [])).toBe(sampleTopology);
   });
 });
 
@@ -109,16 +111,16 @@ describe('moveElements', () => {
  * o contrato agora que o `NodeResizer` a alimenta.
  */
 describe('resizeElement', () => {
-  const [postit] = defaultTopology.postits;
+  const [postit] = sampleTopology.postits;
 
   it('grava o tamanho novo no postit', () => {
-    const next = resizeElement(defaultTopology, postit.id, { width: 400, height: 300 });
+    const next = resizeElement(sampleTopology, postit.id, { width: 400, height: 300 });
 
     expect(next.postits[0].size).toEqual({ width: 400, height: 300 });
   });
 
   it('não toca nos demais campos do elemento', () => {
-    const next = resizeElement(defaultTopology, postit.id, { width: 400, height: 300 });
+    const next = resizeElement(sampleTopology, postit.id, { width: 400, height: 300 });
 
     expect(next.postits[0]).toMatchObject({
       title: postit.title,
@@ -130,18 +132,18 @@ describe('resizeElement', () => {
 
   /** Point e texto não têm `size` no schema; pedir resize neles é no-op. */
   it('ignora elemento sem tamanho, devolvendo a topologia intacta', () => {
-    const [text] = defaultTopology.texts;
+    const [text] = sampleTopology.texts;
 
-    expect(resizeElement(defaultTopology, text.id, { width: 400, height: 300 })).toBe(defaultTopology);
+    expect(resizeElement(sampleTopology, text.id, { width: 400, height: 300 })).toBe(sampleTopology);
   });
 
   it('ignora id inexistente', () => {
-    expect(resizeElement(defaultTopology, 'fantasma', { width: 400, height: 300 })).toBe(defaultTopology);
+    expect(resizeElement(sampleTopology, 'fantasma', { width: 400, height: 300 })).toBe(sampleTopology);
   });
 
   /** O resultado precisa continuar validando: é ele que vai para `options`. */
   it('o resultado passa no schema', () => {
-    const next = resizeElement(defaultTopology, postit.id, { width: 400, height: 300 });
+    const next = resizeElement(sampleTopology, postit.id, { width: 400, height: 300 });
 
     expect(topologySchema.safeParse(next).success).toBe(true);
   });
@@ -149,7 +151,7 @@ describe('resizeElement', () => {
 
 describe('reorderElement', () => {
   it('trazer para frente deixa o elemento com o maior zIndex', () => {
-    const next = reorderElement(defaultTopology, 'datacenter', 'front');
+    const next = reorderElement(sampleTopology, 'datacenter', 'front');
     const target = next.postits.find((p) => p.id === 'datacenter')!;
     const others = allElements(next).filter((item) => item.id !== 'datacenter');
 
@@ -157,7 +159,7 @@ describe('reorderElement', () => {
   });
 
   it('enviar para tras deixa o elemento com o menor zIndex', () => {
-    const next = reorderElement(defaultTopology, 'app-server', 'back');
+    const next = reorderElement(sampleTopology, 'app-server', 'back');
     const target = next.nodes.find((n) => n.id === 'app-server')!;
     const others = allElements(next).filter((item) => item.id !== 'app-server');
 
@@ -166,7 +168,7 @@ describe('reorderElement', () => {
 
   it('mantem os zIndex sem empate e sem buraco', () => {
     // Os defaults nascem todos com zIndex 0; a primeira reordenacao normaliza.
-    const next = reorderElement(defaultTopology, 'edge-router', 'front');
+    const next = reorderElement(sampleTopology, 'edge-router', 'front');
     const zIndexes = allElements(next)
       .map((item) => item.zIndex)
       .sort((a, b) => a - b);
@@ -176,20 +178,20 @@ describe('reorderElement', () => {
 
   it('nao mexe em nada quando o elemento ja esta na ponta', () => {
     // 'titulo' e o ultimo na ordem de desempate, entao 'front' e no-op.
-    expect(reorderElement(defaultTopology, 'titulo', 'front')).toBe(defaultTopology);
+    expect(reorderElement(sampleTopology, 'titulo', 'front')).toBe(sampleTopology);
   });
 
   it('avancar move exatamente uma posicao', () => {
-    const before = ordered(defaultTopology);
+    const before = ordered(sampleTopology);
     const target = before[1];
-    const after = ordered(reorderElement(defaultTopology, target, 'forward'));
+    const after = ordered(reorderElement(sampleTopology, target, 'forward'));
 
     expect(after[2]).toBe(target);
   });
 });
 
 describe('connect', () => {
-  const semArestas: Topology = { ...defaultTopology, edges: [] };
+  const semArestas: Topology = { ...sampleTopology, edges: [] };
 
   it('cria a aresta entre dois nós', () => {
     const next = connect(semArestas, 'edge-router', 'app-server');
@@ -211,8 +213,8 @@ describe('connect', () => {
   });
 
   it('rejeita par já conectado, em qualquer sentido', () => {
-    expect(connect(defaultTopology, 'edge-router', 'app-server')).toBe(defaultTopology);
-    expect(connect(defaultTopology, 'app-server', 'edge-router')).toBe(defaultTopology);
+    expect(connect(sampleTopology, 'edge-router', 'app-server')).toBe(sampleTopology);
+    expect(connect(sampleTopology, 'app-server', 'edge-router')).toBe(sampleTopology);
   });
 
   it('rejeita pontas que não aceitam conexão', () => {
@@ -243,8 +245,8 @@ describe('connect', () => {
   });
 
   it('canConnect recusa par já ligado em qualquer sentido', () => {
-    expect(canConnect(defaultTopology, 'edge-router', 'app-server')).toBe(false);
-    expect(canConnect(defaultTopology, 'app-server', 'edge-router')).toBe(false);
+    expect(canConnect(sampleTopology, 'edge-router', 'app-server')).toBe(false);
+    expect(canConnect(sampleTopology, 'app-server', 'edge-router')).toBe(false);
   });
 
   it('conecta point a nó', () => {
@@ -272,18 +274,18 @@ describe('connect', () => {
 
 describe('updateEdge', () => {
   it('altera estilo e animação sem tocar nas outras arestas', () => {
-    const next = updateEdge(defaultTopology, 'edge-router__app-server', { style: 'dashed', animation: 'dash-flow' });
+    const next = updateEdge(sampleTopology, 'edge-router__app-server', { style: 'dashed', animation: 'dash-flow' });
 
     expect(next.edges[0]).toMatchObject({ style: 'dashed', animation: 'dash-flow' });
-    expect(next.edges[1]).toEqual(defaultTopology.edges[1]);
+    expect(next.edges[1]).toEqual(sampleTopology.edges[1]);
   });
 });
 
 describe('animation nos dados antigos', () => {
   it('aresta salva sem `animation` continua validando', () => {
     // Retrocompatibilidade de `schemaVersion: 1`: o `.default` do schema cobre.
-    const { animation, ...semAnimacao } = defaultTopology.edges[0];
-    const parsed = topologySchema.safeParse({ ...defaultTopology, edges: [semAnimacao] });
+    const { animation, ...semAnimacao } = sampleTopology.edges[0];
+    const parsed = topologySchema.safeParse({ ...sampleTopology, edges: [semAnimacao] });
 
     expect(parsed.success).toBe(true);
     expect(parsed.success && parsed.data.edges[0].animation).toBe('none');
@@ -291,7 +293,7 @@ describe('animation nos dados antigos', () => {
 });
 
 function allElements(topology: Topology) {
-  return [...topology.nodes, ...topology.points, ...topology.postits, ...topology.texts];
+  return [...topology.nodes, ...topology.points, ...topology.postits, ...topology.texts, ...topology.images];
 }
 
 function ordered(topology: Topology): string[] {
@@ -300,12 +302,99 @@ function ordered(topology: Topology): string[] {
     .map((item) => item.id);
 }
 
+/**
+ * A imagem e o unico elemento que nasce **vazio** de proposito: o conteudo dela
+ * e um arquivo, e o arquivo se escolhe no editor. O que estes casos protegem e
+ * que ela nasce utilizavel mesmo assim — com tamanho, sem fundo e sem estado.
+ */
+describe('addElement — imagem', () => {
+  const criada = (topology: Topology) => addElement(topology, 'image', { x: 10, y: 20 }).images.at(-1)!;
+
+  it('nasce sem arquivo, para o editor escolher', () => {
+    expect(criada(sampleTopology).src).toBe('');
+  });
+
+  /** O toggle desligado é o pedido: uma placa por padrão esconderia o PNG transparente. */
+  it('nasce sem fundo e sem estado', () => {
+    const image = criada(sampleTopology);
+
+    expect(image.background).toBeUndefined();
+    expect(image.trigger).toBeUndefined();
+    expect(image.thresholds).toBeUndefined();
+  });
+
+  it('nasce com tamanho e proporção preservada', () => {
+    const image = criada(sampleTopology);
+
+    expect(image.size).toEqual({ width: IMAGE_DEFAULT.width, height: IMAGE_DEFAULT.height });
+    expect(image.fit).toBe('contain');
+  });
+
+  it('o resultado passa no schema', () => {
+    const next = addElement(sampleTopology, 'image', { x: 10, y: 20 });
+
+    expect(topologySchema.safeParse(next).success).toBe(true);
+  });
+});
+
+/** O pedido do cliente: a conexão tem de funcionar para a imagem também. */
+describe('imagem conecta como nó e point', () => {
+  const comImagem = addElement({ ...sampleTopology, edges: [] }, 'image', { x: 0, y: 0 });
+  const imageId = comImagem.images[0].id;
+
+  it('liga imagem a nó', () => {
+    const next = connect(comImagem, 'edge-router', imageId);
+
+    expect(next.edges).toHaveLength(1);
+    expect(next.edges[0]).toMatchObject({ source: 'edge-router', target: imageId });
+  });
+
+  it('liga imagem a imagem', () => {
+    const duas = addElement(comImagem, 'image', { x: 50, y: 0 });
+    const outra = duas.images[1].id;
+
+    expect(connect(duas, imageId, outra).edges).toHaveLength(1);
+  });
+
+  it('canConnect concorda com connect', () => {
+    expect(canConnect(comImagem, 'edge-router', imageId)).toBe(true);
+    // Postit continua fora, com imagem na outra ponta ou não.
+    expect(canConnect(comImagem, imageId, 'datacenter')).toBe(false);
+  });
+
+  /** Apagar a imagem não pode deixar aresta pendurada no JSON salvo. */
+  it('remover a imagem leva junto as arestas dela', () => {
+    const ligada = connect(comImagem, 'edge-router', imageId);
+    const next = removeElements(ligada, [imageId]);
+
+    expect(next.images).toHaveLength(0);
+    expect(next.edges).toHaveLength(0);
+  });
+});
+
+describe('resizeElement — imagem', () => {
+  const comImagem = addElement(sampleTopology, 'image', { x: 0, y: 0 });
+  const imageId = comImagem.images[0].id;
+
+  it('grava o tamanho novo', () => {
+    const next = resizeElement(comImagem, imageId, { width: 200, height: 120 });
+
+    expect(next.images[0].size).toEqual({ width: 200, height: 120 });
+  });
+
+  it('não toca no resto do elemento', () => {
+    const next = resizeElement(comImagem, imageId, { width: 200, height: 120 });
+
+    expect(next.images[0]).toMatchObject({ src: '', fit: 'contain', position: { x: 0, y: 0 } });
+  });
+});
+
 describe('reverseEdge e findEdgeBetween', () => {
-  const id = defaultTopology.edges[0].id;
+  const id = sampleTopology.edges[0].id;
 
   it('troca as pontas preservando o resto da aresta', () => {
-    const antes = defaultTopology.edges[0];
-    const depois = reverseEdge(defaultTopology, id).edges[0];
+    const antes = sampleTopology.edges[0];
+    const depois = reverseEdge(sampleTopology, id).edges[0];
 
     expect(depois).toMatchObject({ source: antes.target, target: antes.source, id: antes.id });
     expect(depois.shape).toBe(antes.shape);
@@ -313,16 +402,93 @@ describe('reverseEdge e findEdgeBetween', () => {
   });
 
   it('inverter duas vezes volta ao original', () => {
-    expect(reverseEdge(reverseEdge(defaultTopology, id), id)).toEqual(defaultTopology);
+    expect(reverseEdge(reverseEdge(sampleTopology, id), id)).toEqual(sampleTopology);
   });
 
   it('id inexistente não altera nada', () => {
-    expect(reverseEdge(defaultTopology, 'nao-existe')).toBe(defaultTopology);
+    expect(reverseEdge(sampleTopology, 'nao-existe')).toBe(sampleTopology);
   });
 
   it('findEdgeBetween acha o par nos dois sentidos', () => {
-    expect(findEdgeBetween(defaultTopology, 'edge-router', 'app-server')?.id).toBe(id);
-    expect(findEdgeBetween(defaultTopology, 'app-server', 'edge-router')?.id).toBe(id);
-    expect(findEdgeBetween(defaultTopology, 'app-server', 'db-server')).toBeUndefined();
+    expect(findEdgeBetween(sampleTopology, 'edge-router', 'app-server')?.id).toBe(id);
+    expect(findEdgeBetween(sampleTopology, 'app-server', 'edge-router')?.id).toBe(id);
+    expect(findEdgeBetween(sampleTopology, 'app-server', 'db-server')).toBeUndefined();
+  });
+});
+
+/**
+ * O caminho por points cria uma aresta por segmento, e as quatro representam um
+ * enlace so. `updateEdges` e o que permite configura-las juntas — e o `Partial`
+ * e o que impede que isso vire "sobrescreva tudo com o retrato de uma delas".
+ */
+describe('updateEdges', () => {
+  const base = (id: string, extras: Partial<TopoEdge> = {}): TopoEdge => ({
+    ...sampleTopology.edges[0],
+    id,
+    ...extras,
+  });
+
+  const topology: Topology = {
+    ...sampleTopology,
+    edges: [base('a', { label: 'IN', width: 2 }), base('b', { label: 'OUT', width: 5 }), base('c')],
+  };
+
+  it('aplica a mesma mudanca as arestas pedidas', () => {
+    const next = updateEdges(topology, ['a', 'b'], { style: 'dashed' });
+
+    expect(next.edges.map((edge) => edge.style)).toEqual(['dashed', 'dashed', 'solid']);
+  });
+
+  it('nao toca no que nao foi pedido', () => {
+    const next = updateEdges(topology, ['a', 'b'], { style: 'dashed' });
+
+    // Rotulo e espessura sao de cada segmento; a edicao em massa nao os achata.
+    expect(next.edges[0]).toMatchObject({ label: 'IN', width: 2 });
+    expect(next.edges[1]).toMatchObject({ label: 'OUT', width: 5 });
+  });
+
+  it('ignora id que nao existe, em vez de criar aresta', () => {
+    const next = updateEdges(topology, ['a', 'fantasma'], { style: 'dotted' });
+
+    expect(next.edges).toHaveLength(3);
+    expect(next.edges[0].style).toBe('dotted');
+  });
+
+  it('lista vazia nao muda nada', () => {
+    expect(updateEdges(topology, [], { style: 'dotted' }).edges).toEqual(topology.edges);
+  });
+});
+
+/** O outro lado do caminho: as ancoras entre os segmentos. */
+describe('updatePoints', () => {
+  const ponto = (id: string, extras: Partial<TopoPoint> = {}): TopoPoint => ({
+    id,
+    position: { x: 0, y: 0 },
+    color: {},
+    zIndex: 0,
+    ...extras,
+  });
+
+  const topology: Topology = {
+    ...sampleTopology,
+    points: [ponto('p1', { color: { field: 'cpu' } }), ponto('p2'), ponto('p3')],
+  };
+
+  it('aplica a mesma mudanca aos points pedidos', () => {
+    const next = updatePoints(topology, ['p1', 'p2'], { chart: true });
+
+    expect(next.points.map((point) => point.chart)).toEqual([true, true, undefined]);
+  });
+
+  it('nao toca no que nao foi pedido', () => {
+    const next = updatePoints(topology, ['p1', 'p2'], { chart: true });
+
+    // O vinculo de metrica do primeiro sobrevive: so `chart` foi escrito.
+    expect(next.points[0].color).toEqual({ field: 'cpu' });
+  });
+
+  /** Arestas e points sao colecoes distintas: mexer numa nao mexe na outra. */
+  it('nao mexe nas arestas', () => {
+    expect(updatePoints(topology, ['p1'], { chart: true }).edges).toEqual(topology.edges);
   });
 });

@@ -1,7 +1,17 @@
 import { XYPosition } from '@xyflow/react';
 
-import { DEFAULT_EDGE_WIDTH, DEVICE_NODE_HEIGHT, DEVICE_NODE_WIDTH, POSTIT_DEFAULT } from './sizes';
-import { ELEMENT_COLLECTION, ElementKind, TopoEdge, TopoNode, TopoPoint, TopoPostit, TopoText, Topology } from './types';
+import { DEFAULT_EDGE_WIDTH, DEVICE_NODE_HEIGHT, DEVICE_NODE_WIDTH, IMAGE_DEFAULT, POSTIT_DEFAULT } from './sizes';
+import {
+  ELEMENT_COLLECTION,
+  ElementKind,
+  TopoEdge,
+  TopoImage,
+  TopoNode,
+  TopoPoint,
+  TopoPostit,
+  TopoText,
+  Topology,
+} from './types';
 
 /**
  * Mutacoes puras da topologia: recebem e devolvem `Topology`, sem tocar em
@@ -11,6 +21,7 @@ import { ELEMENT_COLLECTION, ElementKind, TopoEdge, TopoNode, TopoPoint, TopoPos
 
 const NODE_SIZE = { width: DEVICE_NODE_WIDTH, height: DEVICE_NODE_HEIGHT };
 const POSTIT_SIZE = { width: POSTIT_DEFAULT.width, height: POSTIT_DEFAULT.height };
+const IMAGE_SIZE = { width: IMAGE_DEFAULT.width, height: IMAGE_DEFAULT.height };
 
 /**
  * Elemento novo nasce **sem cor**.
@@ -39,12 +50,13 @@ function collectIds(topology: Topology): string[] {
     ...topology.points.map((p) => p.id),
     ...topology.postits.map((p) => p.id),
     ...topology.texts.map((t) => t.id),
+    ...topology.images.map((i) => i.id),
   ];
 }
 
 /** Maior zIndex em uso, para que o elemento novo nasca na frente. */
 function topZIndex(topology: Topology): number {
-  const all = [...topology.nodes, ...topology.points, ...topology.postits, ...topology.texts];
+  const all = [...topology.nodes, ...topology.points, ...topology.postits, ...topology.texts, ...topology.images];
   return all.reduce((max, item) => Math.max(max, item.zIndex), 0);
 }
 
@@ -96,6 +108,23 @@ export function addElement(topology: Topology, kind: ElementKind, position: XYPo
       };
       return { ...topology, texts: [...topology.texts, text] };
     }
+    case 'image': {
+      // Nasce **sem** `src`: quem escolhe o arquivo e o editor, e um placeholder
+      // visivel no canvas e o que diz onde clicar para escolhe-lo. Nasce tambem
+      // sem fundo — o toggle desligado e o pedido, e uma placa por padrao
+      // esconderia a transparencia que a maioria dos PNGs de icone usa.
+      const image: TopoImage = {
+        id,
+        position,
+        size: IMAGE_SIZE,
+        src: '',
+        fit: 'contain',
+        fontSize: IMAGE_DEFAULT.fontSize,
+        color: NO_COLOR,
+        zIndex,
+      };
+      return { ...topology, images: [...topology.images, image] };
+    }
   }
 }
 
@@ -114,6 +143,7 @@ export function removeElements(topology: Topology, ids: string[]): Topology {
     points: keep(topology.points),
     postits: keep(topology.postits),
     texts: keep(topology.texts),
+    images: keep(topology.images),
     edges: topology.edges.filter(
       (edge) => !doomed.has(edge.id) && !doomed.has(edge.source) && !doomed.has(edge.target)
     ),
@@ -162,12 +192,20 @@ export function moveElements(topology: Topology, updates: PositionUpdate[]): Top
     points: move(topology.points),
     postits: move(topology.postits),
     texts: move(topology.texts),
+    images: move(topology.images),
   };
 }
 
+/**
+ * Quem tem alca de redimensionamento. O point e sempre do mesmo diametro e o
+ * texto e dimensionado pelo `fontSize` — arrastar alca neles nao teria onde
+ * gravar.
+ */
+const RESIZABLE = new Set<ElementKind>(['node', 'postit', 'image']);
+
 export function resizeElement(topology: Topology, id: string, size: { width: number; height: number }): Topology {
   const found = findElement(topology, id);
-  if (!found || (found.kind !== 'node' && found.kind !== 'postit')) {
+  if (!found || !RESIZABLE.has(found.kind)) {
     return topology;
   }
 
@@ -202,8 +240,38 @@ export function updateText(topology: Topology, id: string, changes: Partial<Topo
   return { ...topology, texts: patch(topology.texts, id, changes) };
 }
 
+export function updateImage(topology: Topology, id: string, changes: Partial<TopoImage>): Topology {
+  return { ...topology, images: patch(topology.images, id, changes) };
+}
+
 export function updateEdge(topology: Topology, id: string, changes: Partial<TopoEdge>): Topology {
   return { ...topology, edges: patch(topology.edges, id, changes) };
+}
+
+/**
+ * O mesmo `changes` em varios elementos de uma vez.
+ *
+ * Existe para o caminho por points: ligar A a B passando por tres ancoras cria
+ * quatro conexoes **e** tres ancoras, e todas precisam da mesma configuracao —
+ * mesma trigger, mesmos thresholds. Configura-las uma a uma nao e so
+ * trabalhoso, e uma fonte de divergencia: basta esquecer um segmento para o
+ * caminho acender pela metade, e o mapa passa a mentir.
+ *
+ * `changes` carrega **so os campos que o usuario mexeu**, e nao o elemento
+ * inteiro. E o que permite alterar a espessura de quatro conexoes sem achatar
+ * os rotulos, que sao diferentes em cada uma — ver `BulkForms`.
+ */
+function patchMany<T extends { id: string }>(items: T[], ids: string[], changes: Partial<T>): T[] {
+  const alvos = new Set(ids);
+  return items.map((item) => (alvos.has(item.id) ? { ...item, ...changes } : item));
+}
+
+export function updateEdges(topology: Topology, ids: string[], changes: Partial<TopoEdge>): Topology {
+  return { ...topology, edges: patchMany(topology.edges, ids, changes) };
+}
+
+export function updatePoints(topology: Topology, ids: string[], changes: Partial<TopoPoint>): Topology {
+  return { ...topology, points: patchMany(topology.points, ids, changes) };
 }
 
 /**
@@ -236,7 +304,7 @@ export function canConnect(topology: Topology, source: string, target: string): 
   }
 
   // Postits e textos nunca conectam.
-  const connectable = new Set([...topology.nodes, ...topology.points].map((item) => item.id));
+  const connectable = new Set([...topology.nodes, ...topology.points, ...topology.images].map((item) => item.id));
   if (!connectable.has(source) || !connectable.has(target)) {
     return false;
   }
@@ -305,9 +373,13 @@ export type OrderCommand = 'front' | 'back' | 'forward' | 'backward';
  * empates ao longo de varias operacoes ate a ordem virar imprevisivel.
  */
 export function reorderElement(topology: Topology, id: string, command: OrderCommand): Topology {
-  const ordered = [...topology.nodes, ...topology.points, ...topology.postits, ...topology.texts].sort(
-    (a, b) => a.zIndex - b.zIndex
-  );
+  const ordered = [
+    ...topology.nodes,
+    ...topology.points,
+    ...topology.postits,
+    ...topology.texts,
+    ...topology.images,
+  ].sort((a, b) => a.zIndex - b.zIndex);
 
   const from = ordered.findIndex((item) => item.id === id);
   if (from < 0) {
@@ -338,6 +410,7 @@ export function reorderElement(topology: Topology, id: string, command: OrderCom
     points: restamp(topology.points),
     postits: restamp(topology.postits),
     texts: restamp(topology.texts),
+    images: restamp(topology.images),
   };
 }
 
@@ -345,7 +418,8 @@ export type FoundElement =
   | { kind: 'node'; element: TopoNode }
   | { kind: 'point'; element: TopoPoint }
   | { kind: 'postit'; element: TopoPostit }
-  | { kind: 'text'; element: TopoText };
+  | { kind: 'text'; element: TopoText }
+  | { kind: 'image'; element: TopoImage };
 
 export function findElement(topology: Topology, id: string): FoundElement | undefined {
   const node = topology.nodes.find((item) => item.id === id);
@@ -363,6 +437,10 @@ export function findElement(topology: Topology, id: string): FoundElement | unde
   const text = topology.texts.find((item) => item.id === id);
   if (text) {
     return { kind: 'text', element: text };
+  }
+  const image = topology.images.find((item) => item.id === id);
+  if (image) {
+    return { kind: 'image', element: image };
   }
   return undefined;
 }
