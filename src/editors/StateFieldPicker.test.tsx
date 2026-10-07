@@ -3,7 +3,7 @@ import { FieldType, toDataFrame } from '@grafana/data';
 import { fireEvent, render, screen } from '@testing-library/react';
 
 import { ColorDimension } from '../model/types';
-import { StateFieldPicker, faltaNaQuery, writeMetric } from './StateFieldPicker';
+import { StateFieldPicker, writeMetric } from './StateFieldPicker';
 import { ZabbixSourceProvider } from './zabbixSource';
 
 /**
@@ -79,10 +79,16 @@ describe('qual formulário aparece', () => {
     expect(onChange).not.toHaveBeenCalled();
   });
 
-  it('com host e item salvos, avisa que a métrica não está nas queries', () => {
+  /**
+   * O aviso "essa métrica não está nas queries" saiu: o formulário de host+item
+   * só aparece com a seção Zabbix ligada, e ligada ela faz o painel buscar a
+   * série. O aviso mandava resolver um problema que o usuário acabou de
+   * dispensar — o mesmo defeito que o aviso do vínculo por trigger tinha.
+   */
+  it('com host e item salvos, não avisa nada sobre queries', () => {
     setup({ metric: { host: HOST, item: ITEM } });
 
-    expect(screen.getByText('Essa métrica não está nas queries do painel')).toBeInTheDocument();
+    expect(screen.queryByText(/não está nas queries/)).not.toBeInTheDocument();
   });
 });
 
@@ -106,27 +112,5 @@ describe('writeMetric', () => {
   /** A cor Base é de outro assunto e nunca é tocada aqui. */
   it('preserva a cor fixa', () => {
     expect(writeMetric({ fixed: 'red' }, { host: HOST, item: '' }).fixed).toBe('red');
-  });
-});
-
-describe('faltaNaQuery', () => {
-  const frames = [
-    toDataFrame({
-      name: `${HOST}: ${ITEM}`,
-      fields: [{ name: `${HOST}: ${ITEM}`, type: FieldType.number, values: [42] }],
-    }),
-  ];
-
-  it('vínculo incompleto não avisa nada', () => {
-    expect(faltaNaQuery({ metric: { host: HOST, item: '' } }, frames)).toBe(false);
-    expect(faltaNaQuery({ field: 'cpu' }, frames)).toBe(false);
-  });
-
-  it('a série presente nos frames não avisa', () => {
-    expect(faltaNaQuery({ metric: { host: HOST, item: ITEM } }, frames)).toBe(false);
-  });
-
-  it('a série ausente avisa', () => {
-    expect(faltaNaQuery({ metric: { host: HOST, item: 'Memory' } }, frames)).toBe(true);
   });
 });

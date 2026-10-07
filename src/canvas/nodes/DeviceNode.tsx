@@ -1,12 +1,13 @@
 import React from 'react';
 import { css, cx } from '@emotion/css';
-import { DisplayValue, GrafanaTheme2 } from '@grafana/data';
+import { DataFrame, DisplayValue, GrafanaTheme2 } from '@grafana/data';
 import { useStyles2, useTheme2 } from '@grafana/ui';
 import { Handle, HandleType, NodeProps, Position } from '@xyflow/react';
 
 import { formatDisplayValue, resolveDisplayValue, resolveText, stateFieldName } from '../../data/dimensions';
 import { ElementColor, resolveElementColor } from '../../data/elementColor';
 import { DeviceFlowNode } from '../flowTypes';
+import { TopoNode } from '../../model/types';
 import { ResolvedIcon, TopoIcon, resolveIcon } from '../../icons';
 import { alertClass } from '../alertAnimation';
 import { iconTone } from '../iconTone';
@@ -73,7 +74,7 @@ export function DeviceNode({ data, selected, dragging }: NodeProps<DeviceFlowNod
   // A figura nao pode ser tingida, mas troca de arquivo conforme o estado.
   const tone = iconTone(accent, element.presentation.iconTone, theme);
 
-  const display = resolveDisplayValue(frames, element.value?.field);
+  const display = resolveDisplayValue(frames, badgeField(element, frames));
   // A presenca de `value` e o toggle "Exibir valor"; `value.field` e so a
   // metrica escolhida dentro dele. Quem decide se ha texto no badge e o toggle.
   const badge = resolveBadge(accent, theme, element.value !== undefined, display);
@@ -245,6 +246,25 @@ function capsule(
  * sobre o proprio vinculo — some-lo junto com o numero esconderia justamente o
  * que o operador precisa ver.
  */
+/**
+ * Qual metrica o badge exibe.
+ *
+ * Sem field escolhido, exibe a **do estado** — a mesma que pinta o elemento. E
+ * o que o toggle promete ("Exibir valor") e o que o campo vazio antes negava,
+ * mostrando um travessao.
+ *
+ * Vale mais desde que a metrica pode ser escolhida por host+item: nesse caso a
+ * serie so existe quando o painel busca sozinho, e o seletor de field do
+ * formulario — que lista os frames das queries do dashboard — nao teria o que
+ * oferecer.
+ *
+ * Exportada para teste direto: renderizar o no inteiro exigiria o contexto do
+ * React Flow para exercitar uma escolha de nome.
+ */
+export function badgeField(element: TopoNode, frames: DataFrame[]): string | undefined {
+  return element.value?.field || stateFieldName(element.color, frames);
+}
+
 export function resolveBadge(
   accent: ElementColor,
   theme: GrafanaTheme2,

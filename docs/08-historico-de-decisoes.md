@@ -146,6 +146,28 @@ estação, religador, sensor, torre) e rádios de campo. São `image` — uma so
 outra cor não é "a sonda em alarme". O material vinha com a mesma arte repetida
 em vários tamanhos; entrou **um arquivo por família**, nas dimensões de origem.
 
+Quarto pack, `zabbix` (2026-09-10): o conjunto dos mapas do Zabbix, **inteiro**,
+43 arquivos. Também `image`. Duas decisões do usuário aqui, e as duas contrariam
+o que se tinha feito antes:
+
+- **Entrou apesar da licença.** É GPL-2.0 num plugin Apache-2.0, e foi
+  exatamente essa questão que o deixou de fora quando os outros três foram
+  feitos. A pendência continua aberta em [doc 09](09-pendencias-e-roadmap.md); o
+  que mudou é que o custo de reverter é baixo de propósito — apagar a pasta e a
+  entrada em `ICON_PACKS`, e as chaves salvas caem no genérico sem migrador.
+- **Entrou inteiro, tiras de rack incluídas.** No pack `petrolifera` a regra
+  tinha sido "um arquivo por família", porque lá as repetições eram o mesmo
+  desenho em tamanhos diferentes e a escolha entre elas só podia ser errada.
+  Aqui 2D e 3D são projeções distintas e uma elevação de rack só fecha se todas
+  as peças estiverem na mesma — então a repetição carrega informação, e ficou.
+
+Efeito colateral que vale registrar: `zabbix/server` era o **fixture de "pack que
+não existe"** em `registry.test.ts`, e passou a existir. Dois testes afirmavam o
+contrário do que o nome deles dizia. Trocados por `pack-inexistente/`, e as
+contagens de `IconPicker.test.tsx` que estavam escritas à mão (quantos
+"Servidor", quantos fora da pasta) passaram a sair do próprio catálogo — eram
+asserções sobre o tamanho da biblioteca em testes que nunca foram sobre isso.
+
 ## Marco 7 — O pipeline nativo sai da cadeia de cor (2026-09-02)
 
 A mudança conceitualmente mais importante da v1.0, e a mais contra-intuitiva.

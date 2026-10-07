@@ -30,6 +30,7 @@ import { StateSection } from './StateSection';
 import { TemplateTextField } from './TemplateTextField';
 import { ToggleField } from './ToggleField';
 import { TopoFieldPicker } from './TopoFieldPicker';
+import { useZabbixItemCatalog, useZabbixMetricNames } from './zabbixSource';
 
 interface FormProps<T> {
   element: T;
@@ -42,6 +43,8 @@ interface FormProps<T> {
 
 export function NodeForm({ element, topology, frames, onChange }: FormProps<TopoNode>) {
   const styles = useStyles2(getFormStyles);
+  const metricasDoZabbix = useZabbixMetricNames();
+  const catalogoDoZabbix = useZabbixItemCatalog();
   const patch = (changes: Partial<TopoNode>) => onChange(updateNode(topology, element.id, changes));
   const patchPresentation = (changes: Partial<TopoNode['presentation']>) =>
     patch({ presentation: { ...element.presentation, ...changes } });
@@ -101,6 +104,8 @@ export function NodeForm({ element, topology, frames, onChange }: FormProps<Topo
       >
         <TopoFieldPicker
           frames={frames}
+          extras={metricasDoZabbix}
+          loadExtras={catalogoDoZabbix}
           value={element.value?.field}
           onChange={(field) => patch({ value: { field } })}
           placeholder="Sem métrica"

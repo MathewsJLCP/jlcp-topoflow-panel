@@ -14,15 +14,18 @@ sem clique. Quase toda decisão de UI documentada aqui se explica por isso.
 
 ### O que ele não é
 
-- **Não é um cliente do Zabbix — para os dados.** O que pinta o elemento entra
-  pelo Query Editor nativo do painel (datasource `grafana-zabbix`, Query Mode
+- **Não é um cliente do Zabbix — por padrão.** O que pinta o elemento entra pelo
+  Query Editor nativo do painel (datasource `grafana-zabbix`, Query Mode
   *Problems*), e o plugin só lê o `DataFrame` resultante.
 
-  O **editor**, esse sim, consulta o Zabbix: com um datasource Zabbix escolhido
-  nas opções do painel, os combos de host e trigger sugerem o catálogo inteiro em
-  vez de apenas o que a query já trouxe. A conversa é pelo resource endpoint do
-  próprio datasource (`data/zabbixApi.ts`), sem credencial nenhuma do lado do
-  plugin — ver [o PRD da rodada](prd-zabbix-direto.md).
+  A exceção é a seção **Zabbix** das opções do painel, desligada por padrão.
+  Ligada, ela faz as duas coisas de uma vez, pelo resource endpoint do próprio
+  datasource (`data/zabbixApi.ts`) e sem credencial nenhuma do lado do plugin —
+  ver [o PRD da rodada](prd-zabbix-direto.md):
+
+  1. o **editor** passa a sugerir o catálogo (hosts, triggers, itens) nos combos;
+  2. o **painel** executa a própria query de Problems e dispensa a query no
+     dashboard.
 - **Não tem backend.** É um plugin frontend puro: sem Go, sem mage, sem
   `backend: true` no `plugin.json`. Tudo o que o usuário configura vive em
   `panel.options`, dentro do JSON do dashboard.
@@ -112,7 +115,7 @@ src/
 │   └── IconPicker.tsx      Navegador de ícones com pastas
 └── icons/                Biblioteca de ícones
     ├── registry.ts         Catálogo, chave `pack/nome`, fallback
-    └── packs/              classic (glifos), topoflow (variantes), petrolifera (fotos)
+    └── packs/              classic (glifos), topoflow (variantes), zabbix e petrolifera (figuras)
 ```
 
 Fora de `src/`:

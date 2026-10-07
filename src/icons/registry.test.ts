@@ -49,9 +49,16 @@ describe('resolveIcon', () => {
     expect(resolveIcon('sitemap').ref).toBe(DEFAULT_ICON_REF);
   });
 
-  /** Um pack que ainda não existe (ou que saiu do plugin) não pode explodir. */
+  /**
+   * Um pack que ainda não existe (ou que saiu do plugin) não pode explodir.
+   *
+   * O exemplo aqui era `zabbix/server` até o pack Zabbix entrar de fato, em
+   * 2026-09-10 — o fixture de "pack que não existe" tem de ser um id que nunca
+   * vai virar pack de verdade, senão o teste passa a afirmar o contrário do que
+   * o nome dele diz no dia em que alguém adicionar aquele pack.
+   */
   it('pack desconhecido cai no genérico', () => {
-    expect(resolveIcon('zabbix/server').ref).toBe(DEFAULT_ICON_REF);
+    expect(resolveIcon('pack-inexistente/server').ref).toBe(DEFAULT_ICON_REF);
   });
 
   it('o próprio fallback resolve', () => {
@@ -64,7 +71,8 @@ describe('isKnownIcon', () => {
     expect(isKnownIcon('server')).toBe(true);
     expect(isKnownIcon('classic/server')).toBe(true);
     expect(isKnownIcon('sitemap')).toBe(false);
-    expect(isKnownIcon('zabbix/server')).toBe(false);
+    expect(isKnownIcon('pack-inexistente/server')).toBe(false);
+    expect(isKnownIcon('zabbix/server')).toBe(true);
     expect(isKnownIcon(undefined)).toBe(false);
   });
 });
@@ -120,5 +128,47 @@ describe('pack Petrolífera', () => {
     for (const icon of pack.icons) {
       expect(icon.art.kind).toBe('image');
     }
+  });
+});
+
+describe('pack Zabbix', () => {
+  it('resolve pela chave com pack', () => {
+    const router = resolveIcon('zabbix/router');
+
+    expect(router.name).toBe('router');
+    expect(router.packLabel).toBe('Zabbix');
+  });
+
+  /**
+   * O pack tem `router`, `firewall` e `server`, que os *Clássicos* tambem tem.
+   * Sao icones diferentes, e so o pack na chave os separa — se `splitRef` um dia
+   * deixar de separar, este teste cai antes de um dashboard mostrar o desenho
+   * errado calado.
+   */
+  it('não se confunde com o ícone homônimo dos Clássicos', () => {
+    expect(resolveIcon('zabbix/router').pack).toBe('zabbix');
+    expect(resolveIcon('classic/router').pack).toBe('classic');
+    expect(resolveIcon('router').pack).toBe('classic');
+  });
+
+  /** Sao renderizacoes 3D com cor propria: nao ha a mesma arte em seis tons. */
+  it('todo ícone do pack é figura, não variante', () => {
+    const pack = ICON_PACKS.find((p) => p.id === 'zabbix')!;
+
+    for (const icon of pack.icons) {
+      expect(icon.art.kind).toBe('image');
+    }
+  });
+
+  /**
+   * O conjunto do Zabbix entrou inteiro (43 arquivos), por decisão do usuário em
+   * 2026-09-10, mais o `ap` — a foto do UniFi que o conjunto original não tem e
+   * que o usuário pediu no mesmo dia. Daí 44, e não 43.
+   */
+  it('traz os 43 ícones do conjunto original mais o AP', () => {
+    const pack = ICON_PACKS.find((p) => p.id === 'zabbix')!;
+
+    expect(pack.icons).toHaveLength(44);
+    expect(pack.icons.filter((icon) => icon.name === 'ap')).toHaveLength(1);
   });
 });

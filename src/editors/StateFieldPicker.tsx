@@ -2,7 +2,7 @@ import React, { useId, useState } from 'react';
 import { DataFrame } from '@grafana/data';
 import { Alert, Button, Combobox, Field } from '@grafana/ui';
 
-import { findFieldFrame, isNumericField, stateFieldName } from '../data/dimensions';
+import { isNumericField } from '../data/dimensions';
 import { ColorDimension } from '../model/types';
 import { FieldLabel } from './FieldLabel';
 import { TopoFieldPicker } from './TopoFieldPicker';
@@ -21,9 +21,8 @@ import { useZabbixMetric } from './zabbixSource';
  * **Duas formas de dizer a mesma coisa**, e o formulario mostra uma de cada vez:
  *
  *   - **Host + Item**, escolhidos no catalogo do Zabbix (`color.metric`). E o
- *     caminho quando ha um datasource Zabbix configurado no painel, e e o que
- *     permite vincular antes de existir query — a ordem em que o trabalho
- *     realmente acontece.
+ *     caminho quando a secao Zabbix esta ligada — e, como ela tambem faz o
+ *     painel buscar a serie, vincular deixa de depender de existir query.
  *   - **Campo**, o display name do field (`color.field`). E o formato de tudo o
  *     que ja esta salvo, continua valido para sempre, e e o unico caminho quando
  *     nao ha Zabbix configurado.
@@ -134,18 +133,6 @@ export function StateFieldPicker({ frames, value, onChange }: StateFieldPickerPr
         </Alert>
       )}
 
-      {/*
-        O aviso que so existe enquanto o painel nao busca os proprios dados: a
-        metrica esta escolhida, e nao ha query que a traga. Sem ele o elemento
-        ficaria em NO DATA sem nada na tela explicando por que.
-      */}
-      {faltaNaQuery(value, frames) && (
-        <Alert severity="info" title="Essa métrica não está nas queries do painel">
-          O elemento fica em <strong>NO DATA</strong> até uma query trazer <strong>{item}</strong> do host{' '}
-          <strong>{host}</strong>.
-        </Alert>
-      )}
-
       <TrocaDeModo para="field" onClick={() => setEscolhido('field')} />
     </>
   );
@@ -175,13 +162,4 @@ function TrocaDeModo({ para, onClick }: { para: 'metric' | 'field'; onClick: () 
       {para === 'field' ? 'Usar um campo da query' : 'Escolher host e item no Zabbix'}
     </Button>
   );
-}
-
-/** Vinculo completo cujo nome de serie nao existe em frame nenhum. */
-export function faltaNaQuery(value: ColorDimension, frames: DataFrame[]): boolean {
-  if (!value.metric?.host.trim() || !value.metric?.item.trim()) {
-    return false;
-  }
-
-  return !findFieldFrame(frames, stateFieldName(value, frames));
 }

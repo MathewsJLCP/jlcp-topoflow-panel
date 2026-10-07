@@ -19,6 +19,7 @@ Escrito para dois leitores: quem for manter o TopoFlow, e quem for começar
 | [09 — Pendências e roadmap](09-pendencias-e-roadmap.md) | O que ficou de fora da v1.0 e com que decisão pendente |
 | [PRD — Vínculo direto com o Zabbix](prd-zabbix-direto.md) | Rodada em curso: autocomplete de host/item/trigger pela API do Zabbix, e o painel executando a própria query |
 | [Estilo dos elementos](estilo-elementos-canvas.md) | Contrato visual de cada elemento do canvas (tokens, superfícies, contraste) |
+| [Especificação funcional](especificacao-funcional.md) | Inventário de tudo o que o produto faz — elementos, campos, interações, estados e mensagens —, sem referência visual. Base para o redesenho da v2.0 |
 | [Exemplos](../examples/README.md) | Dashboards prontos para importar, e como adaptá-los ao seu Zabbix |
 
 ## Se você tem 10 minutos

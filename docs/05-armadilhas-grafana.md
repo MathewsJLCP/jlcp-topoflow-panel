@@ -306,6 +306,54 @@ linha. Não dá para distingui-los no canvas sem inventar estado.
 pode corrigir está olhando, e os combos de host/trigger aceitam valor digitado —
 um host 100% saudável nunca aparece na lista.
 
+### A série de métrica vem com o nome do item — e dois hosts colidem
+
+O backend do Zabbix nomeia cada frame de métrica com o **nome do item**, e põe o
+resto em labels do field:
+
+```
+frame.name          = 'CPU Usage'
+field.config.displayNameFromDS = 'CPU Usage'
+field.labels        = { host: 'TESTE-PLUGIN', item: 'CPU Usage', item_key: 'cpu.usage' }
+```
+
+Dois hosts com `CPU Usage` produzem duas séries homônimas. `getFieldDisplayName`
+devolve o mesmo nome para as duas, e `getLastNotNullValue` para na primeira: o
+elemento do segundo host exibe, **em silêncio**, o valor do primeiro. É o pior
+tipo de bug num painel de NOC — plausível e errado.
+
+Quando o painel monta a própria query, ele renomeia cada série para
+`"<host>: <item>"` (`nameMetricFields`) a partir dos **labels**, e não do nome:
+label é dado estruturado, nome é texto que a próxima versão do datasource pode
+formatar diferente.
+
+### Filtro de grupo vazio devolve **nenhum** problema
+
+Ao montar um alvo de Problems na mão (o que o painel faz em
+`data/zabbixQuery.ts`), a tentação é deixar o filtro de grupo em branco para
+dizer "todos os grupos". O efeito é o oposto:
+
+```
+findByFilter(grupos, '')  →  findByName(grupos, '')  →  []
+zabbixAPI.getHosts([])    →  params.groupids = []     // [] é truthy em JS
+```
+
+E `groupids: []` na API do Zabbix significa "nenhum grupo", não "todos". A query
+volta vazia, sempre, sem erro nenhum. O filtro que quer dizer "todos" é a regex
+`/.*/`.
+
+### O filtro de host do datasource só testa o nome **visível**
+
+`filterByRegex` roda sobre `zbx_obj.name`. O vínculo do TopoFlow, porém, aceita
+nome visível **ou** técnico — `matchesHost` compara com os dois, porque o combo
+lista um e quem digita costuma digitar o outro.
+
+Consequência: montar o filtro de host direto com o que está salvo deixaria de
+fora todo elemento vinculado pelo nome técnico, e ele ficaria eternamente
+apagado. Por isso `useZabbixProblems` traduz os nomes com um `host.get`
+(`filter` + `searchByAny`, uma chamada para a lista inteira) antes de montar a
+regex.
+
 ### Match de host tem que ser exato
 
 `contains` faria `MMV-FW-STARTI-01` casar com `MMV-FW-STARTI-011`. Exato,
@@ -348,6 +396,25 @@ pega o caso, já que a função existe). Ver [doc 06](06-testes.md).
 O menu aberto do `Combobox` vive dentro dele, e ele usa a API para decidir quando
 mostrar as sombras de rolagem. Sem stub, qualquer teste que abra um dropdown cai
 com `IntersectionObserver is not defined`.
+
+### `description: undefined` engorda **todas** as linhas do `Combobox`
+
+A altura de cada linha do menu é decidida assim:
+
+```js
+const hasDescription = 'description' in options[index];   // a CHAVE, não o valor
+```
+
+Presença de chave, não de valor. Uma lista montada com
+`{ value, label, description: talvez }` tem a chave em todas as opções, então
+**toda** linha recebe a altura de duas — a segunda em branco — e a lista inteira
+parece espaçada demais sem que nada apareça ali.
+
+Monte a opção sem a chave quando não houver descrição:
+
+```ts
+tecnico ? { value, label, description: tecnico } : { value, label }
+```
 
 ### O menu do `Combobox` é virtualizado
 

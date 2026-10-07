@@ -6,6 +6,7 @@ import { TextDimension } from '../model/types';
 import { isDisplayableField } from '../data/dimensions';
 import { TemplateTextField } from './TemplateTextField';
 import { TopoFieldPicker } from './TopoFieldPicker';
+import { useZabbixItemCatalog, useZabbixMetricNames } from './zabbixSource';
 
 /**
  * Controles do padrao "Dimension" (ADR-P04): um seletor fixo/field e o controle
@@ -41,6 +42,9 @@ interface TextDimensionFieldProps {
 }
 
 export function TextDimensionField({ label, frames, value, template, onChange }: TextDimensionFieldProps) {
+  const doZabbix = useZabbixMetricNames();
+  const catalogo = useZabbixItemCatalog();
+
   return (
     <Field label={label}>
       <Stack direction="column" gap={1}>
@@ -70,6 +74,8 @@ export function TextDimensionField({ label, frames, value, template, onChange }:
         ) : (
           <TopoFieldPicker
             frames={frames}
+            extras={doZabbix}
+            loadExtras={catalogo}
             value={value.field}
             onChange={(field) => onChange({ ...value, field })}
             placeholder="Selecione um field"

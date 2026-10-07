@@ -181,8 +181,9 @@ Antes disso:
 - decida o nível de assinatura (*private*, *community*, *commercial*) —
   para uso interno, **private**, listando os domínios das instâncias;
 - **resolva as licenças dos ícones de terceiros** antes de assinar. Ver
-  [doc 09](09-pendencias-e-roadmap.md): o pack do Zabbix (GPL-2.0) e as fotos de
-  produto Ubiquiti/Cambium do pack `petrolifera` são pendências reais.
+  [doc 09](09-pendencias-e-roadmap.md): o pack `zabbix` (GPL-2.0, num plugin
+  Apache-2.0) e as fotos de produto Ubiquiti/Cambium do pack `petrolifera` são
+  pendências reais — e o pack `zabbix` já está no bundle desde 2026-09-10.
 
 O workflow de release em `.github/workflows/` já faz isso a partir de uma tag,
 desde que o segredo esteja configurado no repositório.

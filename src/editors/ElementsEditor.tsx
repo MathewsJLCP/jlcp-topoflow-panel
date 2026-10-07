@@ -47,7 +47,11 @@ export function ElementsEditor(props: StandardEditorProps<Topology, unknown, Top
     elemento e os frames.
   */
   return (
-    <ZabbixSourceProvider datasource={props.context.options?.zabbix?.datasource}>
+    <ZabbixSourceProvider
+      enabled={props.context.options?.zabbix?.enabled === true}
+      datasource={props.context.options?.zabbix?.datasource}
+      topology={parsed.data}
+    >
       <ElementsLayer {...props} value={parsed.data} />
     </ZabbixSourceProvider>
   );

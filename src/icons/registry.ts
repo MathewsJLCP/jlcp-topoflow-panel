@@ -2,13 +2,14 @@ import { IconPack, ResolvedIcon } from './types';
 import { FALLBACK_ICON, classicPack } from './packs/classic';
 import { petroliferaPack } from './packs/petrolifera';
 import { topoflowPack } from './packs/topoflow';
+import { zabbixPack } from './packs/zabbix';
 
 /**
  * O catalogo de icones do plugin, e a traducao entre a chave salva e a arte.
  *
  * ## A chave
  *
- * O modelo guarda `pack/nome` (`classic/router`, `zabbix/server`). Duas formas
+ * O modelo guarda `pack/nome` (`classic/router`, `zabbix/switch`). Duas formas
  * continuam validas de proposito:
  *
  *   - **sem pack** (`router`) — tudo o que foi salvo antes de existirem pastas.
@@ -31,9 +32,10 @@ import { topoflowPack } from './packs/topoflow';
  *
  * Packs de dominio (**Petrolífera**) vem depois dos gerais: eles atendem a um
  * ramo so, entao ficam onde quem precisa deles vai procurar, sem ocupar a
- * primeira pasta de todo mundo.
+ * primeira pasta de todo mundo. **Zabbix** e geral — vale para qualquer
+ * topologia de rede — entao fica entre os gerais, depois dos *Clássicos*.
  */
-export const ICON_PACKS: IconPack[] = [topoflowPack, classicPack, petroliferaPack];
+export const ICON_PACKS: IconPack[] = [topoflowPack, classicPack, zabbixPack, petroliferaPack];
 
 const PACKS_BY_ID = new Map(ICON_PACKS.map((pack) => [pack.id, pack]));
 

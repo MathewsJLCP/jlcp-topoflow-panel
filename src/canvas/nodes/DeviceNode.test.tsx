@@ -1,8 +1,8 @@
-import { createTheme } from '@grafana/data';
+import { FieldType, createTheme, toDataFrame } from '@grafana/data';
 
 import { ActiveProblem } from '../../data/triggerState';
-import { Severity } from '../../model/types';
-import { resolveBadge } from './DeviceNode';
+import { Severity, TopoNode } from '../../model/types';
+import { badgeField, resolveBadge } from './DeviceNode';
 
 const theme = createTheme();
 
@@ -104,5 +104,42 @@ describe('resolveBadge — governado pelo toggle "Exibir valor"', () => {
   /** `no data` não é o valor da métrica: é um aviso sobre o próprio vínculo. */
   it('`no data` não é silenciado pelo toggle', () => {
     expect(resolveBadge({ state: 'nodata' }, theme, false, undefined)?.label).toBe('no data');
+  });
+});
+
+/**
+ * O badge sem field escolhido exibia um travessao. Agora exibe a metrica do
+ * estado — que e o que o toggle "Exibir valor" promete, e a unica saida quando a
+ * metrica foi escolhida por host+item (nesse caso a serie so existe quando o
+ * painel busca sozinho, e o seletor de field nao teria o que oferecer).
+ */
+describe('badgeField', () => {
+  const no = (overrides: Partial<TopoNode>): TopoNode =>
+    ({
+      id: 'n',
+      position: { x: 0, y: 0 },
+      size: { width: 10, height: 10 },
+      presentation: { primaryText: { mode: 'fixed', fixed: 'n' } },
+      color: {},
+      zIndex: 0,
+      ...overrides,
+    }) as TopoNode;
+
+  const frames = [toDataFrame({ fields: [{ name: 'H: CPU', type: FieldType.number, values: [92] }] })];
+
+  it('o field escolhido no toggle manda', () => {
+    expect(badgeField(no({ value: { field: 'outro' }, color: { field: 'estado' } }), frames)).toBe('outro');
+  });
+
+  it('sem field escolhido, cai na métrica do estado', () => {
+    expect(badgeField(no({ value: {}, color: { field: 'estado' } }), frames)).toBe('estado');
+  });
+
+  it('vínculo por host+item também alimenta o badge', () => {
+    expect(badgeField(no({ value: {}, color: { metric: { host: 'H', item: 'CPU' } } }), frames)).toBe('H: CPU');
+  });
+
+  it('sem vínculo nenhum, não há o que exibir', () => {
+    expect(badgeField(no({ value: {} }), frames)).toBeUndefined();
   });
 });

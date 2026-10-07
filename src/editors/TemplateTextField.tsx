@@ -5,6 +5,7 @@ import { TextArea, useStyles2 } from '@grafana/ui';
 
 import { insertTemplateField, isDisplayableField, missingTemplateFields } from '../data/dimensions';
 import { TopoFieldPicker } from './TopoFieldPicker';
+import { useZabbixItemCatalog, useZabbixMetricNames } from './zabbixSource';
 
 /**
  * Texto que combina palavra e metrica, no formato dos mapas do Zabbix:
@@ -68,7 +69,19 @@ export function TemplateTextField({
     caret.current = at + field.length + 3;
   };
 
-  const missing = missingTemplateFields(value, frames);
+  /*
+    As series que o painel busca direto no Zabbix nao estao nos frames do editor
+    — elas so existem quando o painel desenha. Entram no seletor para poderem
+    ser inseridas, e saem da conta do aviso: acusar "sem correspondencia" uma
+    metrica que o painel busca e vai exibir seria mentira, e foi assim que o
+    aviso apareceu num painel funcionando.
+  */
+  const doZabbix = useZabbixMetricNames();
+  // Alem do que ja esta vinculado, o combo oferece o catalogo de itens dos hosts
+  // que o mapa usa: escolher uma metrica costuma ser o ato de vincular a
+  // primeira, e ai `doZabbix` ainda esta vazio.
+  const catalogo = useZabbixItemCatalog();
+  const missing = missingTemplateFields(value, frames).filter((nome) => !doZabbix.includes(nome));
 
   return (
     <div className={styles.wrapper}>
@@ -85,6 +98,8 @@ export function TemplateTextField({
 
       <TopoFieldPicker
         frames={frames}
+        extras={doZabbix}
+        loadExtras={catalogo}
         // Sempre vazio: o seletor aqui e um botao de inserir, nao o dono de um
         // valor. Guardar a ultima escolha faria o campo parecer um vinculo — e
         // um rotulo com tres metricas nao tem "a" metrica selecionada.

@@ -12,7 +12,7 @@ blocos 1 e 2 foram aprovados em 2026-09-09.
 | --- | --- |
 | 1 — Cliente da API | **feito** em 2026-09-09 |
 | 2 — Métrica por host + item | **feito** em 2026-09-09 |
-| 3 — Query própria | depois do backup |
+| 3 — Query própria (trigger e métrica) | **feito** em 2026-09-09 |
 | 4 — `triggerid` como chave | a aprovar |
 
 ---
@@ -212,24 +212,61 @@ existir.
   o parse ignora **some do JSON** no primeiro arraste, sem erro e sem aviso. O
   `options.zabbix` teria evaporado no primeiro elemento movido.
 
-### Bloco 3 — O painel executa a própria query (depois do backup)
+### Bloco 3 — O painel executa a própria query (feito)
 
-Interruptor separado: `options.zabbix.selfQuery` (ausente = desligado). Escolher
-o datasource no bloco 1 serve ao autocomplete; buscar dado sozinho é outra
-decisão, e o usuário tem que poder tomar uma sem a outra.
+**D2**: entregue em duas etapas, trigger primeiro e métrica depois de validado —
+foi o que permitiu descobrir as armadilhas do alvo de Problems antes de dobrar a
+aposta.
 
-**Montagem dos targets.** O painel junta os vínculos de todos os elementos e
-monta o conjunto mínimo:
+**D3 decidida**: os problemas **não** ficam presos à janela de tempo do
+dashboard. É o default do próprio datasource quando `useTimeRange` está ausente,
+e é o que um telão de NOC precisa — um alarme aberto há oito horas não pode
+sumir porque alguém deixou o dashboard em "últimas 6 horas". A opção não é
+exposta; expor depois é acrescentar um campo, não mudar formato.
 
-- **Trigger:** um único target para o mapa inteiro. O filtro de host do Zabbix
-  aceita regex (`utils.buildRegex`), então N elementos viram
-  `host: { filter: '/^(host-a|host-b|host-c)$/' }` com `queryType: '5'` (Problems)
-  e `refId: 'TOPO_PROBLEMS'`.
-- **Métrica:** um target por host (`refId: 'TOPO_M_<n>'`, `queryType: '0'`), com os
-  itens daquele host em regex. Um target por host, e não um só para tudo, porque
-  o filtro é produto cartesiano — host × item — e agrupar por host mantém o
-  produto dentro do host. De quebra, com um host por target o nome da série é
-  sempre o nome puro do item (§ bloco 2), o que torna a leitura previsível.
+**Um interruptor só para a seção inteira**: `options.zabbix.enabled` (ausente =
+desligado). A separação entre "sugerir" e "buscar" existiu por um dia e foi
+desfeita a pedido do usuário em 2026-09-09: era um segundo controle para uma
+pergunta que ninguém faz, e a resposta útil é sempre "as duas". Quem liga a
+seção está dizendo que o Zabbix responde por trigger neste painel — e é por isso
+que, ligada, os problemas vindos de uma query do dashboard **cedem lugar** aos do
+painel (somados, cada alarme contaria duas vezes) enquanto as séries de métrica
+seguem valendo.
+
+**Montagem do target** (`data/zabbixQuery.ts`, puro e testado): **um único
+target para o mapa inteiro**, por mais elementos que ele tenha. O filtro de host
+do Zabbix aceita regex, então N elementos viram
+`host: { filter: '/^(host-a|host-b|host-c)$/' }` com `queryType: '5'` e
+`refId: 'topoflow-problems'`.
+
+Dois detalhes que custam caro se ignorados, os dois em
+[05](05-armadilhas-grafana.md): o filtro de **grupo** precisa ser `/.*/` (vazio
+faz o datasource mandar `groupids: []`, que significa "nenhum grupo" e devolve
+sempre vazio), e os nomes de host precisam ser **traduzidos para os visíveis**
+antes de virar regex, porque é o único campo que o filtro do datasource testa.
+
+Para **métrica**, um target por host, com os itens daquele host em regex: o
+filtro ali é produto cartesiano (host × item), e agrupar por host mantém o
+produto dentro do host. Diferente do de Problems, esse alvo roda no **backend**
+do datasource.
+
+O conjunto de métricas buscadas não sai só do vínculo de estado: entra **todo
+nome de série referenciado** na topologia com a forma `"<host>: <item>"` — o
+`${AGLIN-FW: CPU}` de um rótulo, o field de "Exibir valor", o texto de uma
+imagem. Sem isso, inserir uma métrica num texto só funcionaria se algum elemento
+já a observasse como estado. Palpite errado não custa nada: um nome que não seja
+de host some na tradução de nomes e nenhum alvo é montado por ele.
+
+Pelo mesmo motivo, os seletores de field do editor passam a oferecer esses nomes
+(`useZabbixMetricNames`): eles não estão nos frames que o editor recebe, porque
+só existem quando o painel desenha.
+
+E as séries que voltam são **renomeadas** para `"<host>: <item>"`
+(`nameMetricFields`), com a grafia de host que o vínculo guardou. Sem isso, dois
+hosts com `CPU Usage` produziriam séries homônimas e o segundo elemento exibiria
+o valor do primeiro, em silêncio — ver
+[05](05-armadilhas-grafana.md). O par (host, item) sai dos **labels** do field,
+que é dado estruturado, e não do nome da série.
 
 **Execução e integração:**
 
@@ -256,11 +293,17 @@ Sem isso, o "UP" que hoje vem do value mapping nativo some — e o contrato diss
 está fixado no dashboard provisionado do e2e ([03](03-estado-e-cor.md)). O plugin
 usa `.useFieldConfig()` sem config customizada, então o registry padrão basta.
 
-**Refresh.** Re-executar em: mudança de time range, refresh do dashboard
+**Refresh.** Re-executa em mudança de time range, refresh do dashboard
 (`RefreshEvent` no `props.eventBus`, público em `@grafana/runtime`) e mudança dos
-vínculos. Cancelar a inscrição no unmount. **Este é o item que exige validação no
-browser** — o jsdom não diz se o evento chega, e a memória do projeto já tem duas
-cicatrizes exatamente desse tipo ([05](05-armadilhas-grafana.md)).
+vínculos. **Validado no browser** contra um Zabbix real: a carga inicial faz oito
+chamadas (versão, tradução de nomes e o caminho do datasource) e cada refresh
+seguinte faz só `problem.get` + `trigger.get` — o resto vem de cache.
+
+A lista de hosts entra como dependência **serializada**: `triggerHosts` varre a
+topologia e devolve um array novo a cada render, que como dependência crua seria
+uma consulta ao Zabbix por render. Duas travas cuidam da corrida: uma contra
+escrita depois do unmount, outra numerando as chamadas para que uma resposta
+lenta e antiga não sobrescreva a mais nova.
 
 **O que se perde, e é preciso dizer ao cliente:**
 
@@ -299,8 +342,8 @@ Tudo opcional, tudo aditivo, **sem migrador** — a regra de
 ```ts
 // panel.options
 zabbix?: {
-  datasource?: string;   // uid; ausente = auto-detecta pelos targets do painel
-  selfQuery?: boolean;   // ausente = false (bloco 3)
+  enabled?: boolean;     // ausente = desligado; liga catálogo e busca própria
+  datasource?: string;   // uid; ausente = o único Zabbix da instância
 }
 
 // elemento, modo Trigger (bloco 4)
@@ -338,7 +381,8 @@ de degradação do bloco 1 já garante.
 - **D1 — o que o modo Métrica salva. Decidida em 2026-09-09:** salva
   `color.metric = { host, item }`, e o seletor de field sai da tela enquanto o
   formulário do Zabbix está ativo, com um botão de volta para o painel que tem
-  Zabbix configurado e queries de outro datasource. Gravar um lado apaga o outro.
+  a seção Zabbix ligada e queries de outro datasource. Gravar um lado apaga o
+  outro.
 
 Em aberto:
 - **D2 — escopo do bloco 3.** Trigger e métrica de uma vez, ou trigger primeiro?
@@ -348,7 +392,11 @@ Em aberto:
 
 ## 8. Testes
 
-- **Jest:** o cliente da API com `postResource` mockado — método e parâmetros de
+- **Jest:** a montagem do alvo de Problems (o contrato com o datasource: campos
+  que ele lê sem proteção, âncora e escape do filtro de host, grupo em `/.*/`,
+  sem `useTimeRange`) e o ciclo do hook (desligado não consulta, refresh refaz,
+  render sem mudança não refaz, falha preserva o último estado); o cliente da API
+  com `postResource` mockado — método e parâmetros de
   cada chamada, cache (pergunta repetida vira uma requisição, erro não fica
   guardado), host desconhecido, e a expansão do nome do item; a fusão catálogo ×
   frames em `zabbixSource`. **Feito no bloco 1** (26 testes). Falta: a resolução
@@ -357,6 +405,13 @@ Em aberto:
 - **Browser (obrigatório):** o refresh do bloco 3 e o value mapping continuar
   pintando "UP" depois do `applyFieldOverrides` — o fixture disso é o dashboard
   provisionado ([06](06-testes.md)).
+
+  **Feito no bloco 3:** com um dashboard **sem query nenhuma**, quatro elementos
+  vinculados por trigger acenderam com a severidade certa (Disaster em vermelho,
+  Warning em amarelo, host saudável na Base) e a lista de incidentes veio
+  completa; o refresh do dashboard e a troca de janela de tempo refazem a busca.
+  Não virou teste commitado: quantos Zabbix a instância tem, e o que está
+  alarmando neles, é propriedade do ambiente.
 
   **Feito no bloco 1:** o e2e cobre a seção Zabbix e o `DataSourcePicker` dentro
   do painel de opções (checando o controle, e não quantos Zabbix a instância

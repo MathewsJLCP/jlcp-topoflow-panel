@@ -283,6 +283,58 @@ async function hostId(uid: string, host: string): Promise<string | undefined> {
 }
 
 /**
+ * Nomes **visiveis** dos hosts, a partir do que o vinculo guardou.
+ *
+ * O vinculo aceita nome visivel ou tecnico (`matchesHost` compara com os dois),
+ * mas o filtro de host do datasource so testa a regex contra o nome **visivel**
+ * (`filterByRegex`, sobre `zbx_obj.name`). Sem esta traducao, um elemento
+ * vinculado por nome tecnico — `sysConcilia` no lugar de
+ * `AGLIN-SRV-CONCILIACAO` — nunca entraria na query que o painel monta, e o
+ * elemento ficaria eternamente apagado sem nada explicando.
+ *
+ * Uma chamada so para a lista inteira: `searchByAny` faz o `filter` casar
+ * qualquer um dos dois campos, em qualquer dos hosts pedidos.
+ *
+ * Host que nao existe no Zabbix simplesmente nao volta — e nao ha o que buscar
+ * por ele mesmo.
+ */
+export async function resolveHostNames(uid: string, hosts: string[]): Promise<Map<string, string>> {
+  const nomes = hosts.map((host) => host.trim()).filter(Boolean);
+  const mapa = new Map<string, string>();
+
+  if (nomes.length === 0) {
+    return mapa;
+  }
+
+  const found = await request<ZabbixHost[]>(uid, 'host.get', {
+    output: ['hostid', 'name', 'host'],
+    filter: { name: nomes, host: nomes },
+    searchByAny: true,
+    limit: LIMIT,
+  });
+
+  /*
+    Devolve um **mapa**, e nao uma lista, porque quem chama precisa saber de qual
+    nome salvo veio cada nome visivel: e assim que a serie de metrica recebe
+    depois o nome que o elemento vai procurar. Ambas as grafias entram como
+    chave, ja que o vinculo pode ter guardado qualquer uma das duas.
+  */
+  for (const host of found) {
+    if (!host.name) {
+      continue;
+    }
+
+    mapa.set(host.name, host.name);
+
+    if (host.host) {
+      mapa.set(host.host, host.name);
+    }
+  }
+
+  return mapa;
+}
+
+/**
  * Triggers do host.
  *
  * `expandDescription` e o que faz o nome bater com o do problema que chega no

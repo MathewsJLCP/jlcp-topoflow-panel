@@ -158,10 +158,17 @@ export function TriggerBindingField({ frames, value, onChange }: TriggerBindingF
 
       {mode === 'trigger' && (
         <>
-          {!hasProblems && (
+          {/*
+            So faz sentido para quem depende das queries do dashboard. Com a
+            secao Zabbix ligada, o painel busca os problemas por conta propria e
+            pedir uma query seria mandar o usuario resolver um problema que ele
+            acabou de dispensar — foi exatamente assim que o aviso apareceu num
+            painel funcionando, cheio de incidentes na tela.
+          */}
+          {!hasProblems && !temCatalogo && (
             <Alert severity="info" title="Nenhuma query de Problems neste painel">
               Adicione uma query com Query Mode <strong>Problems</strong> no editor de queries do painel para vincular
-              triggers.
+              triggers — ou ligue <strong>Consultar o Zabbix diretamente</strong> nas opções do painel.
             </Alert>
           )}
 

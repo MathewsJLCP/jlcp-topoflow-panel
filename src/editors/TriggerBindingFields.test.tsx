@@ -5,6 +5,19 @@ import { cleanup, fireEvent, render, screen } from '@testing-library/react';
 import { ZabbixProblem } from '../data/problems';
 import { TriggerBinding } from '../model/types';
 import { TriggerBindingField, hostOptionsFrom, isHostUnknown, triggerOptionsFrom } from './TriggerBindingFields';
+import { ZabbixSourceProvider } from './zabbixSource';
+
+/*
+  O catalogo do Zabbix so entra nos testes que o pedem explicitamente, dentro do
+  provider; sem ele o componente se comporta como sempre — que e o que todos os
+  outros testes deste arquivo continuam exercitando.
+*/
+jest.mock('../data/zabbixApi', () => ({
+  resolveZabbixUid: () => 'zbx',
+  searchHosts: async () => [],
+  listTriggers: async () => [],
+  listItems: async () => [],
+}));
 
 const HOST = 'AGLIN-FW-STARTI';
 
@@ -372,5 +385,31 @@ describe('TriggerBindingField — posição da lista', () => {
     for (const seta of ['↑', '↓', '←', '→']) {
       expect(posicao(seta)).toBeInTheDocument();
     }
+  });
+});
+
+/**
+ * O aviso de "nenhuma query de Problems" so faz sentido para quem depende das
+ * queries do dashboard. Com a secao Zabbix ligada, ele mandava o usuario
+ * resolver um problema que ele acabou de dispensar — e aparecia num painel
+ * funcionando, cheio de incidentes na tela.
+ */
+describe('aviso de query ausente', () => {
+  const semProblemas = [metricFrame];
+
+  it('sem catálogo, o aviso aparece', () => {
+    render(<TriggerBindingField frames={semProblemas} value={enabled} onChange={jest.fn()} />);
+
+    expect(screen.getByText('Nenhuma query de Problems neste painel')).toBeInTheDocument();
+  });
+
+  it('com a seção Zabbix ligada, o aviso some', () => {
+    render(
+      <ZabbixSourceProvider enabled datasource="zbx">
+        <TriggerBindingField frames={semProblemas} value={enabled} onChange={jest.fn()} />
+      </ZabbixSourceProvider>
+    );
+
+    expect(screen.queryByText('Nenhuma query de Problems neste painel')).not.toBeInTheDocument();
   });
 });

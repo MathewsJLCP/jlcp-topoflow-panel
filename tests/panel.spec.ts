@@ -45,18 +45,19 @@ test('expoe as opcoes de canvas', async ({ gotoPanelEditPage, readProvisionedDas
 });
 
 /**
- * O `DataSourcePicker` do Grafana entra aqui num lugar onde o plugin nunca o
- * usou — dentro do painel de opcoes —, e o jsdom nao diria se ele derruba a aba
- * inteira.
+ * A seção nasce desligada — o padrão é o painel viver das queries do dashboard —
+ * e é o interruptor que revela o resto. O `DataSourcePicker` do Grafana entra
+ * aqui num lugar onde o plugin nunca o usou (dentro do painel de opções), e o
+ * jsdom não diria se ele derruba a aba inteira.
  *
- * O teste checa o **controle**, e nao o conteudo da lista: quantos Zabbix a
- * instancia tem e propriedade do ambiente, e um teste que dependesse disso
- * passaria na maquina de quem provisionou um e falharia na de quem provisionou
- * dois. Foi assim que a primeira versao deste teste falhou — e o que ela
+ * O teste checa os **controles**, e não o conteúdo da lista: quantos Zabbix a
+ * instância tem é propriedade do ambiente, e um teste que dependesse disso
+ * passaria na máquina de quem provisionou um e falharia na de quem provisionou
+ * dois. Foi assim que a primeira versão deste teste falhou — e o que ela
  * revelou, de quebra, foi um bug de verdade: `getList({ type })` acrescenta o
  * `-- Grafana --` ao resultado depois de filtrar.
  */
-test('expoe a secao Zabbix com o seletor de datasource', async ({
+test('a secao Zabbix e um interruptor que revela o datasource', async ({
   gotoPanelEditPage,
   readProvisionedDashboard,
   page,
@@ -66,6 +67,12 @@ test('expoe a secao Zabbix com o seletor de datasource', async ({
 
   const zabbix = panelEditPage.getCustomOptions('Zabbix');
   await zabbix.expand();
+
+  const toggle = page.getByRole('switch', { name: /Consultar o Zabbix/ });
+  await expect(toggle).not.toBeChecked();
+  await expect(page.getByText('Datasource do Zabbix')).toBeHidden();
+
+  await toggle.click({ force: true });
 
   await expect(page.getByText('Datasource do Zabbix')).toBeVisible();
   await expect(page.getByRole('combobox', { name: 'Select a data source' })).toBeVisible();

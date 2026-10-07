@@ -754,17 +754,28 @@ export const topologySchema = z
   });
 
 /**
- * De onde o editor pergunta o catalogo (hosts, itens, triggers) ao Zabbix.
+ * O painel falando com o Zabbix por conta propria.
  *
- * Objeto, e nao um `datasource` solto no topo, porque o bloco 3 acrescenta aqui
- * o interruptor de buscar o dado direto — e as duas coisas sao a mesma
- * configuracao vista do painel: "qual Zabbix".
+ * **Um interruptor so para as duas coisas** (decisao do usuario em 2026-09-09):
+ * ligado, o editor sugere hosts, itens e triggers do catalogo **e** o painel
+ * executa a propria query de Problems para os hosts vinculados. Desligado — o
+ * padrao —, tudo vem das queries do dashboard, como sempre veio.
  *
- * Tudo opcional: ausente significa o comportamento de sempre, em que os combos
- * listam apenas o que esta nos frames das queries do painel. Por isso nao ha
- * migrador nem bump de `schemaVersion`.
+ * Separar os dois (sugerir sem buscar) foi tentado e desfeito: era um segundo
+ * interruptor para uma pergunta que ninguem faz, e a resposta util e sempre
+ * "as duas".
+ *
+ * Tudo opcional: ausente significa desligado. Por isso nao ha migrador nem bump
+ * de `schemaVersion`.
  */
 export const zabbixOptionsSchema = z.object({
+  /**
+   * Liga a secao inteira. Ausente = desligado.
+   *
+   * E o primeiro campo da secao no painel de opcoes, e todos os outros so
+   * aparecem com ele ligado: sem Zabbix escolhido nao ha o que configurar.
+   */
+  enabled: z.boolean().optional(),
   /**
    * Uid do datasource Zabbix. Aceita variavel (`${zbx}`), interpolada na hora de
    * resolver — ver `resolveZabbixUid` em `data/zabbixApi.ts`.

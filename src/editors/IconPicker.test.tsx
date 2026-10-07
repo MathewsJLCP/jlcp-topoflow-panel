@@ -96,15 +96,22 @@ describe('IconBrowser — pastas', () => {
   });
 
   /**
-   * `router`, `server` e `firewall` existem nos dois packs. E o caso que a chave
-   * qualificada existe para resolver: em "Todos", os dois aparecem, e cada um
-   * carrega a sua propria chave.
+   * `router`, `server` e `firewall` existem em mais de um pack. E o caso que a
+   * chave qualificada existe para resolver: em "Todos", todos aparecem, e cada
+   * um carrega a sua propria chave.
+   *
+   * O numero esperado sai do proprio catalogo, e nao de uma constante: escrito a
+   * mao, ele quebrava a cada pack novo (e quebrou, quando o Zabbix entrou e
+   * trouxe o terceiro "Servidor") num teste que nunca foi sobre quantos sao.
    */
   it('o mesmo nome em pastas diferentes convive sem ambiguidade', () => {
+    const homonimos = listIcons().filter((icon) => icon.label === 'Servidor');
+    expect(homonimos.length).toBeGreaterThan(1);
+
     montar();
     fireEvent.click(screen.getByRole('button', { name: /Todos os ícones/ }));
 
-    expect(screen.getAllByRole('option', { name: 'Servidor' })).toHaveLength(2);
+    expect(screen.getAllByRole('option', { name: 'Servidor' })).toHaveLength(homonimos.length);
   });
 });
 
@@ -123,12 +130,18 @@ describe('IconBrowser — busca', () => {
     expect(screen.queryByRole('option', { name: 'Roteador' })).not.toBeInTheDocument();
   });
 
-  /** A busca vale dentro da pasta aberta; o vazio oferece a saída para "Todos". */
+  /**
+   * A busca vale dentro da pasta aberta; o vazio oferece a saída para "Todos".
+   *
+   * O atalho conta quantos ficaram fora, e essa contagem muda a cada pack novo —
+   * entao o teste casa com a frase, nao com o numero. O que ele afirma e que o
+   * atalho apareceu, e isso vale com 1 ou com 5.
+   */
   it('o que existe só em outra pasta não polui o resultado', () => {
     buscar('impressora');
 
     expect(screen.queryByRole('option', { name: 'Impressora' })).not.toBeInTheDocument();
-    expect(screen.getByRole('button', { name: /Há 1 em outra pasta/ })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /Há \d+ em outra/ })).toBeInTheDocument();
   });
 
   /** O nome técnico é o que o usuário de rede tem na cabeça. */

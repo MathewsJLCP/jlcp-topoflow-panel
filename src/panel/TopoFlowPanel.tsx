@@ -4,10 +4,13 @@ import { locationService } from '@grafana/runtime';
 import { Alert } from '@grafana/ui';
 
 import { TopologyCanvas } from '../canvas/TopologyCanvas';
+import { metricBindings, panelSeries, triggerHosts } from '../data/zabbixQuery';
 import { parseTopoFlowOptions } from '../model/parse';
 import { TopoFlowOptions, Topology } from '../model/types';
+import { useZabbixData } from './useZabbixData';
 
 export function TopoFlowPanel({
+  id,
   options,
   data,
   width,
@@ -15,20 +18,48 @@ export function TopoFlowPanel({
   title,
   timeRange,
   timeZone,
+  eventBus,
+  fieldConfig,
+  replaceVariables,
   onOptionsChange,
 }: PanelProps<TopoFlowOptions>) {
   const { options: parsed, issues, topologyInvalid } = useMemo(() => parseTopoFlowOptions(options), [options]);
+
+  /**
+   * Com a secao Zabbix ligada, o painel executa a propria query de Problems —
+   * ver `./useZabbixProblems.ts` e o bloco 3 do PRD. Desligada (o padrao),
+   * `frames` volta vazio e nada aqui muda.
+   */
+  const zabbixLigado = parsed.zabbix?.enabled === true;
+  const hosts = useMemo(() => triggerHosts(parsed.topology), [parsed.topology]);
+  const metrics = useMemo(() => metricBindings(parsed.topology), [parsed.topology]);
+  const zabbix = useZabbixData({
+    enabled: zabbixLigado,
+    datasource: parsed.zabbix?.datasource,
+    hosts,
+    metrics,
+    range: timeRange,
+    timeZone,
+    panelId: id,
+    eventBus,
+    fieldConfig,
+    replaceVariables,
+  });
 
   /**
    * `getFieldDisplayName` recalcula a cada chamada e pode desambiguar diferente
    * entre chamadas. Aquecer o cache uma vez, no ponto mais alto que consome as
    * series, e o padrao do core — e e o que faz dois hosts na mesma query
    * receberem nomes estaveis.
+   *
+   * Quem junta as duas fontes e `panelSeries` — inclusive a regra de que, com o
+   * Zabbix ligado, os problemas do dashboard cedem lugar aos nossos.
    */
   const series = useMemo(() => {
-    cacheFieldDisplayNames(data.series);
-    return data.series;
-  }, [data.series]);
+    const todos = panelSeries(data.series, zabbix.frames, zabbixLigado);
+    cacheFieldDisplayNames(todos);
+    return todos;
+  }, [data.series, zabbix.frames, zabbixLigado]);
 
   /**
    * O canvas so escreve quando o que ele desenha **e** o que esta salvo.
@@ -88,6 +119,12 @@ export function TopoFlowPanel({
               <li key={issue}>{issue}</li>
             ))}
           </ul>
+        </Alert>
+      )}
+
+      {zabbix.error && (
+        <Alert severity="warning" title="Não foi possível atualizar os problemas do Zabbix">
+          {zabbix.error} O mapa continua mostrando o último estado recebido.
         </Alert>
       )}
 

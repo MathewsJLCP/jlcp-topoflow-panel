@@ -25,16 +25,28 @@ export function addTopoFlowOptions(builder: PanelOptionsEditorBuilder<TopoFlowOp
     Fica **antes** do Canvas na ordem de declaracao porque e a configuracao que
     vale para o mapa inteiro e destrava o autocomplete dos elementos — quem abre
     as opcoes pela primeira vez deve tropecar nela, nao procura-la.
+
+    Um interruptor so, e nao dois: ligado, o editor sugere o catalogo **e** o
+    painel busca os proprios problemas. Ver `zabbixOptionsSchema`.
   */
-  builder.addCustomEditor({
-    id: 'zabbix-datasource',
-    path: 'zabbix.datasource',
-    name: 'Datasource do Zabbix',
-    description: 'Usado só pelo editor, para sugerir hosts e triggers. Os dados continuam vindo das queries do painel.',
-    category: ['Zabbix'],
-    editor: ZabbixSourceField,
-    defaultValue: undefined,
-  });
+  builder
+    .addBooleanSwitch({
+      path: 'zabbix.enabled',
+      name: 'Consultar o Zabbix diretamente',
+      description:
+        'Desligado, o painel usa apenas as queries do dashboard — o comportamento padrão. Ligado, o editor sugere hosts e triggers do Zabbix e o painel busca os próprios dados.',
+      defaultValue: false,
+      category: ['Zabbix'],
+    })
+    .addCustomEditor({
+      id: 'zabbix-datasource',
+      path: 'zabbix.datasource',
+      name: 'Datasource do Zabbix',
+      category: ['Zabbix'],
+      editor: ZabbixSourceField,
+      defaultValue: undefined,
+      showIf: (options) => options.zabbix?.enabled === true,
+    });
 
   builder
     .addBooleanSwitch({

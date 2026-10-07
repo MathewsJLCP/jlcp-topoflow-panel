@@ -139,7 +139,7 @@ mostra um de cada vez:
 
 | Formulário | Grava | Quando aparece |
 | --- | --- | --- |
-| **Host + Item** | `color.metric` | há um datasource Zabbix configurado no painel |
+| **Host + Item** | `color.metric` | a seção **Zabbix** das opções do painel está ligada |
 | **Campo** | `color.field` | não há Zabbix, ou o usuário pediu esse caminho |
 
 O par host+item existe porque escolher pelo nome do field exige que a query já
@@ -159,14 +159,30 @@ Três decisões que o formulário carrega:
   item vazios pareceria que a configuração se perdeu.
 - **Trocar de host limpa o item**, que são itens daquele host.
 
-Enquanto o painel não busca os próprios dados (bloco 3 do PRD), um vínculo por
-host+item cuja série não está em nenhuma query rende um aviso no formulário e
-**NO DATA** no elemento — que é a verdade: a métrica está escolhida e ninguém a
-está medindo.
+Com a seção **Zabbix** ligada, o painel busca a série ele mesmo — e por isso o
+formulário não avisa nada sobre queries ausentes: seria mandar resolver o que a
+seção acabou de resolver.
+
+Os seletores de field do editor (o "Inserir métrica" dos textos, o "Exibir valor"
+do nó, o modo _Field_ das dimensões de texto) listam os frames das queries do
+dashboard, onde essas séries **não estão** — elas só existem quando o painel
+desenha. Com a seção ligada eles passam a oferecer, em ordem:
+
+1. o que já está vinculado na topologia (`useZabbixMetricNames`);
+2. o que veio das queries do dashboard;
+3. o **catálogo** de itens numéricos dos hosts que o mapa usa
+   (`useZabbixItemCatalog`), carregado ao abrir o combo.
+
+A ordem é deliberada: são dezenas de itens por host, e o que o usuário já usa não
+pode afundar no meio deles. O catálogo é carregado em lotes de quatro hosts —
+um mapa com quarenta hosts dispararia oitenta requisições no instante em que
+alguém abre o combo, e do outro lado há um Zabbix de produção.
+
+O aviso de "sem correspondência nas séries" desconta o que o painel busca.
 
 ## Vínculo de trigger: o que a UI precisa comunicar
 
-**Sem um datasource Zabbix configurado**, as listas de host e de trigger só
+**Com a seção Zabbix desligada** — o padrão —, as listas de host e de trigger só
 contêm o que está nos dados agora. Um host sem nenhum problema ativo não aparece
 em lista nenhuma, porque o Query Mode _Problems_ só devolve problemas.
 
@@ -175,7 +191,7 @@ Daí duas decisões de UI, que continuam valendo nos dois casos:
 - os dois combos aceitam valor digitado (`createCustomValue`);
 - host desconhecido é **aviso**, nunca erro.
 
-**Com um Zabbix configurado**, a lista passa a ser o catálogo do Zabbix e os
+**Com a seção ligada**, a lista passa a ser o catálogo do Zabbix e os
 frames viram complemento: o que veio dos dados e não voltou da API (limite de
 resultados, permissão, host removido de lá mas ainda no frame) continua
 escolhível. Nenhuma escolha já possível deixa de ser possível, e falha na API cai
@@ -217,12 +233,13 @@ válidas para sempre:
 - **desconhecida** — pack removido, ícone renomeado, JSON à mão. Cai no genérico
   em vez de sumir: um ícone que não existe mais não pode fazer o nó desaparecer.
 
-Três packs, nesta ordem (packs de domínio vêm **depois** dos gerais):
+Quatro packs, nesta ordem (packs de domínio vêm **depois** dos gerais):
 
 | Pack          | Rótulo      | Natureza   | Nota                                                                        |
 | ------------- | ----------- | ---------- | --------------------------------------------------------------------------- |
 | `topoflow`    | Padrão      | `variants` | 11 famílias × 6 tons, estilo mapa do Zabbix                                 |
 | `classic`     | Clássicos   | `glyph`    | os 10 originais; id não é `default` porque o pack padrão passou a ser outro |
+| `zabbix`      | Zabbix      | `image`    | o conjunto de mapas do Zabbix, inteiro (43), mais o `ap`                    |
 | `petrolifera` | Petrolífera | `image`    | ativos do ramo do cliente + rádios de campo                                 |
 
 Laranja e verde do pack `topoflow` foram **derivados por rotação de matiz** dos
@@ -231,10 +248,26 @@ azul do servidor e a lente da câmera giravam junto e o ícone deixava de ser o
 mesmo desenho. O codec PNG foi escrito à mão — não há Pillow nem ImageMagick na
 máquina de desenvolvimento.
 
-O pack `petrolifera` é `image`: fotos e ilustrações de produto, sem a mesma arte
-em seis tons (uma sonda de outra cor não é "a sonda em alarme"). Logo **não
-anuncia estado** — quem anuncia é a placa opaca da cápsula — e o campo "Cor do
-ícone" não aparece.
+Os packs `zabbix` e `petrolifera` são `image`: renderizações e fotos de produto,
+com as cores do equipamento real e sem a mesma arte em seis tons (uma sonda de
+outra cor não é "a sonda em alarme"). Logo **não anunciam estado** — quem anuncia
+é a placa opaca da cápsula — e o campo "Cor do ícone" não aparece para eles.
+
+O pack `zabbix` entrou **inteiro**, com os 43 arquivos do conjunto original
+(decisão do usuário em 2026-09-10), mais um 44º que não é do Zabbix: `ap`, a foto
+do UniFi AC Lite, porque o conjunto original não tem ponto de acesso. O arquivo
+está **copiado** do pack `petrolifera`, e não importado dele — os dois packs têm
+pendência de licença própria e precisam ser removíveis de forma independente. O
+webpack nomeia asset por hash de conteúdo, então as duas cópias viram um arquivo
+só no bundle. Isso inclui as peças de **elevação de rack**,
+que não são ícones de nó: `server-1u-2d` tem 128×9 px e num nó de 20px vira um
+fio de 1,4 px. O lugar delas é o elemento **Imagem**, de tamanho livre. Pela
+mesma razão **2D e 3D entraram os dois** — ao contrário dos tamanhos repetidos do
+pack `petrolifera`, que eram o mesmo desenho: aqui são projeções distintas, e uma
+pilha de rack só fecha se todas as peças estiverem na mesma. A ordem dentro do
+pack é por família (rede, servidores, rack, terminais), não alfabética: com 44
+itens numa grade, alfabética põe `cloud` entre `crypto-router` e `disk-array` e
+procurar vira ler tudo.
 
 Decisões do seletor que são escolha, não acaso: escolha **imediata** no clique
 (sem rodapé de confirmação — o canvas já mostra o resultado e o undo do dashboard

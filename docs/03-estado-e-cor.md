@@ -48,6 +48,10 @@ qualificado assim mesmo, para a cadeia cair em `nodata`. Devolver `undefined` al
 faria o elemento exibir a Base — dizendo "nada acontecendo" sobre algo que
 ninguém está medindo.
 
+Com a seção **Zabbix** ligada não há ambiguidade nenhuma: o painel renomeia as
+séries que busca para exatamente `"<host>: <item>"`, com a grafia de host que o
+vínculo guardou — o primeiro candidato sempre casa.
+
 `nodata` e `neutral` não carregam cor de propósito: não são ausência por
 descuido, são estados cujo tratamento visual é decisão de cada elemento (o point
 cai em `primary.main`, o texto em `text.primary`, a aresta em `border.medium`).

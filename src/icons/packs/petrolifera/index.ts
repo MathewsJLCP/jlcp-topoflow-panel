@@ -30,7 +30,7 @@ import i_unifi_ac_pro from './unifi-ac-pro.png';
  * ## O que veio da pasta do cliente e o que ficou de fora
  *
  * O material chegou com a **mesma arte repetida em varios tamanhos**
- * (`ESTACAO` em cinco, `SONDA` em tres, `TORRE` em dois). Entrou **um arquivo
+ * (`ESTACAO` em cinco, `SONDA` em tres, `TORRE` em dois na epoca). Entrou **um arquivo
  * por familia**, o maior que ainda e leve: dois tamanhos do mesmo desenho seriam
  * duas entradas no seletor sem diferenca visivel, e a escolha entre elas so
  * poderia ser errada. O navegador reduz melhor do que ampliaria, entao o maior e
@@ -45,6 +45,24 @@ import i_unifi_ac_pro from './unifi-ac-pro.png';
  *
  * `SONDA_FRAC` ficou como icone proprio (`sonda-frac`): apesar do nome, e outro
  * desenho — a unidade de fraturamento sobre carreta, nao a torre de perfuracao.
+ *
+ * ## A torre foi trocada (2026-09-10)
+ *
+ * `torre` era o `TORRE_300` original — um pictograma azul de 128x128, antena de
+ * treliça simples. O usuario mandou remover os dois tamanhos antigos e substituiu
+ * pela arte nova: uma torre de telecom vermelha, com refletores parabolicos, em
+ * 129x450.
+ *
+ * Duas consequencias que o arquivo nao conta:
+ *
+ *   - **E alta**, quase 1:3.5. Num no de 20px a figura ocupa ~6px de largura.
+ *     Continua legivel porque a silhueta de torre e vertical por natureza — e o
+ *     mesmo motivo pelo qual as tiras de rack do pack `zabbix` *nao* funcionam
+ *     ali: la a proporcao briga com o desenho, aqui ela e o desenho.
+ *   - **E vermelha**, e vermelho e a cor de alarme deste produto. Como todo
+ *     icone `image`, ela nao anuncia estado — quem anuncia e a placa da capsula
+ *     atras — mas um nó saudavel com uma torre vermelha depende do operador ler
+ *     a placa, e nao a figura. Fica registrado; a escolha da arte e do usuario.
  *
  * Como no pack Padrao, a lista e explicita: `require.context` esconderia do
  * compilador quais arquivos existem.

@@ -1,5 +1,90 @@
 # Changelog
 
+## 1.3.0 — 2026-09-10
+
+### O painel busca os próprios problemas
+
+- **A seção _Zabbix_ virou um interruptor.** Ligada, o editor sugere hosts e
+  triggers do catálogo **e** o painel executa a própria query de Problems para os
+  hosts vinculados — o que **dispensa a query no dashboard**, que é o trabalho
+  manual que esta rodada inteira existe para eliminar. Desligada, e é o padrão,
+  tudo vem das queries do dashboard, como sempre veio.
+- **Vale para os dois vínculos: trigger e métrica.** Uma query só de _Problems_
+  para o mapa inteiro, por mais elementos que ele tenha, e uma query de métrica
+  por host, com os itens daquele host. Os problemas não ficam presos à janela de
+  tempo do dashboard: um alarme aberto há oito horas continua visível com o
+  dashboard em "últimas 6 horas".
+- Unidade, casas decimais e value mappings do painel **continuam valendo** nas
+  séries que o painel busca, e passam a valer na hora em que são editados, sem
+  ir buscar o dado de novo.
+- Atualiza no refresh do dashboard (botão, intervalo automático) e ao mudar a
+  janela de tempo.
+- Com a seção ligada, os problemas que vierem de uma query do dashboard **cedem
+  lugar** aos do painel: as duas fontes trazem os mesmos alarmes, e somadas
+  fariam cada um contar duas vezes. As séries de métrica do dashboard continuam
+  valendo.
+- O aviso "nenhuma query de Problems neste painel" some com a seção ligada — ele
+  mandava resolver um problema que o usuário acabou de dispensar.
+- Falha ao atualizar **preserva o último estado** e avisa no topo do painel —
+  num telão, apagar o mapa é pior que mostrar o estado de um minuto atrás.
+
+### Biblioteca de ícones: pack Zabbix
+
+- **O conjunto de ícones dos mapas do Zabbix entrou na biblioteca**, inteiro: 43
+  desenhos numa pasta *Zabbix*, entre *Clássicos* e *Petrolífera*. Quem já montou
+  o mesmo mapa no Zabbix reconhece cada um sem ler o rótulo.
+- Mais um **AP**, que o conjunto do Zabbix não tem: é a mesma foto do UniFi AC
+  Lite que já estava no pack *Petrolífera*. São 44 na pasta.
+- Roteador, switch, hub, firewall, modem, nuvem, satélite, SAN, PABX, estação,
+  notebook, impressora — e as versões **símbolo** do roteador, do roteador cripto
+  e do PABX IP, que são o desenho esquemático em vez do equipamento.
+- Vieram junto as peças de **elevação de rack** (servidores 1U a 5U, no-break de
+  rack, array de discos e servidor Zabbix, cada um em 2D e 3D, mais os dois racks
+  de 42U). São tiras muito largas: num nó de 20px viram um fio. O lugar delas é o
+  elemento **Imagem**, que tem tamanho livre e onde dá para empilhar uma
+  elevação — e por isso 2D e 3D estão os dois, já que uma pilha só fecha se todas
+  as peças estiverem na mesma projeção.
+- Como no pack *Petrolífera*, são figuras com cor própria: **não anunciam
+  estado** (quem anuncia é a placa da cápsula, atrás delas) e o campo "Cor do
+  ícone" não aparece para eles.
+- **Pendência de licença.** Estes ícones são GPL-2.0 e o plugin é Apache-2.0.
+  Enquanto isso não se resolver, o plugin não deveria ser assinado e publicado
+  com eles. Ver [doc 09](docs/09-pendencias-e-roadmap.md).
+
+### Correções e ajustes de ícone
+
+- **A Torre do pack _Petrolífera_ é outra arte**: uma torre de telecom com
+  refletores, no lugar do pictograma de antena que estava lá. As duas versões
+  antigas saíram.
+
+### Melhorias
+
+- **Os seletores de métrica do editor passam a oferecer o Zabbix.** "Inserir
+  métrica", "Exibir valor" e o modo _Field_ dos textos listam, junto com o que
+  veio das queries, o que já está vinculado **e o catálogo de itens numéricos dos
+  hosts que o mapa usa** — carregado ao abrir o combo, em lotes, e reaproveitado
+  por 30 segundos. Antes, nada disso existia ali: o campo prometia o que não
+  entregava.
+- **O painel busca também a métrica que só um texto menciona.** Todo
+  `${host: item}` escrito num rótulo, legenda ou texto entra na query, assim como
+  o field escolhido em "Exibir valor". Nome que não corresponda a um host do
+  Zabbix é descartado sem custo.
+- **Fim dos dois avisos que mandavam resolver o que a seção já resolveu**: nem
+  "essa métrica não está nas queries do painel" no vínculo por métrica, nem
+  "sem correspondência nas séries" para uma métrica que o painel busca e exibe.
+
+- **"Exibir valor" sem métrica escolhida passa a mostrar a do estado** — a mesma
+  que pinta o elemento —, em vez de um travessão. É o que o toggle promete, e é
+  a única saída quando a métrica foi escolhida por host + item: nesse caso a
+  série só existe quando o painel busca sozinho, e o seletor de field lista
+  apenas o que veio das queries do dashboard.
+
+### Correções
+
+- **A lista de hosts do combo não é mais espaçada.** Todas as linhas vinham com
+  altura de duas, a segunda em branco: o `Combobox` decide a altura por presença
+  da _chave_ `description`, e nós a mandávamos sempre, mesmo vazia.
+
 ## 1.2.0 — 2026-09-09
 
 ### Vínculo direto com o Zabbix
