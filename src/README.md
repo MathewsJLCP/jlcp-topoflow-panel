@@ -38,7 +38,7 @@ aba.
 
 - Grafana **12.3.0** ou superior.
 - Para vínculo com triggers: o datasource
-  [Zabbix](https://grafana.com/grafana/plugins/alexanderzobnin-zabbix-datasource/),
+  [Zabbix](https://grafana.com/grafana/plugins/alexanderzobnin-zabbix-app/),
   com pelo menos uma query em Query Mode *Problems* no painel.
 
 Nenhum backend, nenhuma configuração de servidor: tudo vive no JSON do dashboard.

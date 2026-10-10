@@ -54,3 +54,6 @@ ci/
 /shot-*.png
 /temp/
 /tests/probe.spec.ts
+
+# Cache do npx usado pelo plugin-validator (skill validate-plugin)
+/.cache/

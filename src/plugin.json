@@ -7,14 +7,19 @@
     "keywords": ["panel", "topology", "network", "map", "zabbix", "noc", "diagram"],
     "description": "Mapas de topologia editáveis: desenhe a rede no dashboard e vincule cada elemento a uma métrica ou a uma trigger do Zabbix.",
     "author": {
-      "name": "Matheus-Jlcp"
+      "name": "Matheus Domingos- Jlcp"
     },
     "logos": {
       "small": "img/logo-small.svg",
       "large": "img/logo.svg"
     },
     "links": [],
-    "screenshots": [],
+    "screenshots": [
+      { "name": "Mapa de rede no tema escuro", "path": "img/screenshots/mapa-escuro.png" },
+      { "name": "Mapa de rede no tema claro", "path": "img/screenshots/mapa-claro.png" },
+      { "name": "Gráfico das métricas no hover", "path": "img/screenshots/hover-grafico.png" },
+      { "name": "Editor de elementos no painel de opções", "path": "img/screenshots/editor.png" }
+    ],
     "version": "%VERSION%",
     "updated": "%TODAY%"
   },
