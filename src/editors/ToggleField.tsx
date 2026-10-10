@@ -1,64 +1,63 @@
 import React from 'react';
 import { css } from '@emotion/css';
 import { GrafanaTheme2 } from '@grafana/data';
-import { PopoverContent, Switch, useStyles2 } from '@grafana/ui';
+import { PopoverContent, useStyles2 } from '@grafana/ui';
 
+import { FONT_SANS, TfPalette, tfPalette } from '../theme/palette';
 import { FieldLabel } from './FieldLabel';
-
-interface ToggleFieldProps {
-  label: string;
-  /** Mesma regra do `FieldLabel`: explicacao atras do icone, nunca no corpo. */
-  info?: PopoverContent;
-  enabled: boolean;
-  onToggle: (enabled: boolean) => void;
-  children: React.ReactNode;
-}
+import { TfSwitch } from './ui/TfSwitch';
 
 /**
- * Campo opcional: um `Switch` com rotulo e, quando ligado, o controle de fato.
+ * Linha com chave, no desenho do mockup: rotulo (12.5px, `tx`) com a descricao
+ * opcional embaixo, e a chave a direita. Ligada, o conteudo aparece logo abaixo.
  *
- * O formulario do no acumulou campos que nem todo no usa. Todos visiveis o tempo
- * todo, o que e opcional fica indistinguivel do que e essencial — e o nome do no
- * (o unico campo obrigatorio) some no meio da lista. Com o toggle, o formulario
- * de um no simples ocupa quatro linhas.
+ * Os campos opcionais sao governados pela **presenca do valor** — desligar apaga
+ * o campo; nao ha segundo estado para manter em sincronia.
  */
-export function ToggleField({ label, info, enabled, onToggle, children }: ToggleFieldProps) {
+interface ToggleFieldProps {
+  label: string;
+  info?: PopoverContent;
+  /** Texto curto sob o rotulo (o `desc` do mockup). */
+  description?: string;
+  enabled: boolean;
+  onToggle: (enabled: boolean) => void;
+  children?: React.ReactNode;
+}
+
+export function ToggleField({ label, info, description, enabled, onToggle, children }: ToggleFieldProps) {
   const styles = useStyles2(getStyles);
   const id = React.useId();
 
   return (
     <div className={styles.toggleField}>
       <div className={styles.toggleRow}>
-        <label className={styles.toggleLabel} htmlFor={id}>
-          <FieldLabel info={info}>{label}</FieldLabel>
-        </label>
-        <Switch id={id} value={enabled} onChange={(event) => onToggle(event.currentTarget.checked)} />
+        <div className={styles.text}>
+          <label className={styles.toggleLabel} htmlFor={id}>
+            <FieldLabel info={info}>{label}</FieldLabel>
+          </label>
+          {description && <span className={styles.description}>{description}</span>}
+        </div>
+        <TfSwitch id={id} checked={enabled} onChange={onToggle} />
       </div>
 
       {/* Os controles internos nao repetem o rotulo: quem esta dentro de um
-          `ToggleField` ja foi nomeado na linha do switch. */}
-      {enabled && <div className={styles.toggleBody}>{children}</div>}
+          `ToggleField` ja foi nomeado na linha da chave. */}
+      {enabled && children && <div className={styles.toggleBody}>{children}</div>}
     </div>
   );
 }
 
-const getStyles = (theme: GrafanaTheme2) => ({
-  toggleField: css({
-    marginBottom: theme.spacing(2),
-  }),
-  toggleRow: css({
-    display: 'flex',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    gap: theme.spacing(1),
-  }),
-  toggleLabel: css({
-    color: theme.colors.text.primary,
-    fontSize: theme.typography.bodySmall.fontSize,
-    fontWeight: theme.typography.fontWeightMedium,
-    cursor: 'pointer',
-  }),
-  toggleBody: css({
-    marginTop: theme.spacing(1),
-  }),
-});
+const getStyles = (theme: GrafanaTheme2) => {
+  const p: TfPalette = tfPalette(theme);
+  return {
+    toggleField: css({ display: 'flex', flexDirection: 'column', gap: 12 }),
+    toggleRow: css({ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 10 }),
+    text: css({ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column', gap: 3 }),
+    toggleLabel: css({
+      '&&': { font: `500 12.5px/1.35 ${FONT_SANS}`, color: p.tx },
+      cursor: 'pointer',
+    }),
+    description: css({ font: `11.5px/1.4 ${FONT_SANS}`, color: p.apa }),
+    toggleBody: css({ display: 'flex', flexDirection: 'column', gap: 12 }),
+  };
+};

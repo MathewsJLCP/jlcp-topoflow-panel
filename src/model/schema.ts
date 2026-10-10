@@ -60,9 +60,21 @@ export const textDimensionSchema = z.object({
   field: z.string().optional(),
 });
 
-/** Metrica exibida dentro do no. Sem `field`, o no nao exibe metrica. */
+/**
+ * "Exibir valor" do no. A presenca do objeto e o toggle; o conteudo diz quais
+ * metricas aparecem.
+ *
+ *   - `fromState` — as metricas que definem o estado (todas, na v1.4, que pode
+ *     ter mais de uma). Ausente significa **ligado, a menos que haja `field`**:
+ *     um no salvo antes da v1.4 com `field` escolhido exibia so aquele field, e
+ *     continua exibindo so ele.
+ *   - `fields` — metricas extras, alem das do estado.
+ *   - `field` — a metrica unica de antes da v1.4. Lida como mais uma extra.
+ */
 export const valueDimensionSchema = z.object({
   field: z.string().optional(),
+  fromState: z.boolean().optional(),
+  fields: z.array(z.string()).optional(),
 });
 
 /**
@@ -255,6 +267,26 @@ export const elementThresholdsSchema = z.object({
 });
 
 /**
+ * Uma metrica **alem da primeira** que define o estado do elemento (v1.4).
+ *
+ * A primeira continua onde sempre esteve — `color.field`/`color.metric` com as
+ * regras em `thresholds.steps` —, entao topologia salva antes da v1.4 nao muda
+ * de forma e nao ha migrador. As seguintes vivem em `extraMetrics`, cada uma com
+ * o proprio vinculo e as proprias regras. Com mais de uma, vence a regra de
+ * maior gravidade (ver `elementColor`).
+ */
+export const metricBindingSchema = z.object({
+  field: z.string().optional(),
+  metric: z
+    .object({
+      host: z.string(),
+      item: z.string(),
+    })
+    .optional(),
+  steps: z.array(elementRuleSchema).default([]),
+});
+
+/**
  * Vinculo a uma trigger do Zabbix, lida dos frames de uma query em Query Mode
  * *Problems*. O plugin nunca chama a API do Zabbix: os dados entram pelo Query
  * Editor nativo do painel e nos so lemos o `DataFrame`.
@@ -359,7 +391,7 @@ export const triggerBindingSchema = z.preprocess(
      * "4 incidentes ativos", para a topologia densa em que o operador quer saber
      * **quanto** esta caindo e vai ao hover para saber **o que**.
      */
-    activeDisplay: z.enum(['list', 'count']).optional(),
+    activeDisplay: z.enum(['list', 'count', 'inside', 'strip', 'counter', 'total']).optional(),
   })
 );
 
@@ -437,6 +469,8 @@ export const topoNodeSchema = z.object({
   trigger: triggerBindingSchema.optional(),
   /** Ausente = sem regra de metrica; o elemento repousa na Base (`color.fixed`). */
   thresholds: elementThresholdsSchema.optional(),
+  /** Metricas de estado alem da primeira (v1.4). Ver `metricBindingSchema`. */
+  extraMetrics: z.array(metricBindingSchema).optional(),
   /** Ausente = o elemento nao se move em alerta. */
   alert: elementAlertSchema.optional(),
   /** Ausente = clicar no no nao leva a lugar nenhum. */
@@ -471,6 +505,8 @@ export const topoEdgeSchema = z.object({
   trigger: triggerBindingSchema.optional(),
   /** Ausente = sem regra de metrica; a aresta repousa na Base (`color.fixed`). */
   thresholds: elementThresholdsSchema.optional(),
+  /** Metricas de estado alem da primeira (v1.4). Ver `metricBindingSchema`. */
+  extraMetrics: z.array(metricBindingSchema).optional(),
   /** Ausente = a aresta nao se move em alerta. */
   alert: elementAlertSchema.optional(),
   width: z.number().min(1).max(10),
@@ -483,6 +519,11 @@ export const topoEdgeSchema = z.object({
   // `.default` pelo mesmo motivo dos arrays da topologia: arestas salvas antes
   // do Bloco 4 continuam validando sem migracao.
   animation: z.enum(['none', 'dash-flow', 'flow', 'pulse']).default('none'),
+  /**
+   * Vertices do trajeto (v1.4), em coordenadas do canvas, da origem ao destino.
+   * Ausente ou vazio = linha direta, como sempre foi.
+   */
+  waypoints: z.array(z.object({ x: z.number(), y: z.number() })).optional(),
 });
 
 /** No simplificado: ancora de roteamento. Sem texto, sem icone, sem valor. */
@@ -496,6 +537,8 @@ export const topoPointSchema = z.object({
   trigger: triggerBindingSchema.optional(),
   /** Ausente = sem regra de metrica; o point repousa na Base (`color.fixed`). */
   thresholds: elementThresholdsSchema.optional(),
+  /** Metricas de estado alem da primeira (v1.4). Ver `metricBindingSchema`. */
+  extraMetrics: z.array(metricBindingSchema).optional(),
   /** Ausente = o point nao se move em alerta. */
   alert: elementAlertSchema.optional(),
   /** Grafico da metrica no hover. Ver `chart` em `topoNodeSchema`. */
@@ -676,6 +719,8 @@ export const topoImageSchema = z.object({
   color: colorDimensionSchema,
   trigger: triggerBindingSchema.optional(),
   thresholds: elementThresholdsSchema.optional(),
+  /** Metricas de estado alem da primeira (v1.4). Ver `metricBindingSchema`. */
+  extraMetrics: z.array(metricBindingSchema).optional(),
   alert: elementAlertSchema.optional(),
   /** Ausente = clicar na imagem nao leva a lugar nenhum. */
   drilldown: drilldownSchema.optional(),

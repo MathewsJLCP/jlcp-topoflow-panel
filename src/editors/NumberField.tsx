@@ -1,44 +1,35 @@
 import React from 'react';
-import { Field, Input, PopoverContent } from '@grafana/ui';
+import { css } from '@emotion/css';
+import { GrafanaTheme2 } from '@grafana/data';
+import { Field, Input, PopoverContent, useStyles2 } from '@grafana/ui';
 
+import { FONT_MONO, FONT_SANS, TfPalette, tfPalette } from '../theme/palette';
 import { FieldLabel } from './FieldLabel';
 
 /**
- * Campo numerico com faixa, que **deixa digitar**.
+ * Campo numerico com rascunho: o texto digitado fica na tela enquanto nao
+ * forma um numero valido (apagar para redigitar nao grava zero), e so numeros
+ * dentro da faixa sao gravados.
  *
- * O jeito obvio — validar a cada tecla e cair no valor anterior quando invalido
- * — trava o campo. Para trocar 16 por 24 num campo de minimo 8, o usuario digita
- * "2" antes de "24"; "2" esta fora da faixa, o valor volta a 16 na mesma tecla,
- * e o segundo digito passa a editar "16". Na pratica, nenhum numero de dois
- * digitos comecado abaixo do minimo era alcancavel. Era o bug do "Tamanho da
- * fonte" — nao um detalhe de UX, um campo que nao dava para usar.
- *
- * A saida e separar o que esta na tela do que esta salvo: o texto digitado vive
- * aqui em estado local e so vira valor quando **e** valido. Nada fora da faixa
- * chega ao modelo, que e o que importa — um `fontSize: 2` gravado reprovaria no
- * Zod e derrubaria a topologia inteira para os defaults na proxima leitura.
- *
- * Ao sair do campo, o texto volta ao ultimo valor valido: sem isso um "2"
- * abandonado ficaria na tela sugerindo um estado que nao existe no modelo.
+ * `inline` e o formato do mockup: o rotulo dentro da caixa, a esquerda, e o
+ * numero a direita — como o par Largura/Altura e a espessura da borda.
  */
-
 interface NumberFieldProps {
   label: string;
   info?: PopoverContent;
   value: number;
   min: number;
   max?: number;
-  /** Sufixo visual, tipo `px`. Nao entra no valor. */
   suffix?: string;
+  inline?: boolean;
   onChange: (value: number) => void;
 }
 
-export function NumberField({ label, info, value, min, max, suffix, onChange }: NumberFieldProps) {
+export function NumberField({ label, info, value, min, max, suffix, inline, onChange }: NumberFieldProps) {
+  const styles = useStyles2(getStyles);
+  const id = React.useId();
   const [raw, setRaw] = React.useState(() => String(value));
 
-  // Ressincroniza quando o valor muda por fora (outro elemento selecionado,
-  // undo). Ajuste durante o render, e nao em efeito: e o padrao que o React
-  // documenta para estado derivado de props, ja usado no `ElementsEditor`.
   const [lastValue, setLastValue] = React.useState(value);
   if (value !== lastValue) {
     setLastValue(value);
@@ -47,14 +38,30 @@ export function NumberField({ label, info, value, min, max, suffix, onChange }: 
 
   const handleChange = (next: string) => {
     setRaw(next);
-
-    const parsed = Number(next);
+    const parsed = Number(next.replace(',', '.'));
     const dentroDaFaixa = parsed >= min && (max === undefined || parsed <= max);
-
     if (next.trim() !== '' && Number.isFinite(parsed) && dentroDaFaixa) {
       onChange(parsed);
     }
   };
+
+  if (inline) {
+    return (
+      <label className={styles.box} htmlFor={id}>
+        <span className={styles.boxLabel}>{label}</span>
+        <input
+          id={id}
+          className={styles.boxInput}
+          inputMode="decimal"
+          value={raw}
+          aria-label={label}
+          onChange={(event) => handleChange(event.currentTarget.value)}
+          onBlur={() => setRaw(String(value))}
+        />
+        {suffix && <span className={styles.boxLabel}>{suffix}</span>}
+      </label>
+    );
+  }
 
   return (
     <Field label={<FieldLabel info={info}>{label}</FieldLabel>}>
@@ -70,3 +77,39 @@ export function NumberField({ label, info, value, min, max, suffix, onChange }: 
     </Field>
   );
 }
+
+const getStyles = (theme: GrafanaTheme2) => {
+  const p: TfPalette = tfPalette(theme);
+  return {
+    box: css({
+      '&&': {
+        minWidth: 0,
+        display: 'flex',
+        alignItems: 'center',
+        gap: 6,
+        background: p.elev,
+        border: `1px solid ${p.borda}`,
+        borderRadius: 6,
+        padding: '0 8px',
+        cursor: 'text',
+      },
+      '&:focus-within': { borderColor: p.ac },
+    }),
+    boxLabel: css({ flex: 'none', font: `11px ${FONT_SANS}`, color: p.apa }),
+    boxInput: css({
+      '&&': {
+        width: 0,
+        flex: 1,
+        minWidth: 0,
+        border: 0,
+        background: 'transparent',
+        padding: '7px 0',
+        font: `13px ${FONT_MONO}`,
+        color: p.tx,
+        outline: 'none',
+        textAlign: 'right',
+        boxShadow: 'none',
+      },
+    }),
+  };
+};

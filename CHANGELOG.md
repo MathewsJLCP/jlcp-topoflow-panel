@@ -1,5 +1,77 @@
 # Changelog
 
+## 1.4.0 — 2026-10-09
+
+### Layout novo, inteiro
+
+O painel foi redesenhado a partir do mockup feito no Claude Design. Mudou a cara
+de **todos** os elementos, do canvas e do editor; nada salvo precisa ser editado.
+
+- **Paleta e tipografia próprias.** Escuro e claro do mockup, escolhidos pelo
+  tema do Grafana, e **IBM Plex Sans/Mono embutidas no plugin** — funcionam em
+  Grafana sem saída para a internet. As cores nomeadas que já estavam salvas
+  (`red`, `orange`, `green`...) resolvem para os tons da paleta nova.
+- **Nó:** cartão de cantos arredondados com um **círculo de status** no canto —
+  `✓` na Base, `!` em alarme, `!!` em Disaster, `–` sem dados. O estado pinta a
+  borda e tinge o fundo; o Disaster tem borda mais grossa e fundo mais saturado.
+  Abaixo do nome, o bloco de valores: número grande com uma métrica, uma linha
+  compacta por métrica com várias, e uma **barra com marcas onde cada threshold
+  começa**.
+- **Imagem:** o estado pinta o ícone e o círculo de status (que pousa no canto
+  do desenho, não da caixa). O fundo é opcional e segue a cor do estado.
+- **Point, Postit e Texto** no desenho novo — o Postit ganhou a etiqueta de
+  título com a cor e as quatro alças de canto.
+- **Conexões com seta**, tracejado proporcional à espessura e rótulo em cartão
+  mono. Conexões entre o mesmo par se afastam e os rótulos vão para fora.
+- **Controles, menu de contexto, avisos e popover de hover** no desenho do
+  mockup. O hover mostra os incidentes (severidade, nome, idade) ou o gráfico —
+  agora com as linhas de threshold da métrica e um gráfico por métrica.
+
+### Biblioteca de ícones nova
+
+- **Os packs em PNG e os glifos dos Clássicos saíram; entraram os desenhos SVG
+  do mockup**: Padrão (28), Infra (43 — o antigo pack Zabbix, redesenhado),
+  Petrolífera (9), Formas (15) e Planos (164). **Todo ícone acompanha o estado**:
+  o mesmo roteador sai azul, verde ou vermelho.
+- Topologias salvas abrem com o desenho equivalente: cada chave antiga
+  (`router`, `classic/switch`, `topoflow/router`, `zabbix/rack-42`,
+  `petrolifera/unifi-ac-mesh`...) é levada ao ícone novo. As quatro variantes de
+  UniFi viraram uma só.
+- O seletor de ícones virou uma janela com as pastas, a busca (com sinônimos) e a
+  grade.
+- Os ícones do Infra (ex-Zabbix) são arte própria: a pendência de licença GPL
+  deixou de existir.
+
+### Novidades
+
+- **Várias métricas por elemento.** Cada uma com o próprio campo (ou host +
+  item) e as próprias regras; vence a regra de maior gravidade — vermelho ›
+  laranja › âmbar › sem dados › azul › verde. Uma métrica muda não se esconde
+  atrás do verde de outra.
+- **"Exibir valor" com várias métricas**: as do estado e quantas extras quiser.
+- **Cinco formatos de problemas**: Dentro do nó, Faixa (barra segmentada por
+  severidade), Contador (o número no círculo de status), Lista e Total. Os três
+  primeiros vivem dentro do cartão, então são só do nó.
+- **Vértices nas conexões.** Selecionada, a conexão mostra um `+` em cada
+  segmento (arraste para criar um vértice) e os vértices existentes
+  (arrastáveis; duplo clique ou Delete remove). Duplo clique na linha também
+  cria. O menu de contexto ganhou "Adicionar vértice aqui", "Remover vértice" e
+  "Limpar trajeto"; inverter a direção inverte o trajeto, e arrastar os dois
+  extremos juntos leva os vértices junto.
+- **Editor no desenho do mockup**: o cartão do elemento aberto (com Duplicar,
+  Excluir e fechar), seções com título, a lista "Elementos" agrupada por tipo com
+  a cor do estado de cada um.
+
+### Mudanças de comportamento
+
+- **"Adicionar elemento" e o menu do canvas não oferecem mais Point**, como no
+  mockup: o trajeto das conexões cumpre o papel que ele tinha. Points salvos
+  continuam funcionando e editáveis.
+- O fundo novo da Imagem segue o estado; o fundo sólido de antes continua
+  valendo para quem o tem salvo.
+- O seletor "Cor do ícone" saiu (no mockup o ícone sempre acompanha o estado); a
+  cor fixada antes continua respeitada.
+
 ## 1.3.0 — 2026-09-10
 
 ### O painel busca os próprios problemas

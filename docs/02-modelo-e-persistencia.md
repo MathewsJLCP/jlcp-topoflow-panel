@@ -221,3 +221,17 @@ não há nenhum elemento.
   o postit chegou a divergir (240x180 contra 240x280).
 - **Ids são curtos e legíveis** (`node-1`, `edge-2`), únicos dentro da topologia
   e não globalmente.
+
+## Campos da v1.4
+
+Todos opcionais, sem migrador:
+
+| Campo | Onde | Ausente significa |
+| --- | --- | --- |
+| `extraMetrics: { field?, metric?, steps }[]` | nó, point, imagem, conexão | uma métrica só (a de sempre, em `color` + `thresholds`) |
+| `value.fromState`, `value.fields` | nó | `fromState` ligado, a menos que haja o `value.field` de antes |
+| `trigger.activeDisplay`: + `inside`, `strip`, `counter`, `total` | todos com trigger | `list` (enum ampliado; `count` segue lido como Total) |
+| `waypoints: { x, y }[]` | conexão | linha direta |
+
+As chaves de ícone dos packs em PNG continuam no JSON como estavam; quem as
+traduz é a leitura (`LEGACY` em `icons/registry.ts`), não uma escrita.

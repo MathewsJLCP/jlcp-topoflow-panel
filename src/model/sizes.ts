@@ -8,17 +8,17 @@
  * 240x280 em `defaults.ts`.
  */
 
-export const DEVICE_NODE_WIDTH = 180;
+export const DEVICE_NODE_WIDTH = 184;
 
 /**
  * Piso, nao teto. O card cresce quando o titulo quebra em varias linhas; o que
  * `size.height` define e a altura minima (`minHeight`), para que um nome longo
  * nunca seja truncado.
  */
-export const DEVICE_NODE_HEIGHT = 60;
+export const DEVICE_NODE_HEIGHT = 64;
 
 /** O point nao persiste `size`: e sempre este diametro. */
-export const POINT_NODE_SIZE = 14;
+export const POINT_NODE_SIZE = 16;
 
 export const POSTIT_DEFAULT = { width: 250, height: 170, minWidth: 160, minHeight: 100 };
 

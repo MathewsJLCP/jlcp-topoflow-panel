@@ -1,145 +1,183 @@
-import { FieldType, createTheme, toDataFrame } from '@grafana/data';
+import {
+  DataFrame,
+  FieldType,
+  cacheFieldDisplayNames,
+  createTheme,
+  getDisplayProcessor,
+  toDataFrame,
+} from '@grafana/data';
 
-import { ActiveProblem } from '../../data/triggerState';
-import { Severity, TopoNode } from '../../model/types';
-import { badgeField, resolveBadge } from './DeviceNode';
+import { ElementColor } from '../../data/elementColor';
+import { TopoNode } from '../../model/types';
+import { TF_DARK } from '../../theme/palette';
+import { nodeSurface, stateLook, statusBadge } from '../look';
+import { nodeStats, statFields, statLabel } from '../nodeStats';
 
 const theme = createTheme();
 
 /**
- * Um acento de trigger sempre carrega ao menos um problema — sem problema nao
- * haveria alarme. O helper existe para que cada caso escreva so o que importa
- * nele: a severidade e **quantas** triggers estao abertas.
+ * O desenho do no e decidido por funcoes puras (`look`, `nodeStats`);
+ * renderizar o componente exigiria o contexto do React Flow para os `Handle`s e
+ * testaria layout, nao decisao.
  */
-const alarmando = (severity: Severity, label: string, count = 1): ActiveProblem[] =>
-  Array.from({ length: count }, (_, index) => ({
-    name: `Trigger ${index + 1}`,
-    severity,
-    label,
-    color: '#f00',
-  }));
+const no = (overrides: Partial<TopoNode>): TopoNode =>
+  ({
+    id: 'n',
+    position: { x: 0, y: 0 },
+    size: { width: 184, height: 64 },
+    presentation: { primaryText: { mode: 'fixed', fixed: 'n' }, showIcon: true },
+    color: {},
+    zIndex: 0,
+    ...overrides,
+  }) as TopoNode;
 
-/**
- * O badge e o unico lugar do no onde o estado vira texto. Renderizar o
- * componente exigiria o contexto do React Flow para os `Handle`s e testaria
- * layout, nao decisao — a decisao esta toda aqui.
- */
-describe('resolveBadge', () => {
-  it('mantém `NO DATA`, o nome do step e o valor da métrica', () => {
-    const display = { text: '92', numeric: 92 };
+function frames(fields: Array<{ name: string; values: unknown[]; unit?: string }>): DataFrame[] {
+  const frame = toDataFrame({
+    fields: fields.map(({ name, values, unit }) => ({
+      name,
+      type: typeof values[0] === 'string' ? FieldType.string : FieldType.number,
+      values,
+      config: unit ? { unit } : {},
+    })),
+  });
+  for (const field of frame.fields) {
+    field.display = getDisplayProcessor({ field, theme });
+  }
+  cacheFieldDisplayNames([frame]);
+  return [frame];
+}
 
-    expect(resolveBadge({ state: 'nodata' }, theme, false, undefined)).toEqual({
-      color: theme.colors.text.disabled,
-      label: 'no data',
+const NEUTRO: ElementColor = { state: 'neutral' };
+
+describe('statFields — quais métricas o nó exibe', () => {
+  const series = frames([
+    { name: 'H: CPU', values: [92] },
+    { name: 'H: Ping', values: [1] },
+    { name: 'H: Clientes', values: [23] },
+  ]);
+
+  it('desligado, não exibe nada', () => {
+    expect(statFields(no({ color: { field: 'H: CPU' } }), series, NEUTRO)).toEqual([]);
+  });
+
+  /** "Sem dados" é aviso sobre o vínculo: aparece mesmo com o valor desligado. */
+  it('desligado e sem dados, exibe as métricas do estado', () => {
+    expect(statFields(no({ color: { field: 'H: CPU' } }), series, { state: 'nodata' })).toEqual(['H: CPU']);
+  });
+
+  it('ligado, exibe as métricas do estado (todas) e as extras', () => {
+    const element = no({
+      color: { field: 'H: Ping' },
+      extraMetrics: [{ field: 'H: CPU', steps: [] }],
+      value: { fromState: true, fields: ['H: Clientes'] },
     });
-    expect(resolveBadge({ state: 'threshold', color: '#f00', label: 'crítico' }, theme, true, display)).toEqual({
-      color: '#f00',
-      label: 'crítico',
+
+    expect(statFields(element, series, NEUTRO)).toEqual(['H: Ping', 'H: CPU', 'H: Clientes']);
+  });
+
+  /** Um nó salvo antes da v1.4 com field escolhido exibia só ele — e continua. */
+  it('o field único de antes da v1.4 exibe só ele', () => {
+    expect(statFields(no({ color: { field: 'H: CPU' }, value: { field: 'H: Ping' } }), series, NEUTRO)).toEqual([
+      'H: Ping',
+    ]);
+  });
+
+  it('no modo trigger, as métricas do estado não entram', () => {
+    const element = no({
+      color: { field: 'H: CPU' },
+      trigger: { enabled: true, host: 'H', names: [], showActive: true },
+      value: { fields: ['H: Clientes'] },
     });
-    expect(resolveBadge({ state: 'neutral' }, theme, true, display)?.label).toBe('92');
-  });
 
-  it('sem estado e sem métrica, não há badge', () => {
-    expect(resolveBadge({ state: 'neutral' }, theme, false, undefined)).toBeUndefined();
+    expect(statFields(element, series, NEUTRO)).toEqual(['H: Clientes']);
   });
 });
 
-/**
- * O badge chegou a exibir a severidade por ser o único texto de estado que o nó
- * tinha. Com a lista de triggers ativas embaixo do elemento, aquilo virou um
- * segundo lugar dizendo pior a mesma coisa — e ocupava o badge, que o usuário
- * liga para ver a **métrica**.
- */
-describe('resolveBadge — modo trigger', () => {
-  const alarme = {
-    state: 'trigger',
-    color: '#f00',
-    severity: 4,
-    label: 'High',
-    problems: alarmando(4, 'High', 3),
-  } as const;
-
-  it('com "Exibir valor" desligado, o badge não aparece', () => {
-    expect(resolveBadge(alarme, theme, false, undefined)).toBeUndefined();
+describe('nodeStats — as linhas de valor', () => {
+  it('rótulo é o item, sem o host', () => {
+    expect(statLabel('CORE-SW-01: CPU')).toBe('CPU');
+    expect(statLabel('H1: Interface eth3: Bits received')).toBe('Interface eth3: Bits received');
+    expect(statLabel('sem host')).toBe('sem host');
   });
 
-  it('com "Exibir valor" ligado, o badge mostra a métrica — não a severidade', () => {
-    const badge = resolveBadge(alarme, theme, true, { text: '4.07%', numeric: 4.07 });
+  it('em %, a barra vai de 0 a 100 e a regra que casou pinta o número', () => {
+    const element = no({
+      color: { field: 'H: CPU' },
+      thresholds: { steps: [{ type: 'threshold', value: 80, color: 'red' }] },
+      value: {},
+    });
+    const [row] = nodeStats(element, frames([{ name: 'H: CPU', values: [84], unit: 'percent' }]), NEUTRO, theme);
 
-    expect(badge?.label).toBe('4.07%');
-  });
-});
-
-/**
- * A correção pedida na rodada: com "Exibir valor" desligado, o texto da regra
- * não aparece. Ele é o *display text* do valor — sem valor na tela, não há o
- * que substituir. A cor continua sinalizando o estado no ícone e na cápsula.
- */
-describe('resolveBadge — governado pelo toggle "Exibir valor"', () => {
-  const display = { text: '92', numeric: 92 };
-
-  it('com o valor desligado, a regra pinta mas não escreve', () => {
-    const badge = resolveBadge({ state: 'threshold', color: '#f00', label: 'UP' }, theme, false, display);
-
-    // Label vazio faz o `DeviceNode` render o dot em vez da pílula.
-    expect(badge).toEqual({ color: '#f00', label: '' });
+    expect(row).toMatchObject({ label: 'CPU', value: '84', unit: '%', bar: true, pct: 84, color: TF_DARK.cr });
+    expect(row.ticks).toEqual([{ pct: 80, color: TF_DARK.cr }]);
   });
 
-  it('com o valor ligado, o texto da regra aparece', () => {
-    const badge = resolveBadge({ state: 'threshold', color: '#f00', label: 'UP' }, theme, true, display);
+  it('sem unidade e sem regra, não há barra', () => {
+    const [row] = nodeStats(
+      no({ color: { field: 'H: Clientes' }, value: {} }),
+      frames([{ name: 'H: Clientes', values: [23] }]),
+      NEUTRO,
+      theme
+    );
 
-    expect(badge?.label).toBe('UP');
+    expect(row).toMatchObject({ value: '23', unit: '', bar: false, color: TF_DARK.tf });
   });
 
-  it('com o valor ligado e regra sem texto, aparece o número', () => {
-    const badge = resolveBadge({ state: 'threshold', color: '#f00' }, theme, true, display);
+  it('métrica ausente vira "sem dados"', () => {
+    const [row] = nodeStats(no({ color: { field: 'H: X' }, value: {} }), frames([]), NEUTRO, theme);
 
-    expect(badge?.label).toBe('92');
-  });
-
-  it('sem estado e com o valor desligado, não há badge', () => {
-    expect(resolveBadge({ state: 'neutral' }, theme, false, display)).toBeUndefined();
-  });
-
-  /** `no data` não é o valor da métrica: é um aviso sobre o próprio vínculo. */
-  it('`no data` não é silenciado pelo toggle', () => {
-    expect(resolveBadge({ state: 'nodata' }, theme, false, undefined)?.label).toBe('no data');
+    expect(row).toMatchObject({ value: 'sem dados', bar: false, color: TF_DARK.tx2 });
   });
 });
 
-/**
- * O badge sem field escolhido exibia um travessao. Agora exibe a metrica do
- * estado — que e o que o toggle "Exibir valor" promete, e a unica saida quando a
- * metrica foi escolhida por host+item (nesse caso a serie so existe quando o
- * painel busca sozinho, e o seletor de field nao teria o que oferecer).
- */
-describe('badgeField', () => {
-  const no = (overrides: Partial<TopoNode>): TopoNode =>
-    ({
-      id: 'n',
-      position: { x: 0, y: 0 },
-      size: { width: 10, height: 10 },
-      presentation: { primaryText: { mode: 'fixed', fixed: 'n' } },
-      color: {},
-      zIndex: 0,
-      ...overrides,
-    }) as TopoNode;
+describe('look — como cada estado pousa no nó', () => {
+  const p = TF_DARK;
 
-  const frames = [toDataFrame({ fields: [{ name: 'H: CPU', type: FieldType.number, values: [92] }] })];
+  it('neutro: borda apagada e círculo vazio', () => {
+    const look = stateLook(NEUTRO, undefined, theme);
 
-  it('o field escolhido no toggle manda', () => {
-    expect(badgeField(no({ value: { field: 'outro' }, color: { field: 'estado' } }), frames)).toBe('outro');
+    expect(nodeSurface(look, p).background).toBe(p.sup);
+    expect(statusBadge(look, p).glyph).toBe('');
   });
 
-  it('sem field escolhido, cai na métrica do estado', () => {
-    expect(badgeField(no({ value: {}, color: { field: 'estado' } }), frames)).toBe('estado');
+  it('Base: borda na cor e ✓', () => {
+    const look = stateLook({ state: 'fixed', color: p.ok }, undefined, theme);
+
+    expect(nodeSurface(look, p).border).toBe(`1.5px solid ${p.ok}`);
+    expect(statusBadge(look, p)).toMatchObject({ glyph: '✓', background: p.ok });
   });
 
-  it('vínculo por host+item também alimenta o badge', () => {
-    expect(badgeField(no({ value: {}, color: { metric: { host: 'H', item: 'CPU' } } }), frames)).toBe('H: CPU');
+  it('sem dados: hachurado, tracejado e –', () => {
+    const look = stateLook({ state: 'nodata' }, undefined, theme);
+
+    expect(nodeSurface(look, p).border).toBe(`1.5px dashed ${p.apa}`);
+    expect(nodeSurface(look, p).background).toContain('repeating-linear-gradient');
+    expect(statusBadge(look, p).glyph).toBe('–');
   });
 
-  it('sem vínculo nenhum, não há o que exibir', () => {
-    expect(badgeField(no({ value: {} }), frames)).toBeUndefined();
+  /** Disaster se separa do High pelo tratamento, não pela cor. */
+  it('Disaster: borda de 2.5px, 30% de fundo e !!', () => {
+    const disaster = stateLook(
+      { state: 'trigger', color: p.cr, severity: 5, label: 'Disaster', problems: [] },
+      undefined,
+      theme
+    );
+    const high = stateLook(
+      { state: 'trigger', color: p.cr, severity: 4, label: 'High', problems: [] },
+      undefined,
+      theme
+    );
+
+    expect(nodeSurface(disaster, p).border).toBe(`2.5px solid ${p.cr}`);
+    expect(nodeSurface(disaster, p).background).toContain(' 30%');
+    expect(statusBadge(disaster, p).glyph).toBe('!!');
+    expect(nodeSurface(high, p).border).toBe(`1.5px solid ${p.cr}`);
+    expect(statusBadge(high, p).glyph).toBe('!');
+  });
+
+  it('no formato Contador, o círculo mostra o número de problemas', () => {
+    const look = stateLook({ state: 'threshold', color: p.at }, undefined, theme);
+
+    expect(statusBadge(look, p, 4).glyph).toBe('4');
   });
 });

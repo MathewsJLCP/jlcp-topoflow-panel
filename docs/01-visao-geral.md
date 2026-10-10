@@ -115,7 +115,7 @@ src/
 │   └── IconPicker.tsx      Navegador de ícones com pastas
 └── icons/                Biblioteca de ícones
     ├── registry.ts         Catálogo, chave `pack/nome`, fallback
-    └── packs/              classic (glifos), topoflow (variantes), zabbix e petrolifera (figuras)
+    └── svg/                catálogo SVG do mockup (gerado) e a derivação de tons
 ```
 
 Fora de `src/`:

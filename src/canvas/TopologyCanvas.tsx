@@ -8,7 +8,6 @@ import {
   BackgroundVariant,
   Connection,
   ConnectionMode,
-  Controls,
   EdgeChange,
   NodeChange,
   ReactFlow,
@@ -33,12 +32,18 @@ import {
   resizeElement,
   reorderElement,
   reverseEdge,
+  updateEdge,
 } from '../model/mutations';
-import { CanvasOptions, ElementKind, Topology } from '../model/types';
+import { CanvasOptions, ElementKind, Topology, Waypoint } from '../model/types';
 import { TopoInstanceState } from '../panel/instanceState';
 import { CanvasContextMenu, MenuState } from './CanvasContextMenu';
 import { GhostConnection } from './GhostConnection';
-import { ScreenshotButton } from './ScreenshotButton';
+import { CanvasControls } from './CanvasControls';
+import { HoverLayerContext } from './HoverLayer';
+import { ShotResult } from './ScreenshotButton';
+import { EdgeActions, EdgeActionsContext, SelectedVertex } from './edges/EdgeActions';
+import { edgeGeometry, waypointIndexAt } from './edges/path';
+import { FONT_MONO, FONT_SANS, tfPalette } from '../theme/palette';
 import { TopoTime, TopoTimeContext } from './timeContext';
 import { edgeTypes } from './edges';
 import { LinkRole, TopoFlowEdge, TopoFlowNode } from './flowTypes';
@@ -77,7 +82,14 @@ const RESIZABLE_TYPES = new Set(['postitNode', 'imageNode']);
 /** Referencia estavel: um array novo a cada render reiniciaria a publicacao. */
 const EMPTY_SELECTION: string[] = [];
 
+/** Aviso no topo do canvas (opcoes invalidas, falha do Zabbix). */
+export interface CanvasBanner {
+  title: string;
+  body: string;
+}
+
 export interface TopologyCanvasProps {
+  banners?: CanvasBanner[];
   topology: Topology;
   frames: DataFrame[];
   canvas: CanvasOptions;
@@ -103,6 +115,7 @@ export function TopologyCanvas(props: TopologyCanvasProps) {
 }
 
 function CanvasInner({
+  banners = [],
   topology,
   frames,
   canvas,
@@ -125,7 +138,13 @@ function CanvasInner({
    * O container deste painel. O screenshot procura o viewport a partir daqui, e
    * nao no documento: um dashboard com dois TopoFlow tem dois viewports.
    */
-  const wrapperRef = useRef<HTMLDivElement>(null);
+  const wrapperRef = useRef<HTMLDivElement | null>(null);
+  /** O mesmo elemento, em estado: os popovers de hover precisam dele no render. */
+  const [hoverLayer, setHoverLayer] = useState<HTMLDivElement | null>(null);
+  const setWrapper = useCallback((node: HTMLDivElement | null) => {
+    wrapperRef.current = node;
+    setHoverLayer(node);
+  }, []);
 
   /**
    * Modo Linkar. Vive no estado local, e nao na topologia, porque um gesto pela
@@ -454,11 +473,102 @@ function CanvasInner({
         x: event.clientX,
         y: event.clientY,
         id: edge.id,
-        label: `${edge.source} → ${edge.target}`,
+        label: edge.id,
+        hasWaypoints: Boolean(findEdge(topologyRef.current, edge.id)?.waypoints?.length),
       });
     },
     [linking, cancelLinking]
   );
+
+  /* --- Trajeto das conexoes (vertices) -------------------------------------- */
+
+  const [vertex, setVertex] = useState<SelectedVertex | undefined>();
+  const vertexRef = useRef(vertex);
+  useEffect(() => {
+    vertexRef.current = vertex;
+  });
+
+  const setWaypoints = useCallback(
+    (edgeId: string, waypoints: Waypoint[] | undefined) =>
+      mutate((current) => updateEdge(current, edgeId, { waypoints: waypoints?.length ? waypoints : undefined })),
+    [mutate]
+  );
+
+  const openVertexMenu = useCallback((event: React.MouseEvent, target: SelectedVertex) => {
+    setVertex(target);
+    setMenu({
+      kind: 'vertex',
+      x: event.clientX,
+      y: event.clientY,
+      id: target.edgeId,
+      label: target.edgeId,
+      index: target.index,
+    });
+  }, []);
+
+  const removeVertex = useCallback(
+    (edgeId: string, index: number) => {
+      const list = (findEdge(topologyRef.current, edgeId)?.waypoints ?? []).filter((_, i) => i !== index);
+      setWaypoints(edgeId, list);
+      setVertex(undefined);
+    },
+    [setWaypoints]
+  );
+
+  /** "Adicionar vertice aqui": no ponto do clique direito, no segmento mais proximo. */
+  const addVertexAtMenu = useCallback(
+    (edgeId: string) => {
+      const edge = findEdge(topologyRef.current, edgeId);
+      if (!edge || !menu) {
+        return;
+      }
+      const at = screenToFlowPosition({ x: menu.x, y: menu.y });
+      const point = { x: Math.round(at.x), y: Math.round(at.y) };
+      const box = (id: string) => {
+        const node = getInternalNode(id);
+        const { width = 0, height = 0 } = node?.measured ?? {};
+        const pos = node?.internals.positionAbsolute ?? { x: 0, y: 0 };
+        return { cx: pos.x + width / 2, cy: pos.y + height / 2, w: width, h: height };
+      };
+      const geometry = edgeGeometry(box(edge.source), box(edge.target), edge.shape, edge.waypoints);
+      const index = waypointIndexAt(point, geometry.points);
+      const list = [...(edge.waypoints ?? [])];
+      list.splice(index, 0, point);
+      setWaypoints(edgeId, list);
+      setVertex({ edgeId, index });
+    },
+    [menu, screenToFlowPosition, getInternalNode, setWaypoints]
+  );
+
+  const edgeActions = useMemo<EdgeActions>(
+    () => ({ setWaypoints, vertex, selectVertex: setVertex, openVertexMenu, linking: Boolean(linking) }),
+    [setWaypoints, vertex, openVertexMenu, linking]
+  );
+
+  /**
+   * Com um vertice selecionado, Delete remove o vertice — nao a conexao inteira,
+   * que e o que o React Flow faria com a aresta selecionada.
+   */
+  const onBeforeDelete = useCallback(
+    async ({ nodes: n, edges: e }: { nodes: TopoFlowNode[]; edges: TopoFlowEdge[] }) => {
+      const selectedVertex = vertexRef.current;
+      if (selectedVertex && e.some((edge) => edge.id === selectedVertex.edgeId)) {
+        removeVertex(selectedVertex.edgeId, selectedVertex.index);
+        return false;
+      }
+      return { nodes: n, edges: e };
+    },
+    [removeVertex]
+  );
+
+  const [toast, setToast] = useState<ShotResult | undefined>();
+  useEffect(() => {
+    if (!toast) {
+      return;
+    }
+    const timer = setTimeout(() => setToast(undefined), 5000);
+    return () => clearTimeout(timer);
+  }, [toast]);
 
   const onConnect = useCallback(
     (connection: Connection) => {
@@ -481,6 +591,7 @@ function CanvasInner({
 
   const onPaneClick = useCallback(() => {
     setMenu(undefined);
+    setVertex(undefined);
     cancelLinking();
   }, [cancelLinking]);
 
@@ -588,57 +699,91 @@ function CanvasInner({
        portalizado a partir dos nos — o painel de hover do `Tooltip` nasce no
        final do body, mas o React o mantem nesta arvore de contexto. */
     <TopoTimeContext.Provider value={tempo}>
-      <div
-        ref={wrapperRef}
-        className={styles.wrapper}
-        style={{ width, height }}
-        data-linking={linking ? true : undefined}
-        onMouseMove={onMouseMove}
-      >
-        <ReactFlow<TopoFlowNode, TopoFlowEdge>
-          nodes={nodesWithFrames}
-          edges={edgesWithFrames}
-          nodeTypes={nodeTypes}
-          edgeTypes={edgeTypes}
-          onNodesChange={onNodesChange}
-          onEdgesChange={onEdgesChange}
-          onNodesDelete={onNodesDelete}
-          onEdgesDelete={onEdgesDelete}
-          onConnect={onConnect}
-          onNodeClick={onNodeClick}
-          onPaneContextMenu={editable ? openPaneMenu : preventNativeMenu}
-          onNodeContextMenu={editable ? openNodeMenu : preventNativeMenu}
-          onEdgeContextMenu={editable ? openEdgeMenu : preventNativeMenu}
-          onPaneClick={onPaneClick}
-          // Durante a linkagem o arraste e a selecao por area saem do caminho: o
-          // gesto em curso e apontar um alvo, nao mover a cena.
-          nodesDraggable={editable && !linking}
-          selectionKeyCode={linking ? null : undefined}
-          nodesConnectable={editable}
-          elementsSelectable={editable}
-          edgesFocusable={editable}
-          connectionMode={ConnectionMode.Loose}
-          // Default do React Flow e `true`, o que reescreve o zIndex do no ao
-          // seleciona-lo e quebra a ordem de camadas que `useFlowElements` monta.
-          elevateNodesOnSelect={false}
-          deleteKeyCode={editable ? ['Delete', 'Backspace'] : null}
-          snapToGrid={canvas.snapToGrid}
-          snapGrid={[canvas.gridSize, canvas.gridSize]}
-          colorMode={theme.isDark ? 'dark' : 'light'}
-          proOptions={{ hideAttribution: true }}
-          fitView
-        >
-          {canvas.showGrid && <Background variant={BackgroundVariant.Dots} gap={canvas.gridSize} size={1} />}
-          <Controls showInteractive={false}>
-            {/* Filho do `Controls`, entao entra depois dos botoes nativos — logo
-              abaixo do *Fit view*, que e o ultimo com `showInteractive` off. */}
-            <ScreenshotButton wrapperRef={wrapperRef} title={title} />
-          </Controls>
+      <EdgeActionsContext.Provider value={edgeActions}>
+        <HoverLayerContext.Provider value={hoverLayer}>
+          <div
+            ref={setWrapper}
+            className={styles.wrapper}
+            style={{ width, height }}
+            data-linking={linking ? true : undefined}
+            onMouseMove={onMouseMove}
+          >
+            <ReactFlow<TopoFlowNode, TopoFlowEdge>
+              nodes={nodesWithFrames}
+              edges={edgesWithFrames}
+              nodeTypes={nodeTypes}
+              edgeTypes={edgeTypes}
+              onNodesChange={onNodesChange}
+              onEdgesChange={onEdgesChange}
+              onNodesDelete={onNodesDelete}
+              onEdgesDelete={onEdgesDelete}
+              onBeforeDelete={onBeforeDelete}
+              onConnect={onConnect}
+              onNodeClick={onNodeClick}
+              onPaneContextMenu={editable ? openPaneMenu : preventNativeMenu}
+              onNodeContextMenu={editable ? openNodeMenu : preventNativeMenu}
+              onEdgeContextMenu={editable ? openEdgeMenu : preventNativeMenu}
+              onPaneClick={onPaneClick}
+              // Durante a linkagem o arraste e a selecao por area saem do caminho: o
+              // gesto em curso e apontar um alvo, nao mover a cena.
+              nodesDraggable={editable && !linking}
+              selectionKeyCode={linking ? null : undefined}
+              nodesConnectable={editable}
+              elementsSelectable={editable}
+              edgesFocusable={editable}
+              connectionMode={ConnectionMode.Loose}
+              // Default do React Flow e `true`, o que reescreve o zIndex do no ao
+              // seleciona-lo e quebra a ordem de camadas que `useFlowElements` monta.
+              elevateNodesOnSelect={false}
+              deleteKeyCode={editable ? ['Delete', 'Backspace'] : null}
+              snapToGrid={canvas.snapToGrid}
+              snapGrid={[canvas.gridSize, canvas.gridSize]}
+              colorMode={theme.isDark ? 'dark' : 'light'}
+              proOptions={{ hideAttribution: true }}
+              fitView
+            >
+              {canvas.showGrid && (
+                <Background
+                  variant={BackgroundVariant.Dots}
+                  gap={canvas.gridSize}
+                  size={1.6}
+                  color={tfPalette(theme).grid}
+                />
+              )}
 
-          {ghostFrom && cursor && <GhostConnection from={ghostFrom} to={cursor} />}
-        </ReactFlow>
+              {ghostFrom && cursor && <GhostConnection from={ghostFrom} to={cursor} />}
+            </ReactFlow>
 
-        {/*
+            <CanvasControls wrapperRef={wrapperRef} title={title} onShot={setToast} />
+
+            {banners.length > 0 && (
+              <div className={styles.banners} onMouseDown={(event) => event.stopPropagation()}>
+                {banners.map((banner) => (
+                  <div key={banner.title} className={styles.banner} role="alert">
+                    <span className={styles.bannerPill}>AVISO</span>
+                    <div className={styles.bannerText}>
+                      <span className={styles.bannerTitle}>{banner.title}</span>
+                      <span className={styles.bannerBody}>{banner.body}</span>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+
+            {linking && (
+              <div className={styles.linkHint}>
+                {`Linkar a partir de ${linking.sourceId} — clique num alvo válido. Esc, clique no fundo ou botão direito cancelam.`}
+              </div>
+            )}
+
+            {toast && (
+              <div className={styles.toast} data-error={toast.ok ? undefined : true}>
+                <span className={styles.toastTitle}>{toast.title}</span>
+                <span className={styles.toastBody}>{toast.body}</span>
+              </div>
+            )}
+
+            {/*
           Painel recem-adicionado: a topologia nasce vazia (ver
           `model/defaults.ts`) e a tela nao tem nada que diga como comecar. O
           gesto de criar elemento e o clique direito, que ninguem descobre
@@ -649,26 +794,32 @@ function CanvasInner({
           `pointerEvents: 'none'` porque o alvo do clique direito e o canvas
           atras dela — a dica nao pode ficar no caminho do que ela ensina.
         */}
-        {editable && vazia && (
-          <div className={styles.hint}>
-            <p>Clique com o botão direito no canvas para adicionar elementos.</p>
-            <p>Ou use o botão “Adicionar elemento” no painel de opções, à direita.</p>
-          </div>
-        )}
+            {editable && vazia && (
+              <div className={styles.hint}>
+                <p>Clique com o botão direito no canvas para adicionar elementos.</p>
+                <p>Ou use o botão “Adicionar elemento” no painel de opções, à direita.</p>
+              </div>
+            )}
 
-        {menu && (
-          <CanvasContextMenu
-            state={menu}
-            onClose={() => setMenu(undefined)}
-            onAdd={handleAdd}
-            onLink={handleLink}
-            onDuplicate={handleDuplicate}
-            onDelete={handleDelete}
-            onReorder={handleReorder}
-            onReverse={handleReverse}
-          />
-        )}
-      </div>
+            {menu && (
+              <CanvasContextMenu
+                state={relativeTo(menu, hoverLayer)}
+                bounds={{ width, height }}
+                onClose={() => setMenu(undefined)}
+                onAdd={handleAdd}
+                onLink={handleLink}
+                onDuplicate={handleDuplicate}
+                onDelete={handleDelete}
+                onReorder={handleReorder}
+                onReverse={handleReverse}
+                onAddVertex={addVertexAtMenu}
+                onRemoveVertex={removeVertex}
+                onClearPath={(id) => setWaypoints(id, undefined)}
+              />
+            )}
+          </div>
+        </HoverLayerContext.Provider>
+      </EdgeActionsContext.Provider>
     </TopoTimeContext.Provider>
   );
 }
@@ -699,6 +850,16 @@ export function keepSelection<T extends { id: string; selected?: boolean }>(next
 /** Em modo View nao ha menu, mas o do browser tambem nao deve aparecer. */
 function preventNativeMenu(event: React.MouseEvent | MouseEvent) {
   event.preventDefault();
+}
+
+function findEdge(topology: Topology, id: string) {
+  return topology.edges.find((edge) => edge.id === id);
+}
+
+/** O menu guarda coordenadas de tela (o clique); ele e desenhado dentro do canvas. */
+function relativeTo(menu: MenuState, wrapper: HTMLElement | null): MenuState {
+  const rect = wrapper?.getBoundingClientRect();
+  return rect ? { ...menu, x: menu.x - rect.left, y: menu.y - rect.top } : menu;
 }
 
 type GetInternalNode = ReturnType<typeof useReactFlow>['getInternalNode'];
@@ -793,65 +954,135 @@ export function withNodeData(
   });
 }
 
-const getStyles = (theme: GrafanaTheme2) => ({
-  hint: css({
-    position: 'absolute',
-    inset: 0,
-    display: 'flex',
-    flexDirection: 'column',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: theme.spacing(0.5),
-    pointerEvents: 'none',
-    textAlign: 'center',
-    padding: theme.spacing(2),
-    color: theme.colors.text.secondary,
-    ...theme.typography.bodySmall,
+const getStyles = (theme: GrafanaTheme2) => {
+  const p = tfPalette(theme);
+  return {
+    hint: css({
+      position: 'absolute',
+      inset: 0,
+      display: 'flex',
+      flexDirection: 'column',
+      alignItems: 'center',
+      justifyContent: 'center',
+      gap: 6,
+      pointerEvents: 'none',
+      textAlign: 'center',
+      padding: theme.spacing(2),
+      font: `14px/1.5 ${FONT_SANS}`,
+      color: p.tx2,
 
-    '& p': {
-      margin: 0,
-    },
-  }),
-
-  wrapper: css({
-    // O React Flow mede o container; `100%` dentro de um painel redimensionavel
-    // rende zero na primeira medicao (risco listado no §10 do PRD).
-    position: 'relative',
-    overflow: 'hidden',
-    borderRadius: theme.shape.radius.default,
-    background: theme.colors.background.canvas,
-
-    // O `Background` do React Flow desenha os pontos com a cor herdada; sem
-    // isto ele usa a propria (#91919a no claro, #333 no escuro) e a grade
-    // destoa do resto do painel.
-    '& .react-flow__background': {
-      color: theme.colors.border.weak,
-    },
-
-    /**
-     * Durante o screenshot, tudo congela no estado de repouso.
-     *
-     * O `blink` desce ate opacidade 0.45 e as ondas do radar comecam em 0.55 e
-     * terminam em 0. A captura serializa os estilos **computados** no instante
-     * em que acontece, entao sem isto a foto sairia com o elemento alarmado
-     * meio apagado — justamente o elemento por causa do qual alguem tira o
-     * screenshot. Parada, cada animacao volta ao seu valor de base: o pulse a
-     * `scale(1)`, o blink a opacidade cheia, e os aneis do radar a opacidade
-     * zero, que num quadro parado nao querem dizer nada mesmo.
-     */
-    '&[data-capturing] *': {
-      animation: 'none !important',
-    },
-
-    // Enquanto se aponta um alvo, o cursor diz o que o gesto espera. Postits e
-    // textos nao sao conectaveis, entao herdam `not-allowed` daqui — so nos e
-    // points reescrevem para `crosshair` a partir do proprio `data.link`.
-    '&[data-linking]': {
-      cursor: 'crosshair',
-
-      '& .react-flow__node': {
-        cursor: 'not-allowed',
+      '& p': {
+        margin: 0,
       },
-    },
-  }),
-});
+    }),
+
+    wrapper: css({
+      // O React Flow mede o container; `100%` dentro de um painel redimensionavel
+      // rende zero na primeira medicao (risco listado no §10 do PRD).
+      position: 'relative',
+      overflow: 'hidden',
+      borderRadius: 8,
+      background: p.sup,
+      fontFamily: FONT_SANS,
+
+      /**
+       * Durante o screenshot, tudo congela no estado de repouso: a captura
+       * serializa os estilos **computados** no instante em que acontece, e sem
+       * isto a foto sairia com o elemento alarmado no meio do pulso ou apagado.
+       */
+      '&[data-capturing] *': {
+        animation: 'none !important',
+      },
+
+      // Selecao por area (Shift+arrastar): borda e 10% do violeta de acento.
+      '& .react-flow__selection, & .react-flow__nodesselection-rect': {
+        border: `1px solid ${p.ac}`,
+        background: `color-mix(in oklab, ${p.ac} 10%, transparent)`,
+        borderRadius: 0,
+      },
+
+      // Enquanto se aponta um alvo, o cursor diz o que o gesto espera. Postits e
+      // textos nao sao conectaveis, entao herdam `not-allowed` daqui — so nos e
+      // points reescrevem para `crosshair` a partir do proprio `data.link`.
+      '&[data-linking]': {
+        cursor: 'crosshair',
+
+        '& .react-flow__node': {
+          cursor: 'not-allowed',
+        },
+      },
+    }),
+
+    banners: css({
+      position: 'absolute',
+      left: 12,
+      right: 12,
+      top: 12,
+      display: 'flex',
+      flexDirection: 'column',
+      gap: 8,
+      zIndex: 6,
+    }),
+    banner: css({
+      display: 'flex',
+      gap: 10,
+      padding: '10px 14px',
+      background: p.sup,
+      border: `1px solid color-mix(in oklab, ${p.at} 60%, transparent)`,
+      borderRadius: 8,
+      boxShadow: `0 6px 18px ${p.shadow}`,
+    }),
+    bannerPill: css({
+      flex: 'none',
+      height: 'fit-content',
+      marginTop: 1,
+      padding: '2px 6px',
+      borderRadius: 4,
+      background: p.at,
+      color: p['on-at'],
+      font: `600 10px ${FONT_MONO}`,
+    }),
+    bannerText: css({ display: 'flex', flexDirection: 'column', gap: 3 }),
+    bannerTitle: css({ font: `600 13px ${FONT_SANS}`, color: p.tf }),
+    bannerBody: css({ font: `12.5px/1.45 ${FONT_SANS}`, color: p.tx2 }),
+
+    linkHint: css({
+      position: 'absolute',
+      left: '50%',
+      top: 12,
+      transform: 'translateX(-50%)',
+      padding: '7px 12px',
+      background: p.sup,
+      border: `1px solid ${p.ac}`,
+      borderRadius: 8,
+      font: `500 12px ${FONT_SANS}`,
+      color: p.tx,
+      zIndex: 6,
+      pointerEvents: 'none',
+      whiteSpace: 'nowrap',
+    }),
+
+    toast: css({
+      position: 'absolute',
+      right: 14,
+      bottom: 14,
+      maxWidth: 380,
+      padding: '10px 14px',
+      background: p.sup,
+      border: `1px solid ${p.borda}`,
+      borderRadius: 9,
+      boxShadow: `0 10px 28px ${p.shadow}`,
+      display: 'flex',
+      flexDirection: 'column',
+      gap: 3,
+      zIndex: 9,
+      '&[data-error]': { borderColor: `color-mix(in oklab, ${p.cr} 60%, transparent)` },
+    }),
+    toastTitle: css({
+      font: `600 13px ${FONT_SANS}`,
+      color: p.tf,
+      '[data-error] > &': { color: p['cr-t'] },
+    }),
+    toastBody: css({ font: `12px ${FONT_MONO}`, color: p.tx2, overflowWrap: 'anywhere' }),
+  };
+};

@@ -15,7 +15,7 @@ const opcao = (nome: string) => screen.getByRole('option', { name: nome });
 
 describe('IconPicker', () => {
   it('o campo mostra o ícone atual e abre o navegador', () => {
-    render(<IconPicker value="classic/switch" onChange={jest.fn()} />);
+    render(<IconPicker value="padrao/switch" onChange={jest.fn()} />);
 
     expect(screen.getByLabelText('Ícone')).toHaveTextContent('Switch');
 
@@ -25,10 +25,10 @@ describe('IconPicker', () => {
   });
 
   /** Mesma tolerância do canvas: um ícone que sumiu não pode esvaziar o campo. */
-  it('chave desconhecida aparece como Genérico', () => {
+  it('chave desconhecida aparece como Desconhecido', () => {
     render(<IconPicker value="tolstoi" onChange={jest.fn()} />);
 
-    expect(screen.getByLabelText('Ícone')).toHaveTextContent('Genérico');
+    expect(screen.getByLabelText('Ícone')).toHaveTextContent('Desconhecido');
   });
 
   /** Sem escolha prévia, a grade abre no Padrão — o pack que o produto recomenda. */
@@ -39,17 +39,17 @@ describe('IconPicker', () => {
     abrir();
     fireEvent.click(opcao('Roteador'));
 
-    expect(onChange).toHaveBeenCalledWith('topoflow/router');
+    expect(onChange).toHaveBeenCalledWith('padrao/roteador');
   });
 
   it('o mesmo rótulo em outra pasta devolve outra chave', () => {
     const onChange = jest.fn();
-    render(<IconPicker value="classic/switch" onChange={onChange} />);
+    render(<IconPicker value="infra/switch" onChange={onChange} />);
 
     abrir();
     fireEvent.click(opcao('Roteador'));
 
-    expect(onChange).toHaveBeenCalledWith('classic/router');
+    expect(onChange).toHaveBeenCalledWith('infra/roteador');
   });
 
   /** Nada escolhido não pode aparecer como escolha — o campo mostra o que o
@@ -64,7 +64,7 @@ describe('IconPicker', () => {
 });
 
 describe('IconBrowser — pastas', () => {
-  const montar = (selected = 'classic/router') =>
+  const montar = (selected = 'padrao/roteador') =>
     render(<IconBrowser selected={selected} onSelect={jest.fn()} onDismiss={jest.fn()} />);
 
   /**
@@ -76,17 +76,19 @@ describe('IconBrowser — pastas', () => {
     montar();
 
     expect(screen.getByRole('button', { name: /Todos os ícones/ })).toHaveTextContent(String(listIcons().length));
-    expect(screen.getByRole('button', { name: /Clássicos/ })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /Infra/ })).toBeInTheDocument();
+    // Os Clássicos saíram da biblioteca na v1.4.
+    expect(screen.queryByRole('button', { name: /Clássicos/ })).not.toBeInTheDocument();
   });
 
   it('abre na pasta do ícone selecionado', () => {
-    montar('classic/router');
+    montar('infra/roteador');
 
-    expect(screen.getByRole('button', { name: /Clássicos/ })).toHaveAttribute('data-active');
+    expect(screen.getByRole('button', { name: /Infra/ })).toHaveAttribute('data-active');
   });
 
   it('trocar de pasta troca o que a grade mostra', () => {
-    montar('classic/router');
+    montar('infra/roteador');
 
     const naPastaClassica = screen.getAllByRole('option').length;
     fireEvent.click(screen.getByRole('button', { name: /Todos os ícones/ }));
@@ -120,7 +122,7 @@ describe('IconBrowser — busca', () => {
     fireEvent.change(screen.getByPlaceholderText(/Buscar por nome/), { target: { value: termo } });
 
   beforeEach(() => {
-    render(<IconBrowser selected="classic/router" onSelect={jest.fn()} onDismiss={jest.fn()} />);
+    render(<IconBrowser selected="padrao/roteador" onSelect={jest.fn()} onDismiss={jest.fn()} />);
   });
 
   it('filtra pelo rótulo', () => {
@@ -138,9 +140,9 @@ describe('IconBrowser — busca', () => {
    * atalho apareceu, e isso vale com 1 ou com 5.
    */
   it('o que existe só em outra pasta não polui o resultado', () => {
-    buscar('impressora');
+    buscar('sonda');
 
-    expect(screen.queryByRole('option', { name: 'Impressora' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('option', { name: 'Sonda' })).not.toBeInTheDocument();
     expect(screen.getByRole('button', { name: /Há \d+ em outra/ })).toBeInTheDocument();
   });
 
@@ -149,8 +151,8 @@ describe('IconBrowser — busca', () => {
     buscar('router');
     expect(opcao('Roteador')).toBeInTheDocument();
 
-    buscar('wifi');
-    expect(opcao('Access point')).toBeInTheDocument();
+    buscar('wireless');
+    expect(opcao('Wi-Fi')).toBeInTheDocument();
   });
 
   it('estado vazio diz o que houve', () => {
@@ -162,15 +164,15 @@ describe('IconBrowser — busca', () => {
 
 /**
  * Sem isto, metade das buscas do usuário brasileiro falha em silêncio: quem
- * digita "generico" não acha "Genérico", e quem digita "Genérico" também não.
+ * digita "parabolica" não acha "Antena parabólica", e o contrário também não.
  */
 describe('filtrar', () => {
   const icons = listIcons();
 
   it('ignora acento e caixa nos dois sentidos', () => {
-    expect(filtrar(icons, 'generico').map((i) => i.name)).toContain('generic');
-    expect(filtrar(icons, 'GENÉRICO').map((i) => i.name)).toContain('generic');
-    expect(filtrar(icons, 'Banco de Dados').map((i) => i.name)).toContain('database');
+    expect(filtrar(icons, 'parabolica').map((i) => i.name)).toContain('antena-parabolica');
+    expect(filtrar(icons, 'PARABÓLICA').map((i) => i.name)).toContain('antena-parabolica');
+    expect(filtrar(icons, 'Banco de Dados').map((i) => i.name)).toContain('banco-de-dados');
   });
 
   it('busca vazia devolve tudo', () => {
@@ -182,7 +184,7 @@ describe('filtrar', () => {
   });
 
   it('procura nos sinônimos, não só no rótulo', () => {
-    expect(filtrar(icons, 'lb').map((i) => i.name)).toContain('load-balancer');
-    expect(filtrar([resolveIcon('cloud')], 'internet')).toHaveLength(1);
+    expect(filtrar(icons, 'generico').map((i) => i.name)).toContain('desconhecido');
+    expect(filtrar([resolveIcon('padrao/internet')], 'wan')).toHaveLength(1);
   });
 });

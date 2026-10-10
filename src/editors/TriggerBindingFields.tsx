@@ -1,39 +1,22 @@
 import React, { useId, useMemo } from 'react';
 import { css } from '@emotion/css';
-import { DataFrame, GrafanaTheme2, SelectableValue } from '@grafana/data';
-import {
-  Alert,
-  Button,
-  Combobox,
-  ComboboxOption,
-  Field,
-  IconButton,
-  RadioButtonGroup,
-  Switch,
-  useStyles2,
-} from '@grafana/ui';
+import { DataFrame, GrafanaTheme2 } from '@grafana/data';
+import { Combobox, ComboboxOption, Field, useStyles2 } from '@grafana/ui';
 
 import { extractProblems, hasProblemsFrame, listHosts, listTriggers, matchesHost } from '../data/problems';
 import { TriggerBinding } from '../model/types';
+import { FONT_SANS, TfPalette, tfPalette } from '../theme/palette';
 import { FieldLabel } from './FieldLabel';
+import { ToggleField } from './ToggleField';
 import { useZabbixCatalog, useZabbixSource } from './zabbixSource';
+import { DashedButton, Note } from './ui/Section';
+import { Segmented } from './ui/Segmented';
+import { TfSelect } from './ui/TfSelect';
 
 /**
- * Vinculo do elemento a uma trigger do Zabbix.
- *
- * **Os dados continuam vindo das queries do painel** — o Query Mode *Problems* e
- * quem acende o elemento, e este formulario le os frames resultantes para saber
- * o que ja esta na tela.
- *
- * O que mudou: com um datasource Zabbix configurado no painel, os dois combos
- * passam a sugerir o **catalogo do Zabbix** (`./zabbixSource.tsx`), e nao apenas
- * o que os frames trouxeram. E a diferenca entre escolher entre os hosts que
- * estao com problema agora e escolher entre todos os hosts que existem.
- *
- * Sem Zabbix configurado nada disso muda: as listas so contem **o que esta nos
- * dados agora**. Um host sem nenhum problema ativo nao aparece em lista nenhuma
- * — dai os dois combos aceitarem valor digitado (`createCustomValue`) e dai o
- * aviso de host desconhecido ser aviso, e nunca erro.
+ * O vinculo de trigger do elemento: o radio Metrica | Trigger e, em Trigger, o
+ * host, as triggers (relacao OU), a lista de ativas — formato e posicao —, no
+ * desenho do mockup.
  */
 
 const MODE_OPTIONS = [
@@ -41,75 +24,59 @@ const MODE_OPTIONS = [
   { label: 'Trigger', value: 'trigger' as const },
 ];
 
-/** Opcao default do combo de trigger: qualquer trigger do host. */
 const ANY_TRIGGER = '';
 const ANY_TRIGGER_OPTION: ComboboxOption<string> = { value: ANY_TRIGGER, label: 'Qualquer trigger do host' };
 
-/**
- * Vinculo recem-criado, para quando o usuario abre o modo Trigger e ainda nao ha
- * objeto salvo. Espelha os defaults do schema — que e quem manda depois do
- * primeiro parse; isto aqui so cobre o instante entre o clique e o save.
- */
 const NOVO_VINCULO = { host: '', names: [], enabled: true, showActive: true };
 
-/**
- * Seta e nao texto, no mesmo formato do "Posicao do titulo" do postit:
- * "Superior | Inferior | Esquerda | Direita" nao cabe nos 300px do painel de
- * opcoes sem truncar, e o glifo diz a mesma coisa sem traducao.
- *
- * O nome completo vai em `description`, que o `RadioButtonGroup` transforma em
- * tooltip — sem ele o botao fica mudo para quem nao adivinha a seta, que era o
- * defeito da primeira versao deste campo.
- */
-const DISPLAY_OPTIONS: Array<SelectableValue<'list' | 'count'>> = [
+type Format = 'inside' | 'strip' | 'counter' | 'list' | 'total';
+
+/** Os formatos do mockup. Os tres primeiros vivem dentro do cartao, entao so existem no no. */
+const NODE_FORMATS: Array<{ value: Format; label: string }> = [
+  { value: 'inside', label: 'Dentro do nó' },
+  { value: 'strip', label: 'Faixa' },
+  { value: 'counter', label: 'Contador' },
+];
+const COMMON_FORMATS: Array<{ value: Format; label: string }> = [
   { value: 'list', label: 'Lista' },
-  { value: 'count', label: 'Total' },
+  { value: 'total', label: 'Total' },
 ];
 
-const POSITION_OPTIONS: Array<SelectableValue<'top' | 'bottom' | 'left' | 'right'>> = [
-  { value: 'top', label: '↑', description: 'Acima do elemento' },
-  { value: 'bottom', label: '↓', description: 'Abaixo do elemento' },
-  { value: 'left', label: '←', description: 'À esquerda do elemento' },
-  { value: 'right', label: '→', description: 'À direita do elemento' },
+const POSITION_OPTIONS = [
+  { value: 'top' as const, label: 'Acima' },
+  { value: 'bottom' as const, label: 'Abaixo' },
+  { value: 'left' as const, label: 'Esquerda' },
+  { value: 'right' as const, label: 'Direita' },
 ];
 
 interface TriggerBindingFieldProps {
   frames: DataFrame[];
   value?: TriggerBinding;
   onChange: (next: TriggerBinding) => void;
+  /** No: os formatos de dentro do cartao. Ausente, so Lista e Total. */
+  isNode?: boolean;
+  /** Conexao: sem lista de ativas (a aresta nao tem onde pendura-la). */
+  showList?: boolean;
 }
 
-export function TriggerBindingField({ frames, value, onChange }: TriggerBindingFieldProps) {
-  // O `Field` do Grafana so associa `label` e controle quando recebe o `htmlFor`
-  // — o `Combobox` nao herda id sozinho, e sem isso o campo fica sem rotulo
-  // acessivel (e sem `getByLabelText` no teste).
+export function TriggerBindingField({ frames, value, onChange, isNode, showList = true }: TriggerBindingFieldProps) {
   const styles = useStyles2(getStyles);
   const ids = useId();
   const hostId = `${ids}-host`;
   const triggerId = `${ids}-trigger`;
-  const activeId = `${ids}-active`;
 
   const mode = value?.enabled ? 'trigger' : 'metric';
   const host = value?.host ?? '';
 
-  /*
-    Uma linha em branco quando nao ha nenhuma: e o estado "qualquer trigger do
-    host", e ele precisa de um combo na tela para deixar de ser — um campo
-    ausente nao se preenche. Por isso a UI trabalha sobre `rows`, e nunca sobre
-    `names` cru.
-  */
+  // Uma linha em branco quando nao ha nenhuma: e o estado "qualquer trigger do
+  // host", e ele precisa de um combo na tela para deixar de ser.
   const names = value?.names ?? [];
   const rows = names.length > 0 ? names : [''];
 
   const hasProblems = useMemo(() => hasProblemsFrame(frames), [frames]);
-  // So para as mensagens de lista vazia: com catalogo, "nao ha nos dados" seria
-  // mentira — a lista veio do Zabbix inteiro e mesmo assim nao achou nada.
   const temCatalogo = useZabbixSource() !== undefined;
   const hostsFromFrames = useMemo(() => hostOptionsFrom(frames), [frames]);
   const triggersFromFrames = useMemo(() => triggerOptionsFrom(frames, host, false), [frames, host]);
-  // A opcao "qualquer" so existe enquanto ha uma linha so: numa lista de duas,
-  // escolhe-la na segunda abrangeria todo o host e faria a primeira nao querer
-  // dizer nada — um controle que apaga em silencio a escolha vizinha.
   const triggerLeading = useMemo(() => (rows.length === 1 ? [ANY_TRIGGER_OPTION] : []), [rows.length]);
   const {
     hostOptions,
@@ -121,11 +88,6 @@ export function TriggerBindingField({ frames, value, onChange }: TriggerBindingF
   const patch = (changes: Partial<TriggerBinding>) =>
     onChange({ ...NOVO_VINCULO, ...value, ...changes, enabled: true });
 
-  /*
-    As tres escritas na lista. Todas passam por `rows` — e nao por `names` — para
-    que a primeira edicao feita sobre a linha em branco virtual grave uma lista
-    de verdade, em vez de escrever no indice de uma lista que nao existe.
-  */
   const setName = (index: number, next: string) => patch({ names: rows.map((name, i) => (i === index ? next : name)) });
   const removeName = (index: number) => patch({ names: rows.filter((_, i) => i !== index) });
   const addName = () => patch({ names: [...rows, ''] });
@@ -135,56 +97,50 @@ export function TriggerBindingField({ frames, value, onChange }: TriggerBindingF
       onChange({ ...NOVO_VINCULO, ...value, enabled: true });
       return;
     }
-
-    // So alcancavel com o vinculo ligado — o radio nao dispara para a opcao ja
-    // marcada, entao aqui `value` sempre existe. Desligar preserva host e nome:
-    // e o que faz alternar entre os modos nao custar nada, mesmo apos salvar.
     if (value) {
       onChange({ ...value, enabled: false });
     }
   };
 
+  // `count` e o "Total" de antes da v1.4; formato de no salvo fora do no cai na Lista.
+  const formats = isNode ? [...NODE_FORMATS, ...COMMON_FORMATS] : COMMON_FORMATS;
+  const raw = value?.activeDisplay === 'count' ? 'total' : (value?.activeDisplay ?? 'list');
+  const format: Format = formats.some((f) => f.value === raw) ? raw : 'list';
+  const showPosition = !isNode || format === 'list';
+
   return (
     <>
       <Field
         label={
-          <FieldLabel info="Em Trigger, a cor vem do Zabbix e o vínculo por métrica fica inativo. A cor fixa segue valendo como identidade.">
+          <FieldLabel info="Como este elemento decide o próprio estado. Alternar preserva a configuração do outro modo.">
             Estado
           </FieldLabel>
         }
       >
-        <RadioButtonGroup options={MODE_OPTIONS} value={mode} onChange={handleMode} size="sm" fullWidth />
+        <Segmented options={MODE_OPTIONS} value={mode} onChange={handleMode} />
       </Field>
 
       {mode === 'trigger' && (
         <>
-          {/*
-            So faz sentido para quem depende das queries do dashboard. Com a
-            secao Zabbix ligada, o painel busca os problemas por conta propria e
-            pedir uma query seria mandar o usuario resolver um problema que ele
-            acabou de dispensar — foi exatamente assim que o aviso apareceu num
-            painel funcionando, cheio de incidentes na tela.
-          */}
           {!hasProblems && !temCatalogo && (
-            <Alert severity="info" title="Nenhuma query de Problems neste painel">
-              Adicione uma query com Query Mode <strong>Problems</strong> no editor de queries do painel para vincular
-              triggers — ou ligue <strong>Consultar o Zabbix diretamente</strong> nas opções do painel.
-            </Alert>
+            <Note tone="info" title="Nenhuma query de Problems neste painel">
+              Adicione uma query com Query Mode Problems no editor de queries do painel para vincular triggers — ou
+              ligue Consultar o Zabbix diretamente nas opções do painel.
+            </Note>
           )}
 
-          {/*
-            Falhar consultando o Zabbix nao pode travar a configuracao: os combos
-            seguem oferecendo o que veio dos frames e aceitando valor digitado. O
-            aviso existe para o usuario nao concluir que o host sumiu do Zabbix.
-          */}
           {zabbixError && (
-            <Alert severity="warning" title="Não foi possível consultar o Zabbix">
-              {zabbixError} As sugestões abaixo vêm apenas das queries do painel.
-            </Alert>
+            <Note tone="warn" title="Não foi possível consultar o Zabbix">
+              {`${zabbixError} As sugestões abaixo vêm apenas das queries do painel.`}
+            </Note>
           )}
 
           <Field
-            label={<FieldLabel info="Nome do host no Zabbix. Aceita valor digitado.">Host</FieldLabel>}
+            label={
+              <FieldLabel info="Casamento exato, sem diferenciar maiúsculas, contra o nome visível ou técnico.">
+                Host
+              </FieldLabel>
+            }
             htmlFor={hostId}
           >
             <Combobox
@@ -201,21 +157,14 @@ export function TriggerBindingField({ frames, value, onChange }: TriggerBindingF
           </Field>
 
           {hostUnknown && (
-            <Alert
-              severity="warning"
-              title="Host sem correspondência nos dados. Confira o nome, ou ele simplesmente não tem problema ativo agora."
-            />
+            <Note tone="warn">
+              Host sem correspondência nos dados. Confira o nome, ou ele simplesmente não tem problema ativo agora.
+            </Note>
           )}
 
-          {/*
-            Uma linha por trigger, na relacao **OU**: basta uma alarmar para o
-            elemento acender, e as que alarmarem juntas aparecem todas na lista
-            abaixo do elemento. Com uma linha so, e exatamente o campo unico de
-            antes — inclusive a opcao "qualquer trigger do host".
-          */}
           <Field
             label={
-              <FieldLabel info="Cada linha é uma trigger que acende o elemento; basta uma alarmar. Com uma linha só, deixe em “qualquer” para acender com qualquer problema do host.">
+              <FieldLabel info="Relação OU: basta uma alarmar. Vazio = qualquer trigger do host.">
                 {rows.length > 1 ? 'Triggers' : 'Trigger'}
               </FieldLabel>
             }
@@ -223,14 +172,9 @@ export function TriggerBindingField({ frames, value, onChange }: TriggerBindingF
           >
             <div className={styles.triggerList}>
               {rows.map((name, index) => (
-                // Pelo indice de proposito: o nome nao e unico (duas linhas em
-                // branco convivem enquanto o usuario escolhe) e a lista so muda
-                // por acao dele, nunca por reordenacao vinda dos dados.
                 <div className={styles.triggerRow} key={index}>
-                  {/* Rotulo proprio, escondido: o `Combobox` do Grafana so
-                      repassa `aria-labelledby` — um `aria-label` nele nao chega
-                      ao input, e a linha 2 em diante ficaria muda para leitor de
-                      tela (o `htmlFor` do `Field` alcanca so a primeira). */}
+                  {/* O `Combobox` so repassa `aria-labelledby`: rotulo proprio,
+                      escondido, para a linha 2 em diante nao ficar muda. */}
                   <label className={styles.srOnly} htmlFor={`${triggerId}-${index}`}>
                     {`Trigger ${index + 1}`}
                   </label>
@@ -244,116 +188,54 @@ export function TriggerBindingField({ frames, value, onChange }: TriggerBindingF
                     placeholder={rows.length > 1 ? 'Selecione ou digite a trigger' : 'Qualquer trigger do host'}
                     noOptionsMessage={temCatalogo ? 'Nenhuma trigger encontrada' : 'Nenhuma trigger nos dados'}
                   />
-                  {/* Some com uma linha so: remove-la levaria o campo inteiro, e
-                      o caminho para "qualquer trigger" e a opcao do combo. */}
                   {rows.length > 1 && (
-                    // O `IconButton` deriva o rotulo acessivel do `tooltip` e
-                    // ignora um `aria-label` proprio — dai o numero da linha vir
-                    // no proprio texto, que e tambem o que distingue os botoes.
-                    <IconButton
-                      name="times"
-                      tooltip={`Remover a trigger ${index + 1}`}
+                    <button
+                      type="button"
+                      className={styles.remove}
+                      title="Remover"
+                      aria-label={`Remover a trigger ${index + 1}`}
                       onClick={() => removeName(index)}
-                    />
+                    >
+                      ×
+                    </button>
                   )}
                 </div>
               ))}
-
-              <Button
-                type="button"
-                variant="secondary"
-                fill="text"
-                size="sm"
-                icon="plus"
-                onClick={addName}
-                className={styles.addTrigger}
-              >
-                Adicionar trigger
-              </Button>
+              <DashedButton onClick={addName}>+ Adicionar trigger</DashedButton>
             </div>
           </Field>
 
-          {/*
-            Fica ligado por padrao: sem a lista, o elemento vermelho diz que algo
-            caiu e nao o que caiu. O desligar existe para a topologia densa, em
-            que o nome de cada trigger cobriria os elementos vizinhos.
-
-            E um `Switch` solto, e nao um `ToggleField`, porque nao ha nada para
-            revelar embaixo — o `ToggleField` existe para campos que escondem um
-            controle.
-          */}
-          <div className={styles.switchRow}>
-            {/* `label` explicito, e nao o `Field` do Grafana: com um `Switch`
-                dentro, o `Field` renderiza o rotulo num `<span>` e o controle
-                fica sem rotulo acessivel — sem `htmlFor`, sem leitor de tela e
-                sem `getByLabelText` no teste. Mesmo padrao do `ToggleField`. */}
-            <label className={styles.switchLabel} htmlFor={activeId}>
-              <FieldLabel info="Mostra o que está em PROBLEM logo abaixo do elemento, na topologia — os nomes das triggers ou só o total, conforme o formato escolhido.">
-                Exibir triggers ativas
-              </FieldLabel>
-            </label>
-            <Switch
-              id={activeId}
-              value={value?.showActive !== false}
-              onChange={(event) => patch({ showActive: event.currentTarget.checked })}
-            />
-          </div>
-
-          {/* Os dois campos abaixo so fazem pergunta a quem tem o que exibir:
-              com a lista desligada, perguntariam o formato e o lugar de uma
-              coisa que nao aparece. */}
-          {/* "Formato da lista", e nao "Formato": o painel de opcoes do Grafana ja
-              tem meia duzia de campos chamados "Formato" nas secoes nativas, e o
-              par com "Posicao da lista" logo abaixo e o que diz de que lista se
-              esta falando aqui. */}
-          {value?.showActive !== false && (
-            <Field
-              label={
-                <FieldLabel info="Lista mostra o nome de cada trigger em PROBLEM — até três, e o restante vira “+N outras”. Total troca as linhas por uma só, “4 incidentes ativos”: use quando importa quanto está caindo, e o nome de cada uma cabe no hover.">
-                  Formato da lista
-                </FieldLabel>
-              }
+          {showList && (
+            <ToggleField
+              label="Exibir triggers ativas"
+              description="Mostra a lista de alarmes fixa junto ao elemento."
+              enabled={value?.showActive !== false}
+              onToggle={(showActive) => patch({ showActive })}
             >
-              <RadioButtonGroup
-                options={DISPLAY_OPTIONS}
-                value={value?.activeDisplay ?? 'list'}
+              <TfSelect
+                label="Formato dos problemas"
+                info="Dentro do nó: seção no cartão. Faixa: barra segmentada + pior problema. Contador: número no círculo + pior problema. Lista: cartão preso ao elemento. Total: uma linha com a contagem."
+                value={format}
+                options={formats}
                 onChange={(activeDisplay) => patch({ activeDisplay })}
-                size="sm"
-                fullWidth
               />
-            </Field>
-          )}
 
-          {value?.showActive !== false && (
-            <Field
-              label={
-                <FieldLabel info="De que lado do elemento a lista aparece. Escolha pelo espaço que a sua topologia tem — um elemento na borda inferior joga a lista para fora da área visível.">
-                  Posição da lista
-                </FieldLabel>
-              }
-            >
-              <RadioButtonGroup
-                options={POSITION_OPTIONS}
-                value={value?.activePosition ?? 'bottom'}
-                onChange={(activePosition) => patch({ activePosition })}
-                size="sm"
-                fullWidth
-              />
-            </Field>
+              {showPosition && (
+                <Field label="Posição da lista">
+                  <Segmented
+                    options={POSITION_OPTIONS}
+                    value={value?.activePosition ?? 'bottom'}
+                    onChange={(activePosition) => patch({ activePosition })}
+                  />
+                </Field>
+              )}
+            </ToggleField>
           )}
         </>
       )}
     </>
   );
 }
-
-/**
- * As tres funcoes abaixo sao exportadas para teste direto.
- *
- * O menu do `Combobox` e virtualizado e nao renderiza opcao nenhuma em jsdom —
- * um teste de DOM sobre ele exercitaria a biblioteca, nao este codigo. Testar a
- * lista que entregamos ao componente cobre o que e nosso.
- */
 
 function toOptions(values: string[]): Array<ComboboxOption<string>> {
   return values.map((value) => ({ value, label: value }));
@@ -397,43 +279,31 @@ export function isHostUnknown(frames: DataFrame[], host: string): boolean {
   return !extractProblems(frames).some((problem) => matchesHost(problem, host));
 }
 
-const getStyles = (theme: GrafanaTheme2) => ({
-  triggerList: css({
-    display: 'flex',
-    flexDirection: 'column',
-    gap: theme.spacing(0.5),
-  }),
-  triggerRow: css({
-    display: 'flex',
-    alignItems: 'center',
-    gap: theme.spacing(0.5),
-    // O combo carrega a linha inteira; o botao de remover fica no seu tamanho.
-    // O rotulo escondido nao ocupa lugar no flex, entao a conta e sobre o combo.
-    '& > div': { flex: 1, minWidth: 0 },
-  }),
-  srOnly: css({
-    position: 'absolute',
-    width: 1,
-    height: 1,
-    overflow: 'hidden',
-    clip: 'rect(0, 0, 0, 0)',
-    whiteSpace: 'nowrap',
-  }),
-  addTrigger: css({
-    alignSelf: 'flex-start',
-    paddingLeft: 0,
-  }),
-  switchRow: css({
-    display: 'flex',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    gap: theme.spacing(1),
-    marginBottom: theme.spacing(2),
-  }),
-  switchLabel: css({
-    color: theme.colors.text.primary,
-    fontSize: theme.typography.bodySmall.fontSize,
-    fontWeight: theme.typography.fontWeightMedium,
-    cursor: 'pointer',
-  }),
-});
+const getStyles = (theme: GrafanaTheme2) => {
+  const p: TfPalette = tfPalette(theme);
+  return {
+    triggerList: css({ display: 'flex', flexDirection: 'column', gap: 6 }),
+    triggerRow: css({
+      display: 'flex',
+      alignItems: 'center',
+      gap: 6,
+      '& > div': { flex: 1, minWidth: 0 },
+    }),
+    srOnly: css({
+      position: 'absolute',
+      width: 1,
+      height: 1,
+      overflow: 'hidden',
+      clip: 'rect(0, 0, 0, 0)',
+      whiteSpace: 'nowrap',
+    }),
+    remove: css({
+      border: 0,
+      background: 'transparent',
+      color: p.apa,
+      font: `15px ${FONT_SANS}`,
+      cursor: 'pointer',
+      padding: '0 2px',
+    }),
+  };
+};

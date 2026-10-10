@@ -291,25 +291,19 @@ temas.
 
 ## Ícones que acompanham o estado
 
-Um ícone tem **natureza**, e ela decide se ele pode acender:
+Desde a v1.4 **todo ícone acompanha o estado**. Todos vêm do catálogo do mockup:
+desenhos com volume, faces em `--tf-t1..t4`, acesos por seis tons derivados da
+cor (OKLCH). Os glifos de traço dos Clássicos saíram junto com os packs em PNG.
 
-| `kind`     | O que é                                       | Acende?                            |
-| ---------- | --------------------------------------------- | ---------------------------------- |
-| `glyph`    | SVG inline que herda `currentColor`           | sim, pela cor                      |
-| `image`    | arte colorida (PNG, logo, foto de produto)    | não — quem anuncia é a placa atrás |
-| `variants` | a mesma figura em vários arquivos, um por tom | sim, **trocando de arquivo**       |
+`icons/svg/tones.ts` deriva os seis tons (topo claro, base, lateral escura,
+sombra, detalhe, brilho) de **uma** cor, em OKLCH — o volume do desenho
+sobrevive a qualquer matiz. A cor é a **já resolvida pela cadeia**
+(`canvas/iconTone.ts` → `iconColor`), então o ícone pinta exatamente o que a regra
+pintou; sem estado (neutro, sem dado) fica o azul original do desenho. O
+`iconTone` salvo antes da v1.4 (cor fixa) continua respeitado, pela paleta do
+tema; o editor não oferece mais a escolha.
 
-`variants` é a terceira natureza, descoberta com o material do cliente (11
-famílias × 4-6 cores, no estilo mapa do Zabbix), e ela desfaz a oposição
-glifo × figura que estruturava o desenho original.
-
-O tom sai da **cor já resolvida pela cadeia, por matiz** (`canvas/iconTone.ts`),
-e não da severidade. É o que faz a regra valer nos dois modos: o ícone acompanha
-exatamente a cor que a regra pintou. Cada cor nomeada do Grafana cai no tom
-homônimo; roxo vai para azul e magenta para vermelho (vizinhos cromáticos);
-saturação < 15% cai em cinza.
-
-> Usa saturação **HSV**, não HSL. Com HSL, `dark-red` (Disaster) viraria cinza.
+As figuras de cor fixa (`image`, `variants`) saíram com os packs em PNG.
 
 ## Animação de alerta
 
@@ -347,3 +341,32 @@ radar). Onde a regra estiver, está a animação dela.
    `text.primary`. Foi a causa-raiz de nós e arestas nascerem brancos.
 
 Detalhe completo em [estilo-elementos-canvas.md](estilo-elementos-canvas.md).
+
+## Várias métricas por elemento (v1.4)
+
+O nível 1 da cadeia passou a ter **uma ou mais** métricas. A primeira é a de
+sempre (`color.field`/`color.metric` + `thresholds.steps`); as seguintes vêm de
+`extraMetrics`, cada uma com o próprio vínculo e as próprias regras
+(`stateMetrics` em `data/elementColor.ts`).
+
+Cada métrica é avaliada como a única era (`evaluateMetric`): regra que casou,
+sem dados, ou repouso. Depois, a combinação, como no mockup:
+
+1. vence a regra de **maior gravidade pelo matiz** (`colorGravity`): vermelho 5 ›
+   laranja 4 › âmbar 3 › azul 2 › cinza 1.5 › verde 1. É pelo matiz, e não pela
+   posição, porque regras de métricas diferentes só se comparam pela cor que
+   pedem;
+2. mas **"sem dados" de qualquer métrica vence uma regra abaixo do âmbar** (< 2.5)
+   — uma métrica muda não pode se esconder atrás do verde de outra;
+3. sem regra e sem falta de dado, a cadeia segue para a Base.
+
+Com uma métrica só, isto é exatamente a cadeia de antes. O estado `threshold`
+ganhou `field`: qual métrica decidiu.
+
+## Paleta (v1.4)
+
+As cores salvas passam por `resolveTfColor` (`theme/palette.ts`): as nomeadas
+do Grafana com par no mockup viram os tokens dele; hex passa direto. A
+severidade usa `severityTfColor` (Disaster e High no mesmo vermelho — o Disaster
+se distingue pelo tratamento, ver `canvas/look.ts`). Ver
+`docs/estilo-elementos-canvas.md`.

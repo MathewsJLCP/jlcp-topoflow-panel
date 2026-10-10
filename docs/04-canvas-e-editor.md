@@ -225,118 +225,111 @@ próprio tooltip.
 
 ## Biblioteca de ícones
 
-Chave salva: **`pack/nome`** (`classic/router`). Duas outras formas continuam
-válidas para sempre:
+Chave salva: **`pack/nome`** (`padrao/roteador`). Continuam válidas para sempre:
 
-- **sem pack** (`router`) — o formato de tudo que foi salvo antes de existirem
-  pastas. Resolve no pack `classic`. É o que dispensa migrador.
-- **desconhecida** — pack removido, ícone renomeado, JSON à mão. Cai no genérico
-  em vez de sumir: um ícone que não existe mais não pode fazer o nó desaparecer.
+- **sem pack** (`router`) ou **dos Clássicos** (`classic/router`) — o pack de
+  glifos saiu na v1.4; cada chave vai ao desenho equivalente;
+- **anterior à v1.4** (`topoflow/router`, `zabbix/rack-42`,
+  `petrolifera/unifi-ac-mesh`) — a tabela `LEGACY` em `icons/registry.ts` leva
+  cada chave dos packs em PNG ao desenho equivalente. Um teste garante que todo
+  destino existe;
+- **do pack Zabbix** (`zabbix/switch`) — o pack virou **Infra**; sem entrada na
+  tabela, `zabbix/<nome>` resolve em `infra/<nome>`;
+- **desconhecida** — cai no Desconhecido (`padrao/desconhecido`) em vez de sumir.
 
-Quatro packs, nesta ordem (packs de domínio vêm **depois** dos gerais):
+Packs: Padrão (28), Infra (43), Petrolífera (9), Formas (15), Planos (164). O
+Infra é o pack Zabbix do mockup renomeado (`RENAMED` em `icons/svg/index.ts`).
+Todos são SVG do catálogo `icons/svg/catalog.generated.ts`, gerado por
+`scripts/gen-icon-catalog.js` a partir do `topoflow-icons.js` do mockup. É um
+`.ts`, e não `.json`, porque o webpack do `.config` copia todo `.json` de `src/`
+para o `dist` — o catálogo iria duplicado no pacote.
 
-| Pack          | Rótulo      | Natureza   | Nota                                                                        |
-| ------------- | ----------- | ---------- | --------------------------------------------------------------------------- |
-| `topoflow`    | Padrão      | `variants` | 11 famílias × 6 tons, estilo mapa do Zabbix                                 |
-| `classic`     | Clássicos   | `glyph`    | os 10 originais; id não é `default` porque o pack padrão passou a ser outro |
-| `zabbix`      | Zabbix      | `image`    | o conjunto de mapas do Zabbix, inteiro (43), mais o `ap`                    |
-| `petrolifera` | Petrolífera | `image`    | ativos do ramo do cliente + rádios de campo                                 |
+O ícone é desenhado num `<img>` com data URI (`svgIconUri`), e não inline: vários
+desenhos declaram `id` internos (filtros, gradientes) que colidiriam na página.
 
-Laranja e verde do pack `topoflow` foram **derivados por rotação de matiz** dos
-arquivos existentes, girando só a cor dominante: sem a janela de ±45°, o display
-azul do servidor e a lente da câmera giravam junto e o ícone deixava de ser o
-mesmo desenho. O codec PNG foi escrito à mão — não há Pillow nem ImageMagick na
-máquina de desenvolvimento.
+`icons/iconMask.ts` rasteriza o desenho uma vez (160px) para achar a silhueta:
+o círculo de status da Imagem pousa no canto da tinta, e a conexão para a 4px
+dela. Em jsdom a máscara não existe e tudo cai na caixa.
 
-Os packs `zabbix` e `petrolifera` são `image`: renderizações e fotos de produto,
-com as cores do equipamento real e sem a mesma arte em seis tons (uma sonda de
-outra cor não é "a sonda em alarme"). Logo **não anunciam estado** — quem anuncia
-é a placa opaca da cápsula — e o campo "Cor do ícone" não aparece para eles.
+O seletor (`IconPicker`) é uma janela própria: pastas à esquerda, busca por
+termos (ignora acento, varre rótulo, chave, pack e sinônimos), grade; escolha
+imediata no clique; Esc fecha (listener de captura — o Grafana consome o Esc).
 
-O pack `zabbix` entrou **inteiro**, com os 43 arquivos do conjunto original
-(decisão do usuário em 2026-09-10), mais um 44º que não é do Zabbix: `ap`, a foto
-do UniFi AC Lite, porque o conjunto original não tem ponto de acesso. O arquivo
-está **copiado** do pack `petrolifera`, e não importado dele — os dois packs têm
-pendência de licença própria e precisam ser removíveis de forma independente. O
-webpack nomeia asset por hash de conteúdo, então as duas cópias viram um arquivo
-só no bundle. Isso inclui as peças de **elevação de rack**,
-que não são ícones de nó: `server-1u-2d` tem 128×9 px e num nó de 20px vira um
-fio de 1,4 px. O lugar delas é o elemento **Imagem**, de tamanho livre. Pela
-mesma razão **2D e 3D entraram os dois** — ao contrário dos tamanhos repetidos do
-pack `petrolifera`, que eram o mesmo desenho: aqui são projeções distintas, e uma
-pilha de rack só fecha se todas as peças estiverem na mesma. A ordem dentro do
-pack é por família (rede, servidores, rack, terminais), não alfabética: com 44
-itens numa grade, alfabética põe `cloud` entre `crypto-router` e `disk-array` e
-procurar vira ler tudo.
-
-Decisões do seletor que são escolha, não acaso: escolha **imediata** no clique
-(sem rodapé de confirmação — o canvas já mostra o resultado e o undo do dashboard
-cobre o arrependimento); a coluna de pastas aparece **mesmo com um pack só**,
-porque é a estrutura da biblioteca; a busca ignora acento nos dois sentidos e
-varre rótulo, chave e sinônimos; quando não acha na pasta aberta mas acha em
-outra, o vazio oferece o atalho para "Todos".
-
-Na **Imagem**, `src` guarda três coisas — data URI, URL e chave do catálogo. Quem
-separa é `isKnownIcon`, que só reconhece o que existe no catálogo, então uma URL
-nunca é confundida com ícone. O modo do formulário (Biblioteca / Arquivo) é
-**estado local derivado do próprio `src`**, e não campo do schema: seria uma
-segunda fonte de verdade livre para discordar, e alternar não pode custar o que
-já estava configurado.
+Na **Imagem**, `src` guarda data URI, URL ou chave do catálogo; quem separa é
+`isKnownIcon`. O modo Biblioteca / Arquivo continua estado local derivado do
+`src`, com o valor do modo abandonado guardado na sessão.
 
 ## Hover: um painel, dois conteúdos
 
 `ElementHover` é **um por elemento**, e o conteúdo depende da fonte de estado:
+alarmando → incidentes (pílula da severidade, nome, idade); métrica com gráfico
+ligado → o gráfico; nenhum dos dois → nada.
 
-- **Trigger, alarmando** → tabela de incidentes (severidade, nome, tempo);
-- **Métrica, com gráfico ligado** → a série da métrica no tempo;
-- nenhum dos dois → não há painel.
+Desde a v1.4 o popover é **próprio**, desenhado dentro do canvas como no mockup
+(e não o `Tooltip` do Grafana, que traz moldura e fundo dele): o canvas publica o
+próprio elemento em `HoverLayerContext`, e o popover nasce à direita do elemento
+— à esquerda perto da borda —, encolhido para caber. Sem o canvas (testes), cai
+no `document.body`.
 
-Os dois nunca competem. Um `Tooltip` só, e não um por conteúdo, também é
-necessidade técnica: o `Tooltip` do Grafana clona o filho e ancora nele por ref,
-e dois aninhados fariam o de fora ancorar num componente de função, que engole a
-ref em silêncio e abre o painel no canto da tela.
+Gatilho: hover **ou foco** abre; no dashboard, clique num elemento em alarme
+fixa; Esc (captura) ou clique fora soltam. No editor o clique seleciona, e com
+drill-down o clique navega — nos dois casos não há fixar. Some durante o arraste.
 
-Gatilho: **hover abre, clique fixa**, Esc/clique fora solta. Em **modo de edição
-o hover também vale** — o painel mudo no editor foi o primeiro tropeço de quem
-testou. Ali o clique não fixa (já seleciona o elemento) e o painel some durante
-o arraste.
+O gráfico (`MetricChart`) é SVG próprio no desenho do mockup: uma série por
+métrica de estado, na janela de tempo do dashboard, com as regras de threshold
+da métrica em linhas tracejadas. Uma métrica: legenda Name / Last / Max / Mean;
+várias: um gráfico mais baixo por métrica. Os valores passam pelo `field.display`
+(unidade, casas, value mappings do painel); os ticks do eixo usam no máximo uma
+casa e a unidade do campo.
 
-O gráfico (`MetricChart`) plota a **mesma** métrica que decide a cor: não há
-segundo seletor de propósito, porque ele existe para responder "de onde veio essa
-cor". A janela de tempo é a do dashboard, lida de um contexto React
-(`useTopoTime`) — quem mudou o time range espera que tudo na tela acompanhe.
+## Problemas junto ao elemento
 
-O frame é **remontado** (tempo + valor) em vez de reaproveitado: o frame da query
-costuma trazer várias métricas, e `field.config.custom` chega vazio porque
-`module.ts` chama `.useFieldConfig()` sem opções de gráfico. Preenchendo, o traço
-é uma decisão nossa e não um acidente.
+Num telão ninguém passa o mouse. Desde a v1.4 há cinco formatos
+(`trigger.activeDisplay`, ausente = `list`; `count` é o Total de antes), em
+`canvas/Problems.tsx`:
 
-## `ActiveTriggers`: o que fica na tela
+- **Dentro do nó**, **Faixa** e **Contador** vivem dentro do cartão — só o nó os
+  oferece; salvos em imagem ou point, caem na Lista;
+- **Lista** é o cartão pendurado, preso por um conector, na posição escolhida;
+- **Total** é uma linha, "N incidentes ativos", vestindo a maior severidade.
 
-Num telão ninguém passa o mouse. Quatro decisões carregam a forma:
+Continuam valendo: teto de três linhas (`+N outras`; o hover tem tudo), uma
+linha por problema cortada no fim, e a extensão não recebe ponteiro — arraste,
+seleção e conexão continuam do elemento. No nó, a posição só aparece no editor
+para a Lista.
 
-- **Dois formatos, escolhidos pelo usuário** (`trigger.activeDisplay`, ausente =
-  `list`): `list` mostra os nomes das triggers; `count` troca as linhas por uma
-  só, **"4 incidentes ativos"**, de altura fixa para qualquer número de alarmes.
-  A linha do total veste a **maior severidade em curso**, como a primeira linha
-  da lista vestiria — trocar de formato muda quanto se lê, nunca o que a cor
-  diz. Os nomes não se perdem: vão para o `title` da linha e para o hover.
-- **Teto de três linhas.** Um NOC em pico tem elementos com dez ou quinze
-  alarmes, e sem teto a lista de um nó cobriria os elementos abaixo dele. O que
-  sobra vira `+N outras`, e o hover tem a lista completa.
-- **Uma linha por trigger, cortada no fim.** Altura previsível importa mais que o
-  nome inteiro: com quebra, dois alarmes de nome longo empurram o dobro de altura
-  sobre a cena.
-- **Não recebe ponteiro** (`pointerEvents: 'none'`): o arraste, a seleção e o
-  gesto de conexão continuam pertencendo ao elemento. A extensão é legenda, não
-  alvo.
+## Conexões: trajeto, paralelas, setas (v1.4)
 
-A **posição** é escolhível entre quatro lados (não cantos), com o campo escondido
-quando a lista está desligada: a topologia é que decide onde há espaço — elemento
-na borda inferior joga a lista para fora. O **formato** fica no mesmo lugar, pelo
-mesmo motivo, e o rótulo é "Formato da lista" e não "Formato": as seções nativas
-do painel de opções já têm meia dúzia de campos chamados "Formato", e é o par com
-"Posição da lista" que diz de que lista se está falando.
+A geometria é pura (`canvas/edges/path.ts`, testável sem React Flow): recorte na
+borda +1.5px, curva quadrática com controle a 20%, paralelas a 20px sobre a
+normal do sentido canônico do par (`parallelIndex` em `useFlowElements`), setas
+no fim e no meio de cada segmento da polilinha.
+
+O trajeto (`edge.waypoints`) é editado direto na aresta: `EdgeActionsContext`
+entrega `setWaypoints`, o vértice selecionado e o menu do vértice — contexto, e
+não `data` da aresta, porque o `data` congela entre reconstruções. O arraste
+mantém um rascunho local e grava no `pointerup`. Delete com vértice selecionado
+remove o vértice (`onBeforeDelete` devolve `false` para a aresta). Arrastar as
+duas pontas pelo mesmo deslocamento leva o trajeto junto (`moveElements`);
+inverter a conexão inverte a ordem dos vértices.
+
+## Editor no desenho do mockup (v1.4)
+
+O Layer é: "+ Adicionar elemento" (Nó, Postit, Texto, Imagem — o Point saiu do
+menu, o trajeto o substitui), o cartão do elemento aberto (ou os cartões de
+edição em massa) e a lista "Elementos" agrupada por tipo, com a cor do estado.
+
+Controles próprios em `src/editors/ui/` mantêm a semântica que os testes e os
+leitores de tela usam: o segmentado é um `radiogroup` de botões `radio` com
+`aria-checked` e `aria-label`; a chave é `role="switch"` rotulada pelo `label`.
+O "i" das dicas tem o glifo em `aria-hidden`, para não entrar no nome acessível do
+campo. Selects nativos precisam de altura explícita — o CSS global do Grafana os
+achata.
+
+O bloco de Estado (`StateSection`) cuida das várias métricas. Remover a primeira
+promove a segunda, e isso reescreve `color`, `thresholds` e `extraMetrics` numa
+escrita só (`onMetricsChange`): três escritas separadas partiriam do mesmo
+elemento e só a última valeria.
 
 ## Drill-down: um `<a>` de verdade
 
@@ -383,3 +376,14 @@ morto é pior que item ausente**.
 
 Em modo View não há menu, mas o menu do browser também não aparece
 (`preventDefault`): um menu nativo sobre o mapa não ajuda ninguém.
+
+Desde a v1.4 o menu é **próprio** (`CanvasContextMenu`), no desenho do mockup:
+título com o id do alvo (ou "canvas"), itens sem ícone, "Excluir" em vermelho.
+Ganhou os alvos de trajeto — na conexão, "Adicionar vértice aqui", "Limpar
+trajeto" (só com vértices) e "Inverter direção"; no vértice, "Remover vértice" e
+"Limpar trajeto". O menu do canvas não oferece mais Point. Coordenadas: o estado
+guarda as de tela (o clique) e o menu é desenhado relativo ao canvas, encolhido
+para caber; fecha no clique fora e no Esc (listener de captura).
+
+O resultado do screenshot virou o toast do canvas, como no mockup ("Imagem da
+topologia baixada" com o nome do arquivo, ou a causa provável da falha).

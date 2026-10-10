@@ -4,6 +4,7 @@ import baseConfig from './.config/eslint.config.mjs';
 export default defineConfig([
   {
     ignores: [
+      '**/*.generated.ts',
       '**/logs',
       '**/*.log',
       '**/npm-debug.log*',

@@ -6,6 +6,7 @@ import { NodeProps } from '@xyflow/react';
 import { TopoText } from '../../model/types';
 import { TextFlowNode } from '../flowTypes';
 import { TextNode, textBackground } from './TextNode';
+import { resolveTfColor } from '../../theme/palette';
 
 /**
  * O `TextNode` nao usa hook nenhum do React Flow — sem `Handle`, sem
@@ -74,7 +75,7 @@ describe('textBackground', () => {
     const fundo = textBackground({ color: 'blue', opacity: 1 }, theme);
 
     expect(fundo).not.toContain('blue');
-    expect(fundo).toContain(theme.visualization.getColorByName('blue'));
+    expect(fundo).toContain(resolveTfColor('blue', theme));
   });
 });
 

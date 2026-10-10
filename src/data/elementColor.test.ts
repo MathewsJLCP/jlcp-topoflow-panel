@@ -11,9 +11,10 @@ import {
 } from '@grafana/data';
 
 import { ElementThresholds, TriggerBinding } from '../model/types';
-import { accentColor, resolveElementColor } from './elementColor';
+import { accentColor, colorGravity, resolveElementColor } from './elementColor';
 import { writeSeverityLadder } from './thresholds';
 import { ZabbixProblem } from './problems';
+import { resolveTfColor } from '../theme/palette';
 
 const theme = createTheme();
 
@@ -62,7 +63,8 @@ describe('resolveElementColor — nível 1 (threshold do elemento)', () => {
 
     expect(resolveElementColor({ fixed: 'blue', field: 'cpu' }, frames, theme, { thresholds: CRITICO })).toEqual({
       state: 'threshold',
-      color: theme.visualization.getColorByName('red'),
+      field: 'cpu',
+      color: resolveTfColor('red', theme),
       label: 'crítico',
       animation: undefined,
     });
@@ -74,7 +76,8 @@ describe('resolveElementColor — nível 1 (threshold do elemento)', () => {
 
     expect(resolveElementColor({ field: 'cpu' }, frames, theme, { thresholds: semRotulo })).toEqual({
       state: 'threshold',
-      color: theme.visualization.getColorByName('red'),
+      field: 'cpu',
+      color: resolveTfColor('red', theme),
       label: undefined,
       animation: undefined,
     });
@@ -99,7 +102,7 @@ describe('resolveElementColor — o pipeline nativo não pinta elemento', () => 
       resolveElementColor({ fixed: 'orange', field: 'cpu' }, frames, theme, { thresholds: { steps: [] } })
     ).toEqual({
       state: 'fixed',
-      color: theme.visualization.getColorByName('orange'),
+      color: resolveTfColor('orange', theme),
     });
   });
 
@@ -121,7 +124,7 @@ describe('resolveElementColor — binding sem regra de threshold', () => {
 
     expect(resolveElementColor({ fixed: 'blue', field: 'cpu' }, frames, theme)).toEqual({
       state: 'fixed',
-      color: theme.visualization.getColorByName('blue'),
+      color: resolveTfColor('blue', theme),
     });
   });
 
@@ -158,7 +161,7 @@ describe('resolveElementColor — níveis 2 e 3', () => {
   it('sem binding, usa o acento estático', () => {
     expect(resolveElementColor({ fixed: 'blue' }, [], theme)).toEqual({
       state: 'fixed',
-      color: theme.visualization.getColorByName('blue'),
+      color: resolveTfColor('blue', theme),
     });
   });
 
@@ -205,7 +208,7 @@ describe('resolveElementColor — nível 0 (trigger)', () => {
 
     expect(resolveElementColor({ fixed: 'blue', field: 'cpu' }, frames, theme, { trigger })).toMatchObject({
       state: 'trigger',
-      color: theme.visualization.getColorByName('red'),
+      color: resolveTfColor('red', theme),
       severity: 4,
       label: 'High',
     });
@@ -217,7 +220,7 @@ describe('resolveElementColor — nível 0 (trigger)', () => {
 
     expect(resolveElementColor({ fixed: 'blue', field: 'cpu' }, frames, theme, { trigger })).toEqual({
       state: 'fixed',
-      color: theme.visualization.getColorByName('blue'),
+      color: resolveTfColor('blue', theme),
     });
   });
 
@@ -237,7 +240,8 @@ describe('resolveElementColor — nível 0 (trigger)', () => {
       resolveElementColor({ field: 'cpu' }, frames, theme, { trigger: desligado, thresholds: REGRA_METRICA })
     ).toEqual({
       state: 'threshold',
-      color: theme.visualization.getColorByName('red'),
+      field: 'cpu',
+      color: resolveTfColor('red', theme),
       label: 'crítico',
       animation: undefined,
     });
@@ -253,7 +257,7 @@ describe('resolveElementColor — nível 0 (trigger)', () => {
 
     expect(resolveElementColor({ fixed: 'blue', field: 'cpu' }, frames, theme)).toEqual({
       state: 'fixed',
-      color: theme.visualization.getColorByName('blue'),
+      color: resolveTfColor('blue', theme),
     });
   });
 });
@@ -293,7 +297,8 @@ describe('resolveElementColor — nível 1 (regra do elemento)', () => {
 
     expect(resolveElementColor({ field: 'cpu' }, frames, theme, { thresholds: REGRAS })).toEqual({
       state: 'threshold',
-      color: theme.visualization.getColorByName('orange'),
+      field: 'cpu',
+      color: resolveTfColor('orange', theme),
       label: 'atenção',
     });
   });
@@ -308,7 +313,7 @@ describe('resolveElementColor — nível 1 (regra do elemento)', () => {
 
     expect(resolveElementColor({ fixed: 'blue', field: 'cpu' }, frames, theme, { thresholds: acimaDoField })).toEqual({
       state: 'fixed',
-      color: theme.visualization.getColorByName('blue'),
+      color: resolveTfColor('blue', theme),
     });
   });
 
@@ -318,7 +323,8 @@ describe('resolveElementColor — nível 1 (regra do elemento)', () => {
 
     expect(resolveElementColor({ field: 'cpu' }, frames, theme, { thresholds: semRotulo })).toEqual({
       state: 'threshold',
-      color: theme.visualization.getColorByName('orange'),
+      field: 'cpu',
+      color: resolveTfColor('orange', theme),
       label: undefined,
     });
   });
@@ -337,7 +343,7 @@ describe('resolveElementColor — nível 1 (regra do elemento)', () => {
 
     expect(resolveElementColor({ field: 'cpu' }, frames, theme, { trigger, thresholds: REGRAS })).toMatchObject({
       state: 'trigger',
-      color: theme.visualization.getColorByName('red'),
+      color: resolveTfColor('red', theme),
       severity: 4,
       label: 'High',
     });
@@ -358,7 +364,7 @@ describe('resolveElementColor — regra própria de severidade', () => {
   it('sem regra própria, o mapa do Zabbix continua valendo', () => {
     expect(resolveElementColor({}, frames, theme, { trigger })).toMatchObject({
       state: 'trigger',
-      color: theme.visualization.getColorByName('red'),
+      color: resolveTfColor('red', theme),
       label: 'High',
     });
   });
@@ -366,7 +372,7 @@ describe('resolveElementColor — regra própria de severidade', () => {
   it('a regra própria troca a cor do alarme', () => {
     expect(resolveElementColor({}, frames, theme, { trigger, thresholds: severidade(4, 'purple') })).toMatchObject({
       state: 'trigger',
-      color: theme.visualization.getColorByName('purple'),
+      color: resolveTfColor('purple', theme),
       severity: 4,
     });
   });
@@ -386,7 +392,7 @@ describe('resolveElementColor — regra própria de severidade', () => {
 
   it('regra mais grave que o alarme não se aplica, e o mapa volta', () => {
     expect(resolveElementColor({}, frames, theme, { trigger, thresholds: severidade(5, 'purple') })).toMatchObject({
-      color: theme.visualization.getColorByName('red'),
+      color: resolveTfColor('red', theme),
     });
   });
 
@@ -396,7 +402,7 @@ describe('resolveElementColor — regra própria de severidade', () => {
 
     expect(
       resolveElementColor({ fixed: 'blue' }, semAlarme, theme, { trigger, thresholds: severidade(0, 'purple') })
-    ).toEqual({ state: 'fixed', color: theme.visualization.getColorByName('blue') });
+    ).toEqual({ state: 'fixed', color: resolveTfColor('blue', theme) });
   });
 });
 
@@ -421,7 +427,7 @@ describe('resolveElementColor — severidade desligada', () => {
 
     expect(resolveElementColor({ fixed: 'green' }, frames, theme, { trigger, thresholds: semNivel(4) })).toEqual({
       state: 'fixed',
-      color: theme.visualization.getColorByName('green'),
+      color: resolveTfColor('green', theme),
     });
   });
 
@@ -494,5 +500,74 @@ describe('resolveElementColor — vínculo por host + item', () => {
     );
 
     expect(resultado).toEqual({ state: 'nodata' });
+  });
+});
+
+describe('resolveElementColor — várias métricas (v1.4)', () => {
+  const PING = { steps: [{ type: 'value' as const, match: '1', color: 'green' }] };
+  const CPU = { steps: [{ type: 'threshold' as const, value: 80, color: 'red' }] };
+
+  function frames(cpu: unknown, ping: unknown): DataFrame[] {
+    return [...buildFrames('cpu', [cpu]), ...buildFrames('ping', [ping])];
+  }
+
+  /** Vermelho de uma métrica vence o verde da outra, qualquer que seja a ordem. */
+  it('vence a regra de maior gravidade', () => {
+    const resultado = resolveElementColor({ field: 'ping' }, frames(92, 1), theme, {
+      thresholds: PING,
+      extraMetrics: [{ field: 'cpu', steps: CPU.steps }],
+    });
+
+    expect(resultado).toMatchObject({ state: 'threshold', color: resolveTfColor('red', theme), field: 'cpu' });
+  });
+
+  it('abaixo das regras da segunda, vale a primeira', () => {
+    const resultado = resolveElementColor({ field: 'ping' }, frames(40, 1), theme, {
+      thresholds: PING,
+      extraMetrics: [{ field: 'cpu', steps: CPU.steps }],
+    });
+
+    expect(resultado).toMatchObject({ state: 'threshold', color: resolveTfColor('green', theme), field: 'ping' });
+  });
+
+  /**
+   * Uma métrica muda não pode ser escondida pelo verde da outra — sem dado tem
+   * de ser visivelmente diferente de saudável.
+   */
+  it('"sem dados" de uma métrica vence o verde da outra', () => {
+    const resultado = resolveElementColor({ field: 'ping' }, buildFrames('ping', [1]), theme, {
+      thresholds: PING,
+      extraMetrics: [{ field: 'cpu', steps: CPU.steps }],
+    });
+
+    expect(resultado).toEqual({ state: 'nodata' });
+  });
+
+  it('mas o vermelho vence o "sem dados"', () => {
+    const resultado = resolveElementColor({ field: 'cpu' }, buildFrames('cpu', [95]), theme, {
+      thresholds: CPU,
+      extraMetrics: [{ field: 'ping', steps: PING.steps }],
+    });
+
+    expect(resultado).toMatchObject({ state: 'threshold', color: resolveTfColor('red', theme) });
+  });
+
+  /** Vínculo de trigger ligado continua desligando todas as métricas. */
+  it('a trigger ligada desliga as métricas extras também', () => {
+    const resultado = resolveElementColor({ fixed: 'green' }, frames(95, 1), theme, {
+      trigger: { enabled: true, host: 'h', names: [], showActive: true },
+      extraMetrics: [{ field: 'cpu', steps: CPU.steps }],
+    });
+
+    expect(resultado).toEqual({ state: 'fixed', color: resolveTfColor('green', theme) });
+  });
+});
+
+describe('colorGravity', () => {
+  it('ordena vermelho › laranja › âmbar › azul › verde', () => {
+    const ordem = ['#EF4444', '#F97316', '#F59E0B', '#3B82F6', '#22C55E'].map(colorGravity);
+
+    expect([...ordem].sort((a, b) => b - a)).toEqual(ordem);
+    expect(colorGravity('#8D8D98')).toBe(1.5);
   });
 });

@@ -2,6 +2,7 @@ import { DataFrame } from '@grafana/data';
 import { Edge, Node } from '@xyflow/react';
 
 import { TopoEdge, TopoImage, TopoNode, TopoPoint, TopoPostit, TopoText } from '../model/types';
+import { Parallel } from './edges/path';
 
 /**
  * Ponte entre o modelo e o React Flow.
@@ -71,7 +72,13 @@ export type TopoFlowNode = DeviceFlowNode | PointFlowNode | PostitFlowNode | Tex
  * `editable` chega ate a aresta pelo mesmo motivo que chega ate os nos: e o que
  * cala o painel de triggers em modo de edicao, onde o rotulo e alca de selecao.
  */
-export type TopoFlowEdgeData = { element: TopoEdge; frames: DataFrame[]; editable: boolean };
+export type TopoFlowEdgeData = {
+  element: TopoEdge;
+  frames: DataFrame[];
+  editable: boolean;
+  /** Posicao entre as conexoes do mesmo par (ver `edges/path.ts`). */
+  parallel?: Parallel;
+};
 export type TopoFlowEdge = Edge<TopoFlowEdgeData, 'topoEdge'>;
 
 /**

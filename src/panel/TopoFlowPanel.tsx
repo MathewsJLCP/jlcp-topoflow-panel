@@ -1,9 +1,8 @@
 import React, { useCallback, useMemo } from 'react';
 import { PanelProps, cacheFieldDisplayNames } from '@grafana/data';
 import { locationService } from '@grafana/runtime';
-import { Alert } from '@grafana/ui';
 
-import { TopologyCanvas } from '../canvas/TopologyCanvas';
+import { CanvasBanner, TopologyCanvas } from '../canvas/TopologyCanvas';
 import { metricBindings, panelSeries, triggerHosts } from '../data/zabbixQuery';
 import { parseTopoFlowOptions } from '../model/parse';
 import { TopoFlowOptions, Topology } from '../model/types';
@@ -104,31 +103,33 @@ export function TopoFlowPanel({
   const editable =
     !topologyInvalid && (locationService.getSearchObject().editPanel !== undefined || parsed.canvas.inlineEditing);
 
+  // Os avisos pousam no topo do canvas, como no mockup — e nao acima dele, onde
+  // empurrariam o mapa para fora da altura do painel.
+  const banners: CanvasBanner[] = [];
+  if (issues.length > 0) {
+    banners.push({
+      title: 'Opções inválidas, usando defaults',
+      body: [
+        ...issues,
+        ...(topologyInvalid
+          ? [
+              'A topologia salva continua no JSON do painel e não será sobrescrita: a edição fica desligada até o problema ser corrigido em Panel JSON.',
+            ]
+          : []),
+      ].join(' '),
+    });
+  }
+  if (zabbix.error) {
+    banners.push({
+      title: 'Não foi possível atualizar os problemas do Zabbix',
+      body: `${zabbix.error} O mapa continua mostrando o último estado recebido.`,
+    });
+  }
+
   return (
     <>
-      {issues.length > 0 && (
-        <Alert severity="warning" title="Opções inválidas, usando defaults">
-          {topologyInvalid && (
-            <p>
-              A topologia salva continua no JSON do painel e <strong>não será sobrescrita</strong>: a edição fica
-              desligada até o problema abaixo ser corrigido em <em>Panel JSON</em>.
-            </p>
-          )}
-          <ul>
-            {issues.map((issue) => (
-              <li key={issue}>{issue}</li>
-            ))}
-          </ul>
-        </Alert>
-      )}
-
-      {zabbix.error && (
-        <Alert severity="warning" title="Não foi possível atualizar os problemas do Zabbix">
-          {zabbix.error} O mapa continua mostrando o último estado recebido.
-        </Alert>
-      )}
-
       <TopologyCanvas
+        banners={banners}
         topology={parsed.topology}
         frames={series}
         canvas={parsed.canvas}

@@ -77,7 +77,6 @@ test('botao direito no pane abre o menu de adicionar', async ({
   await page.mouse.click(pane.x + pane.width - 80, pane.y + 40, { button: 'right' });
 
   await expect(page.getByRole('menuitem', { name: 'Adicionar nó aqui' })).toBeVisible();
-  await expect(page.getByRole('menuitem', { name: 'Adicionar point aqui' })).toBeVisible();
   await expect(page.getByRole('menuitem', { name: 'Adicionar postit aqui' })).toBeVisible();
   await expect(page.getByRole('menuitem', { name: 'Adicionar texto aqui' })).toBeVisible();
 });
@@ -145,7 +144,7 @@ test('elemento sob os controles de zoom nao recebe clique (problema conhecido)',
   await gotoPanelEditPage({ dashboard, id: '1', ...nav });
   await expect(page.locator(NODE).first()).toBeVisible();
 
-  const controls = (await page.locator('.react-flow__controls').boundingBox())!;
+  const controls = (await page.locator('.topo-controls').boundingBox())!;
   const centro = { x: controls.x + controls.width / 2, y: controls.y + controls.height / 2 };
 
   const sob = await page.evaluate(

@@ -1,23 +1,34 @@
 import React from 'react';
 import { css, cx } from '@emotion/css';
-import { DataFrame, DisplayValue, GrafanaTheme2 } from '@grafana/data';
+import { GrafanaTheme2 } from '@grafana/data';
 import { useStyles2, useTheme2 } from '@grafana/ui';
 import { Handle, HandleType, NodeProps, Position } from '@xyflow/react';
 
-import { formatDisplayValue, resolveDisplayValue, resolveText, stateFieldName } from '../../data/dimensions';
-import { ElementColor, resolveElementColor } from '../../data/elementColor';
+import { resolveText } from '../../data/dimensions';
+import { resolveElementColor, stateMetrics } from '../../data/elementColor';
 import { DeviceFlowNode } from '../flowTypes';
-import { TopoNode } from '../../model/types';
-import { ResolvedIcon, TopoIcon, resolveIcon } from '../../icons';
+import { TopoIcon, resolveIcon } from '../../icons';
+import { FONT_SANS, TfPalette, tfMix, tfPalette } from '../../theme/palette';
 import { alertClass } from '../alertAnimation';
-import { iconTone } from '../iconTone';
-import { StateFill, stateFill } from '../stateFill';
-import { ActiveTriggers, activeProblems } from '../ActiveTriggers';
+import { iconColor as resolveIconColor } from '../iconTone';
+import { nodeSurface, stateLook, statusBadge } from '../look';
+import { StatRow, nodeStats } from '../nodeStats';
+import {
+  CounterProblems,
+  HangingList,
+  InsideProblems,
+  StripProblems,
+  TotalProblems,
+  problemFormat,
+  problemRows,
+  useNow,
+} from '../Problems';
+import { activeProblems } from '../ActiveTriggers';
+import { RadarRings } from '../RadarRings';
 import { DrilldownSurface } from '../DrilldownSurface';
 import { MetricChart } from '../MetricChart';
 import { hasDrilldown } from '../drilldown';
 import { ElementHover } from '../ElementHover';
-import { HANDLE_SIZE, ICON_BOX_SIZE, ICON_SIZE, TRANSITION_FAST, alpha } from '../tokens';
 
 /** Ganchos estaveis para os seletores: o nome do Emotion muda entre builds. */
 const HANDLE_CLASS = 'topo-handle';
@@ -30,149 +41,128 @@ const HANDLES: Array<{ position: Position; type: HandleType }> = [
   { position: Position.Left, type: 'source' },
 ];
 
-const NO_DATA_LABEL = 'no data';
+const RADIUS = 16;
 
 /**
- * No de dispositivo: capsula de icone + bloco de texto + badge de estado.
+ * No de dispositivo, no desenho do mockup da v1.4.
  *
- * **O card inteiro assume a cor de estado** (doc de estilo §8). Um no com
- * severidade High e um retangulo vermelho de 180x60, nao um card cinza com um
- * icone vermelho.
+ * Cartao de cantos 16px com o **circulo de status** no canto superior esquerdo
+ * (`✓` na Base, `!` no alarme, `!!` no Disaster, `–` sem dados, o numero de
+ * problemas no formato Contador). Abaixo do nome, o bloco de valores e, no modo
+ * trigger, os problemas no formato escolhido.
  *
- * Isto reverte a regra A.2 original, que restringia a cor a icone, capsula e
- * badge para nao transformar um NOC com 30 alarmes em letreiro. A reversao e
- * deliberada e vem do PRD 6.2: numa topologia de parede, lida a metros de
- * distancia, um icone de 20px nao carrega o sinal — a area carrega. O custo
- * conhecido e o excesso de saturacao com muitos alarmes simultaneos.
- *
- * O que impede o preenchimento de virar ilegibilidade e o `stateFill`: ele
- * devolve o fundo **e** a cor de texto que o tema garante legivel sobre ele. Com
- * o card preenchido, texto, icone, capsula e badge derivam todos de `fill.text`
- * — nenhum deles pode mais assumir que o fundo e escuro.
+ * O estado pinta a borda e tinge o fundo (12%, 30% no Disaster); o texto fica
+ * sempre no `tf` da paleta. Quem decide as cores e `look.ts` — o mesmo para
+ * todos os elementos.
  */
 export function DeviceNode({ data, selected, dragging }: NodeProps<DeviceFlowNode>) {
   const theme = useTheme2();
   const styles = useStyles2(getStyles);
+  const p = tfPalette(theme);
+  const now = useNow();
   const { element, frames, editable } = data;
 
   const accent = resolveElementColor(element.color, frames, theme, {
     trigger: element.trigger,
     thresholds: element.thresholds,
+    extraMetrics: element.extraMetrics,
   });
+  const look = stateLook(accent, element.alert, theme);
+  const surface = nodeSurface(look, p);
+
   const primary = resolveText(element.presentation.primaryText, frames);
   const secondary = element.presentation.secondaryText && resolveText(element.presentation.secondaryText, frames);
 
-  // `fill` so existe nos niveis 0, 1 e 2 da cadeia. Sem ele o card fica
-  // `background.secondary`, a capsula `background.primary` e o icone
-  // `text.secondary` — o estado neutro de A.3, que continua valendo para
-  // `nodata` e `neutral`.
-  const fill = stateFill(accent, theme);
-  const iconColor =
-    fill?.text ?? (accent.state === 'nodata' ? theme.colors.text.disabled : theme.colors.text.secondary);
-
   const icon = resolveIcon(element.presentation.icon);
-  // A figura nao pode ser tingida, mas troca de arquivo conforme o estado.
-  const tone = iconTone(accent, element.presentation.iconTone, theme);
+  const tint = resolveIconColor(accent, element.presentation.iconTone, theme);
 
-  const display = resolveDisplayValue(frames, badgeField(element, frames));
-  // A presenca de `value` e o toggle "Exibir valor"; `value.field` e so a
-  // metrica escolhida dentro dele. Quem decide se ha texto no badge e o toggle.
-  const badge = resolveBadge(accent, theme, element.value !== undefined, display);
-  // Sobre um card preenchido, qualquer cor propria do badge disputa com o fundo
-  // — inclusive a dele mesmo, que **e** o fundo nos estados de trigger e
-  // threshold. O token de contraste e o unico legivel ali por construcao.
-  const badgeColor = fill ? fill.text : badge?.color;
+  const stats = nodeStats(element, frames, accent, theme);
+
+  const format = problemFormat(element.trigger, true);
+  const rows = problemRows(activeProblems(accent, element.trigger), theme, now);
+  const badge = statusBadge(look, p, format === 'counter' && rows.length ? rows.length : undefined);
+
+  const linked = hasDrilldown(element.drilldown);
 
   return (
-    <div className={styles.root} data-editable={editable || undefined} data-link={data.link}>
-      {/* O card e o gatilho do painel de triggers: e a superficie inteira do no,
-          e o badge sozinho seria um alvo de 40x14 num telao. E, pelo mesmo
-          motivo, e tambem a superficie do drill-down. */}
+    <div
+      className={styles.root}
+      data-editable={editable || undefined}
+      data-selected={selected || data.link === 'source' || undefined}
+      data-link={data.link}
+    >
+      {look.animation === 'radar' && look.color && <RadarRings color={look.color} radius={RADIUS} rings={2} />}
+
       <ElementHover
         accent={accent}
         title={primary}
         editable={editable}
-        linked={hasDrilldown(element.drilldown)}
+        linked={linked}
         dragging={dragging}
         chart={
-          element.chart ? <MetricChart frames={frames} field={stateFieldName(element.color, frames)} /> : undefined
+          element.chart ? (
+            <MetricChart
+              frames={frames}
+              metrics={stateMetrics(element.color, {
+                thresholds: element.thresholds,
+                extraMetrics: element.extraMetrics,
+              })}
+            />
+          ) : undefined
         }
       >
-        {/* A origem do gesto usa o mesmo tratamento de selecionado: durante a
-            linkagem ela e, de fato, o elemento em foco. */}
         <DrilldownSurface
           drilldown={element.drilldown}
           editable={editable}
-          className={cx(
-            styles.card,
-            CARD_CLASS,
-            (selected || data.link === 'source') && styles.cardSelected,
-            alertClass(accent, element.alert)
-          )}
-          // Inline e nao classe porque a cor vem do dado. Nao toca em `border` de
-          // proposito: e da borda que saem o hover e o anel de selecao, e um
-          // estilo inline venceria as duas classes.
-          //
-          // `color` alimenta o `currentColor` dos aneis do radar: eles saem na cor
-          // do estado que estao anunciando, e nao na cor de texto herdada.
-          style={fill ? { background: fill.background, color: fill.background } : undefined}
+          className={cx(styles.card, CARD_CLASS, alertClass(accent, element.alert))}
+          style={{ border: surface.border, background: surface.background }}
         >
-          {/* Sem icone, a capsula tambem sai — uma caixa vazia no lugar dele
-            deixaria o texto desalinhado por um motivo invisivel. */}
-          {element.presentation.showIcon && (
-            <span className={styles.iconBox} style={capsule(icon, fill, theme)}>
-              <TopoIcon icon={icon} tone={tone} size={ICON_SIZE} style={{ color: iconColor }} />
-            </span>
-          )}
+          <span
+            className={styles.badge}
+            style={{ background: badge.background, border: badge.border, color: badge.color }}
+          >
+            {badge.glyph}
+          </span>
 
-          <div className={styles.textBlock}>
-            <div className={styles.primary} style={fill ? { color: fill.text } : undefined}>
-              {primary}
+          <div className={styles.head}>
+            {element.presentation.showIcon && (
+              <span className={styles.iconBox} title={icon.label}>
+                <TopoIcon icon={icon} color={tint} size={34} className={styles.svgIcon} />
+              </span>
+            )}
+
+            <div className={styles.text}>
+              <div className={styles.primary}>{primary || element.id}</div>
+              {secondary && <div className={styles.secondary}>{secondary}</div>}
             </div>
-            {/* A hierarquia entre primario e secundario e mantida por opacidade
-              sobre a mesma cor de contraste, e nao por `text.secondary`, que so
-              tem contraste garantido sobre o fundo neutro do tema. */}
-            {secondary && (
-              <div className={styles.secondary} style={fill ? { color: alpha(fill.text, 0.8) } : undefined}>
-                {secondary}
-              </div>
+
+            {!editable && linked && (
+              <span className={styles.arrow} title="Drill-down">
+                ↗
+              </span>
             )}
           </div>
 
-          {badge && badgeColor && badge.label && (
-            <span
-              className={styles.badge}
-              style={{
-                color: badgeColor,
-                background: alpha(badgeColor, 0.15),
-                borderColor: alpha(badgeColor, 0.35),
-              }}
-            >
-              {badge.label}
-            </span>
+          {stats.length > 0 && (
+            <>
+              <div className={styles.divider} />
+              {stats.length === 1 ? <BigStat row={stats[0]} /> : <StatList rows={stats} />}
+            </>
           )}
 
-          {/* Estado colorido sem texto: um dot basta, e uma pilula vazia so
-            ocuparia o canto sem dizer nada. Com o card preenchido nem o dot se
-            justifica — ele existia para dizer "ha estado aqui", e o card
-            inteiro ja diz isso em 180x60. */}
-          {badge && badgeColor && !badge.label && !fill && (
-            <span className={styles.badgeDot} style={{ background: badgeColor }} />
-          )}
+          {rows.length > 0 && format === 'inside' && <InsideProblems rows={rows} />}
+          {rows.length > 0 && format === 'strip' && <StripProblems rows={rows} />}
+          {rows.length > 0 && format === 'total' && <TotalProblems rows={rows} />}
+          {rows.length > 0 && format === 'counter' && <CounterProblems rows={rows} />}
         </DrilldownSurface>
       </ElementHover>
 
-      {/* Irma do card, e nao filha: dentro dele as linhas roubariam altura do
-          titulo. Fora, o card fica intacto e a lista transborda para baixo. */}
-      <ActiveTriggers
-        problems={activeProblems(accent, element.trigger)}
-        position={element.trigger?.activePosition}
-        display={element.trigger?.activeDisplay}
-        width={element.size.width}
-      />
+      {format === 'list' && (
+        <HangingList rows={rows} position={element.trigger?.activePosition} format="list" color={look.color} />
+      )}
 
-      {/* Fora do card de proposito: o card sobe 1px no hover, e handles ali
-          dentro subiriam junto, deslocando o alvo de conexao sob o ponteiro. */}
+      {/* Fora do cartao: ele pode estar pulsando, e o alvo de conexao nao pode
+          andar sob o ponteiro. */}
       {HANDLES.map(({ position, type }) => (
         <Handle
           key={position}
@@ -186,237 +176,197 @@ export function DeviceNode({ data, selected, dragging }: NodeProps<DeviceFlowNod
   );
 }
 
-/**
- * Superficie da capsula do icone.
- *
- * O glifo divide a cor do card: a capsula e um vinco claro sobre o fundo do
- * estado, e o desenho por cima sai no token de contraste. E o tratamento que
- * existe desde que o card inteiro passou a se pintar.
- *
- * A **figura** nao tem essa saida. Arte colorida nao herda cor, entao sobre um
- * card vermelho ela disputa com o fundo — um icone azul do Zabbix num alarme
- * Disaster se le como sujeira, nao como equipamento. Ela ganha entao uma placa
- * opaca no fundo neutro do tema: a mesma decisao ja tomada no elemento Imagem,
- * onde a cor do estado pousa **atras** da arte e nunca nela.
- */
-function capsule(
-  icon: ResolvedIcon,
-  fill: StateFill | undefined,
-  theme: GrafanaTheme2
-): React.CSSProperties | undefined {
-  if (icon.art.kind === 'image') {
-    return {
-      background: theme.colors.background.primary,
-      boxShadow: `inset 0 0 0 1px ${theme.colors.border.weak}`,
-    };
-  }
-
-  return fill
-    ? { background: alpha(fill.text, 0.15), boxShadow: `inset 0 0 0 1px ${alpha(fill.text, 0.25)}` }
-    : undefined;
+function Bar({ row, height }: { row: StatRow; height: 5 | 6 }) {
+  const styles = useStyles2(getStyles);
+  const track = height - 2;
+  return (
+    <div className={styles.bar} style={{ height }}>
+      <div className={styles.barTrack} style={{ height: track, background: row.track }} />
+      <div className={styles.barFill} style={{ height, width: `${row.pct}%`, background: row.fill }} />
+      {row.ticks.map((tick, i) => (
+        <span
+          key={i}
+          className={styles.barTick}
+          style={{ left: `${tick.pct}%`, height: height + 4, background: tick.color }}
+        />
+      ))}
+    </div>
+  );
 }
 
-/**
- * Conteudo do badge, em ordem de precedencia:
- *
- *   1. binding de cor sem dado  -> `NO DATA` em `text.disabled`
- *   2. estado com valor exibido -> o texto da regra, ou o valor formatado
- *   3. estado sem valor exibido -> rotulo vazio
- *   4. valor exibido sem estado -> o valor formatado
- *
- * Quem decide como um rotulo vazio aparece e o `DeviceNode`: com o card neutro
- * vira um dot, com o card preenchido nao vira nada. A cor devolvida aqui e a do
- * estado, tambem sujeita a troca pelo token de contraste quando ha fill — este
- * helper responde pelo **conteudo** do badge, nao pela superficie onde ele pousa.
- *
- * **`showValue` governa os itens 2 e 4.** O texto de uma regra e o texto do
- * valor: e o que o Value mappings do Grafana chama de *display text*, e serve
- * para substituir o numero por uma palavra (`200` -> `UP`). Com o valor
- * desligado nao ha o que substituir, entao a regra continua pintando o no mas
- * nao escreve nada — quem sinaliza o estado ali e a cor.
- *
- * **A trigger nao escreve mais aqui.** O badge chegou a exibir a severidade
- * (`HIGH`, `DISASTER`) por ser o unico texto de estado que o no tinha; com a
- * lista de triggers ativas embaixo do elemento, aquilo virou um segundo lugar
- * dizendo pior a mesma coisa — e ainda ocupava o badge, que o usuario liga para
- * ver a **metrica**. Hoje o modo trigger cai nas mesmas regras dos demais: com
- * "Exibir valor" ligado o badge mostra o valor, e sem ele nao mostra nada.
- *
- * `no data` continua fora dessa regra: nao e o valor da metrica, e sim um aviso
- * sobre o proprio vinculo — some-lo junto com o numero esconderia justamente o
- * que o operador precisa ver.
- */
-/**
- * Qual metrica o badge exibe.
- *
- * Sem field escolhido, exibe a **do estado** — a mesma que pinta o elemento. E
- * o que o toggle promete ("Exibir valor") e o que o campo vazio antes negava,
- * mostrando um travessao.
- *
- * Vale mais desde que a metrica pode ser escolhida por host+item: nesse caso a
- * serie so existe quando o painel busca sozinho, e o seletor de field do
- * formulario — que lista os frames das queries do dashboard — nao teria o que
- * oferecer.
- *
- * Exportada para teste direto: renderizar o no inteiro exigiria o contexto do
- * React Flow para exercitar uma escolha de nome.
- */
-export function badgeField(element: TopoNode, frames: DataFrame[]): string | undefined {
-  return element.value?.field || stateFieldName(element.color, frames);
+/** Uma metrica: rotulo, numero de 22px e a barra. */
+function BigStat({ row }: { row: StatRow }) {
+  const styles = useStyles2(getStyles);
+  return (
+    <div className={styles.big}>
+      <span className={styles.statLabel}>{row.label}</span>
+      <div className={styles.valueLine}>
+        <span className={styles.bigValue} style={{ color: row.color }}>
+          {row.value}
+        </span>
+        {row.unit && <span className={styles.bigUnit}>{row.unit}</span>}
+      </div>
+      {row.bar && <Bar row={row} height={6} />}
+    </div>
+  );
 }
 
-export function resolveBadge(
-  accent: ElementColor,
-  theme: GrafanaTheme2,
-  showValue: boolean,
-  display: DisplayValue | undefined
-): { color: string; label: string } | undefined {
-  if (accent.state === 'nodata') {
-    return { color: theme.colors.text.disabled, label: NO_DATA_LABEL };
-  }
-
-  if (accent.state === 'threshold') {
-    // Sem `showValue` o label fica vazio e o badge vira um dot: a cor ja esta
-    // no icone e na capsula, e a pilula so repetiria o que eles dizem.
-    return { color: accent.color, label: showValue ? (accent.label ?? formatDisplayValue(display)) : '' };
-  }
-
-  if (showValue) {
-    return { color: display?.color ?? theme.colors.text.secondary, label: formatDisplayValue(display) };
-  }
-
-  return undefined;
+/** Varias metricas: uma linha compacta por metrica. */
+function StatList({ rows }: { rows: StatRow[] }) {
+  const styles = useStyles2(getStyles);
+  return (
+    <div className={styles.list}>
+      {rows.map((row, i) => (
+        <div key={i} className={styles.listItem}>
+          <div className={styles.listLine}>
+            <span className={styles.listLabel}>{row.label}</span>
+            <span className={styles.listValue} style={{ color: row.color }}>
+              {row.value}
+            </span>
+            {row.unit && <span className={styles.listUnit}>{row.unit}</span>}
+          </div>
+          {row.bar && <Bar row={row} height={5} />}
+        </div>
+      ))}
+    </div>
+  );
 }
 
-const getStyles = (theme: GrafanaTheme2) => ({
-  root: css({
-    position: 'relative',
-    width: '100%',
-    // `inherit` pega o `minHeight` que `useFlowElements` escreve no wrapper a
-    // partir de `element.size.height`. Altura fixa aqui truncaria o titulo.
-    minHeight: 'inherit',
+const getStyles = (theme: GrafanaTheme2) => {
+  const p: TfPalette = tfPalette(theme);
+  return {
+    root: css({
+      position: 'relative',
+      width: '100%',
+      // `inherit` pega o `minHeight` que `useFlowElements` escreve no wrapper a
+      // partir de `element.size.height`. Altura fixa aqui truncaria o titulo.
+      minHeight: 'inherit',
+      borderRadius: RADIUS,
+      fontFamily: FONT_SANS,
 
-    [`&[data-editable]:hover .${HANDLE_CLASS}`]: {
-      opacity: 1,
-      pointerEvents: 'auto',
-    },
+      '&[data-selected]': { outline: `2px solid ${p.ac}`, outlineOffset: 4 },
 
-    // Alvo valido de linkagem: `crosshair` reverte o `not-allowed` que o
-    // container aplica a todos os nos, e o hover antecipa o resultado do clique.
-    '&&[data-link="valid"]': {
-      cursor: 'crosshair',
-
-      [`&:hover .${CARD_CLASS}`]: {
-        borderColor: theme.colors.primary.main,
+      [`&[data-editable]:hover .${HANDLE_CLASS}`]: {
+        opacity: 1,
+        pointerEvents: 'auto',
       },
-    },
-    // Alvo invalido nao ganha realce nenhum — nem o hover comum. O unico sinal
-    // e o cursor `not-allowed` herdado do container.
-    [`&[data-link="invalid"]:hover .${CARD_CLASS}`]: {
-      transform: 'none',
-      borderColor: theme.colors.border.weak,
-      boxShadow: theme.shadows.z1,
-    },
-  }),
-  card: css({
-    position: 'relative',
-    width: '100%',
-    minHeight: 'inherit',
-    display: 'flex',
-    alignItems: 'center',
-    gap: theme.spacing(1.25),
-    padding: theme.spacing(1, 1.5),
-    background: theme.colors.background.secondary,
-    border: `1px solid ${theme.colors.border.weak}`,
-    borderRadius: theme.shape.radius.default,
-    boxShadow: theme.shadows.z1,
-    cursor: 'default',
-    transition: `border-color ${TRANSITION_FAST}, box-shadow ${TRANSITION_FAST}, transform ${TRANSITION_FAST}`,
 
-    '&:hover': {
-      transform: 'translateY(-1px)',
-      borderColor: theme.colors.border.medium,
-      boxShadow: theme.shadows.z2,
-    },
-  }),
-  cardSelected: css({
-    borderColor: theme.colors.primary.main,
-    boxShadow: `0 0 0 1px ${theme.colors.primary.main}`,
-    // Hover nao apaga a selecao: sem isto, passar o ponteiro sobre um no
-    // selecionado trocaria o anel de selecao pela sombra de hover.
-    '&:hover': {
-      borderColor: theme.colors.primary.main,
-      boxShadow: `0 0 0 1px ${theme.colors.primary.main}`,
-    },
-  }),
-  iconBox: css({
-    flex: `0 0 ${ICON_BOX_SIZE}px`,
-    height: ICON_BOX_SIZE,
-    display: 'flex',
-    alignItems: 'center',
-    justifyContent: 'center',
-    borderRadius: theme.shape.radius.default,
-    background: theme.colors.background.primary,
-    transition: `background ${TRANSITION_FAST}, box-shadow ${TRANSITION_FAST}`,
-  }),
-  textBlock: css({
-    display: 'flex',
-    flexDirection: 'column',
-    gap: 1,
-    minWidth: 0,
-  }),
-  primary: css({
-    color: theme.colors.text.primary,
-    fontSize: theme.typography.body.fontSize,
-    fontWeight: theme.typography.fontWeightMedium,
-    lineHeight: 1.3,
-    // O card cresce em altura; o nome nunca e cortado.
-    whiteSpace: 'pre-wrap',
-    wordBreak: 'break-word',
-  }),
-  secondary: css({
-    color: theme.colors.text.secondary,
-    fontFamily: theme.typography.fontFamilyMonospace,
-    fontSize: theme.typography.bodySmall.fontSize,
-    lineHeight: 1.3,
-    whiteSpace: 'pre-wrap',
-    wordBreak: 'break-word',
-  }),
-  badge: css({
-    // Fora do fluxo do flex: no canto, sem roubar largura do titulo.
-    position: 'absolute',
-    top: 6,
-    right: 8,
-    padding: '1px 6px',
-    border: '1px solid',
-    borderRadius: theme.shape.radius.sm,
-    fontFamily: theme.typography.fontFamilyMonospace,
-    fontSize: 10,
-    fontWeight: theme.typography.fontWeightMedium,
-    letterSpacing: '0.04em',
-    textTransform: 'uppercase',
-    lineHeight: 1.4,
-    whiteSpace: 'nowrap',
-  }),
-  badgeDot: css({
-    position: 'absolute',
-    top: 6,
-    right: 8,
-    width: 6,
-    height: 6,
-    borderRadius: theme.shape.radius.circle,
-  }),
-  handle: css({
-    // `&&` eleva a especificidade acima do CSS proprio do React Flow.
-    '&&': {
-      width: HANDLE_SIZE,
-      height: HANDLE_SIZE,
-      background: theme.colors.background.canvas,
-      border: `1px solid ${theme.colors.primary.main}`,
-      borderRadius: theme.shape.radius.circle,
-      opacity: 0,
-      pointerEvents: 'none',
-      transition: `opacity ${TRANSITION_FAST}`,
-    },
-  }),
-});
+      // Linkagem: alvo valido tracejado, solido sob o ponteiro.
+      '&&[data-link="valid"]': {
+        cursor: 'crosshair',
+        outline: `2px dashed ${p.ac}`,
+        outlineOffset: 4,
+        '&:hover': { outlineStyle: 'solid' },
+      },
+      '&[data-link="invalid"]': { opacity: 0.32 },
+    }),
+    card: css({
+      position: 'relative',
+      width: '100%',
+      minHeight: 'inherit',
+      display: 'flex',
+      flexDirection: 'column',
+      gap: 10,
+      padding: '16px 14px 14px',
+      borderRadius: RADIUS,
+      boxShadow: `0 4px 14px ${p.shadow}`,
+      cursor: 'default',
+      color: p.tf,
+      textDecoration: 'none',
+    }),
+    badge: css({
+      position: 'absolute',
+      left: 24,
+      top: 0,
+      transform: 'translate(-50%, -50%)',
+      width: 20,
+      height: 20,
+      boxSizing: 'border-box',
+      borderRadius: '50%',
+      display: 'flex',
+      alignItems: 'center',
+      justifyContent: 'center',
+      font: `800 10.5px/1 ${FONT_SANS}`,
+    }),
+    head: css({
+      display: 'flex',
+      gap: 10,
+      alignItems: 'flex-start',
+    }),
+    iconBox: css({
+      flex: 'none',
+      width: 30,
+      height: 30,
+      borderRadius: 8,
+      display: 'flex',
+      alignItems: 'center',
+      justifyContent: 'center',
+    }),
+    svgIcon: css({ flex: 'none', pointerEvents: 'none' }),
+    text: css({
+      flex: 1,
+      minWidth: 0,
+      display: 'flex',
+      flexDirection: 'column',
+      gap: 3,
+    }),
+    primary: css({
+      font: `600 14px/1.3 ${FONT_SANS}`,
+      color: p.tf,
+      overflowWrap: 'anywhere',
+      whiteSpace: 'pre-wrap',
+    }),
+    secondary: css({
+      font: `12px ${FONT_SANS}`,
+      color: p.tx2,
+      overflowWrap: 'anywhere',
+      whiteSpace: 'pre-wrap',
+    }),
+    arrow: css({ flex: 'none', font: `600 12px ${FONT_SANS}`, color: p.rot }),
+    divider: css({ height: 1, background: tfMix(p.rot, 22) }),
+    big: css({ display: 'flex', flexDirection: 'column', gap: 7 }),
+    statLabel: css({ font: `500 12px ${FONT_SANS}`, color: p.tx }),
+    valueLine: css({ display: 'flex', alignItems: 'baseline', gap: 6 }),
+    bigValue: css({ font: `700 22px/1 ${FONT_SANS}` }),
+    bigUnit: css({ font: `600 11.5px ${FONT_SANS}`, color: p.tx2 }),
+    list: css({ display: 'flex', flexDirection: 'column', gap: 9 }),
+    listItem: css({ display: 'flex', flexDirection: 'column', gap: 5 }),
+    listLine: css({ display: 'flex', alignItems: 'baseline', gap: 6 }),
+    listLabel: css({
+      flex: 1,
+      minWidth: 0,
+      font: `500 12px ${FONT_SANS}`,
+      color: p.tx,
+      whiteSpace: 'nowrap',
+      overflow: 'hidden',
+      textOverflow: 'ellipsis',
+    }),
+    listValue: css({ font: `700 15px/1 ${FONT_SANS}` }),
+    listUnit: css({ font: `600 11px ${FONT_SANS}`, color: p.tx2 }),
+    bar: css({ position: 'relative' }),
+    barTrack: css({ position: 'absolute', left: 0, right: 0, top: 1, borderRadius: 2 }),
+    barFill: css({ position: 'absolute', left: 0, top: 0, borderRadius: 3 }),
+    barTick: css({
+      position: 'absolute',
+      top: -2,
+      width: 2,
+      borderRadius: 1,
+      transform: 'translateX(-50%)',
+    }),
+    handle: css({
+      // `&&` eleva a especificidade acima do CSS proprio do React Flow.
+      '&&': {
+        width: 10,
+        height: 10,
+        minWidth: 10,
+        minHeight: 10,
+        background: p.sup,
+        border: `2px solid ${p.ac}`,
+        borderRadius: '50%',
+        cursor: 'crosshair',
+        opacity: 0,
+        pointerEvents: 'none',
+      },
+    }),
+  };
+};

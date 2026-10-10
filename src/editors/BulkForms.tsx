@@ -1,7 +1,7 @@
 import React from 'react';
 import { css } from '@emotion/css';
 import { DataFrame, GrafanaTheme2 } from '@grafana/data';
-import { Combobox, Field, RadioButtonGroup, Slider, useStyles2 } from '@grafana/ui';
+import { Combobox, Field, Slider, useStyles2 } from '@grafana/ui';
 
 import { updateEdges, updatePoints } from '../model/mutations';
 import { TopoEdge, TopoPoint, Topology } from '../model/types';
@@ -9,6 +9,8 @@ import { FieldLabel } from './FieldLabel';
 import { StateSection } from './StateSection';
 import { TemplateTextField } from './TemplateTextField';
 import { ANIMATION_OPTIONS, SHAPE_OPTIONS, STYLE_OPTIONS } from './ElementForms';
+import { Segmented } from './ui/Segmented';
+import { FONT_MONO, FONT_SANS, tfPalette } from '../theme/palette';
 
 /**
  * Edicao em massa dos elementos selecionados no canvas.
@@ -55,16 +57,21 @@ import { ANIMATION_OPTIONS, SHAPE_OPTIONS, STYLE_OPTIONS } from './ElementForms'
  */
 
 /** Moldura comum: quantos elementos, e o contrato da edicao em massa. */
-function BulkSection({ title, children }: { title: string; children: React.ReactNode }) {
+function BulkSection({ title, glyph, children }: { title: string; glyph: string; children: React.ReactNode }) {
   const styles = useStyles2(getStyles);
 
+  // O cartao do mockup: mesmo desenho do cartao de um elemento so, com o glifo
+  // do tipo e o aviso de que cada campo vale para todos.
   return (
     <div className={styles.root}>
       <div className={styles.header}>
-        <span className={styles.count}>{title}</span>
-        <span className={styles.hint}>Cada campo alterado vale para todos.</span>
+        <span className={styles.glyph}>{glyph}</span>
+        <div className={styles.titleBox}>
+          <span className={styles.count}>{title}</span>
+          <span className={styles.hint}>Cada campo alterado vale para todos.</span>
+        </div>
       </div>
-      {children}
+      <div className={styles.body}>{children}</div>
     </div>
   );
 }
@@ -129,16 +136,16 @@ export function BulkEdgeForm({ edges, topology, frames, onChange }: BulkEdgeForm
   const [primeira] = edges;
 
   return (
-    <BulkSection title={`${edges.length} conexões selecionadas`}>
+    <BulkSection title={`${edges.length} conexões selecionadas`} glyph="—">
       <MixedField label="Estilo" values={edges.map((edge) => edge.style)}>
         {(comum) => (
-          <RadioButtonGroup options={STYLE_OPTIONS} value={comum} onChange={(style) => patch({ style })} fullWidth />
+          <Segmented options={STYLE_OPTIONS} value={comum} onChange={(style) => patch({ style })} fullWidth />
         )}
       </MixedField>
 
       <MixedField label="Forma" values={edges.map((edge) => edge.shape)}>
         {(comum) => (
-          <RadioButtonGroup options={SHAPE_OPTIONS} value={comum} onChange={(shape) => patch({ shape })} fullWidth />
+          <Segmented options={SHAPE_OPTIONS} value={comum} onChange={(shape) => patch({ shape })} fullWidth />
         )}
       </MixedField>
 
@@ -242,7 +249,7 @@ export function BulkPointForm({ points, topology, frames, onChange }: BulkPointF
   const [primeiro] = points;
 
   return (
-    <BulkSection title={`${points.length} points selecionados`}>
+    <BulkSection title={`${points.length} points selecionados`} glyph="•">
       <StateSeedNote elements={points} count={points.length} />
 
       <StateSection
@@ -314,26 +321,36 @@ export function commonValue<T>(values: T[]): T | undefined {
 
 const getStyles = (theme: GrafanaTheme2) => ({
   root: css({
-    padding: theme.spacing(1),
-    marginBottom: theme.spacing(1),
-    border: `1px solid ${theme.colors.primary.border}`,
-    borderRadius: theme.shape.radius.default,
-    background: theme.colors.background.secondary,
+    marginBottom: 12,
+    border: `1px solid ${tfPalette(theme).ac}`,
+    borderRadius: 10,
+    background: tfPalette(theme).fundo,
+    overflow: 'hidden',
   }),
   header: css({
     display: 'flex',
-    flexDirection: 'column',
-    gap: 2,
-    marginBottom: theme.spacing(1),
+    alignItems: 'center',
+    gap: 9,
+    padding: '9px 10px',
+    background: `color-mix(in oklab, ${tfPalette(theme).ac} 10%, ${tfPalette(theme).sup})`,
+    borderBottom: `1px solid ${tfPalette(theme).borda}`,
   }),
-  count: css({
-    color: theme.colors.text.primary,
-    fontWeight: theme.typography.fontWeightMedium,
+  glyph: css({
+    flex: 'none',
+    width: 24,
+    height: 24,
+    borderRadius: 6,
+    background: tfPalette(theme).ac,
+    color: tfPalette(theme)['on-ac'],
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    font: `600 12px ${FONT_MONO}`,
   }),
-  hint: css({
-    color: theme.colors.text.secondary,
-    fontSize: theme.typography.bodySmall.fontSize,
-  }),
+  titleBox: css({ display: 'flex', flexDirection: 'column', minWidth: 0 }),
+  count: css({ font: `600 13px ${FONT_SANS}`, color: tfPalette(theme).tf }),
+  hint: css({ font: `11px ${FONT_SANS}`, color: tfPalette(theme).tx2 }),
+  body: css({ display: 'flex', flexDirection: 'column', gap: 12, padding: 12 }),
   label: css({
     display: 'flex',
     alignItems: 'baseline',

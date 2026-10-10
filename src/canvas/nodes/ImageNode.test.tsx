@@ -1,60 +1,53 @@
 import { createTheme } from '@grafana/data';
 
-import { ElementColor } from '../../data/elementColor';
 import { ImageBackground } from '../../model/types';
-import { backgroundColor } from './ImageNode';
-
-/**
- * A placa e a unica superficie da imagem que pode mudar de cor — a figura em si
- * nunca e tingida. O que se fixa aqui e de onde a cor dela vem em cada caso.
- */
+import { TF_DARK, tfMix } from '../../theme/palette';
+import { stateLook } from '../look';
+import { ICON_FILL, imageSurface } from './ImageNode';
 
 const theme = createTheme();
+const p = TF_DARK;
 
-const solido: ImageBackground = { mode: 'fixed', color: 'blue', opacity: 1 };
-const estado: ImageBackground = { mode: 'state', color: 'blue', opacity: 1 };
+const estado: ImageBackground = { mode: 'state', color: '', opacity: 0.22 };
+const solido: ImageBackground = { mode: 'fixed', color: 'blue', opacity: 0.5 };
 
-const NEUTRO: ElementColor = { state: 'neutral' };
-const SEM_DADO: ElementColor = { state: 'nodata' };
+const NEUTRO = stateLook({ state: 'neutral' }, undefined, theme);
+const SEM_DADO = stateLook({ state: 'nodata' }, undefined, theme);
+const ALARME = stateLook({ state: 'threshold', color: p.at }, undefined, theme);
 
-describe('backgroundColor', () => {
-  it('sem fundo configurado não pinta nada', () => {
-    expect(backgroundColor(undefined, NEUTRO, undefined, theme)).toBeUndefined();
+describe('imageSurface', () => {
+  it('sem fundo configurado, a caixa não aparece', () => {
+    expect(imageSurface(undefined, ALARME, p, theme).background).toBe('transparent');
   });
 
-  it('modo sólido usa a cor escolhida, resolvida pelo tema', () => {
-    const painted = backgroundColor(solido, NEUTRO, undefined, theme);
-
-    // O nome vira a cor do tema — nunca fica salvo resolvido, para acompanhar
-    // claro e escuro.
-    expect(painted).toContain(theme.visualization.getColorByName('blue'));
+  /** O fundo do mockup: borda do estado e a cor dele na opacidade escolhida. */
+  it('modo estado usa a cor e a borda do estado', () => {
+    expect(imageSurface(estado, ALARME, p, theme)).toEqual({
+      background: tfMix(p.at, 22),
+      border: `2px solid ${p.at}`,
+    });
   });
 
-  it('modo sólido ignora o estado, mesmo havendo um', () => {
-    expect(backgroundColor(solido, NEUTRO, '#ff0000', theme)).not.toContain('#ff0000');
+  it('sem dado, hachurado e tracejado', () => {
+    const surface = imageSurface(estado, SEM_DADO, p, theme);
+
+    expect(surface.background).toContain('repeating-linear-gradient');
+    expect(surface.border).toBe(`1.5px dashed ${p.apa}`);
   });
 
-  it('modo estado usa a cor do estado resolvido', () => {
-    expect(backgroundColor(estado, NEUTRO, '#ff0000', theme)).toContain('#ff0000');
+  it('sem estado, um cinza fraco com a borda da superfície', () => {
+    expect(imageSurface(estado, NEUTRO, p, theme)).toEqual({
+      background: tfMix(p.rot, Math.round(0.22 * 60)),
+      border: `1px solid ${p.borda}`,
+    });
   });
 
-  /**
-   * Os dois casos sem estado não podem se confundir: um painel mudo tem de
-   * continuar visivelmente distinto de um saudável.
-   */
-  it('sem dado cai no cinza de "falta dado", não no neutro', () => {
-    expect(backgroundColor(estado, SEM_DADO, undefined, theme)).toContain(theme.colors.text.disabled);
+  /** O modo sólido de antes da v1.4 continua valendo, na paleta do tema. */
+  it('modo sólido usa a cor escolhida e ignora o estado', () => {
+    expect(imageSurface(solido, ALARME, p, theme).background).toBe(tfMix(p.in, 50));
   });
 
-  it('sem estado nenhum a placa aparece, neutra', () => {
-    const painted = backgroundColor(estado, NEUTRO, undefined, theme);
-
-    // Ligou o toggle, a placa existe: sumir com ela se leria como bug.
-    expect(painted).toContain(theme.colors.background.secondary);
-  });
-
-  it('a opacidade entra na cor, e não no elemento', () => {
-    // Modular o elemento apagaria a figura junto; a placa é que fica translúcida.
-    expect(backgroundColor({ ...solido, opacity: 0.5 }, NEUTRO, undefined, theme)).toContain('50%');
+  it('o desenho ocupa 84% da caixa', () => {
+    expect(ICON_FILL).toBe(0.84);
   });
 });

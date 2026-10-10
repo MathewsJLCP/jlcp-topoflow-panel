@@ -1,13 +1,10 @@
 import React from 'react';
 import { css } from '@emotion/css';
-import { DataFrame, GrafanaTheme2, SelectableValue } from '@grafana/data';
-import { ColorPicker, Combobox, Field, Input, RadioButtonGroup, Slider, Stack, useStyles2 } from '@grafana/ui';
+import { DataFrame, GrafanaTheme2 } from '@grafana/data';
+import { Field, Input, useStyles2 } from '@grafana/ui';
 
 import { isNumericField } from '../data/dimensions';
 import { STARTER_ICON_REF, isKnownIcon } from '../icons';
-import { IconToneChoice } from '../canvas/iconTone';
-import { IconPicker } from './IconPicker';
-
 import { updateEdge, updateImage, updateNode, updatePoint, updatePostit, updateText } from '../model/mutations';
 import {
   ImageBackground,
@@ -20,10 +17,11 @@ import {
   TopoText,
   Topology,
 } from '../model/types';
+import { FONT_SANS, tfPalette } from '../theme/palette';
 import { TextDimensionField } from './DimensionFields';
 import { DrilldownField } from './DrilldownField';
 import { FieldLabel } from './FieldLabel';
-import { FixedColorField } from './FixedColorField';
+import { IconPicker } from './IconPicker';
 import { ImageUploadField } from './ImageUploadField';
 import { NumberField } from './NumberField';
 import { StateSection } from './StateSection';
@@ -31,7 +29,16 @@ import { TemplateTextField } from './TemplateTextField';
 import { ToggleField } from './ToggleField';
 import { TopoFieldPicker } from './TopoFieldPicker';
 import { useZabbixItemCatalog, useZabbixMetricNames } from './zabbixSource';
+import { DashedButton, Note, SectionHead, TextLink } from './ui/Section';
+import { Segmented } from './ui/Segmented';
+import { TfColorRow, TfRange } from './ui/TfRange';
+import { TfSelect } from './ui/TfSelect';
 
+/**
+ * Os formularios de cada tipo de elemento, no desenho do mockup: secoes com
+ * titulo mono (Conteudo, Estado, Exibicao, Drill-down; Trajeto e Linha na
+ * conexao; Figura na imagem), segmentados, chaves e faixas.
+ */
 interface FormProps<T> {
   element: T;
   topology: Topology;
@@ -39,7 +46,7 @@ interface FormProps<T> {
   onChange: (next: Topology) => void;
 }
 
-/** Metricas so fazem sentido sobre numeros. */
+const pct = (v: number) => `${Math.round(v * 100)}%`;
 
 export function NodeForm({ element, topology, frames, onChange }: FormProps<TopoNode>) {
   const styles = useStyles2(getFormStyles);
@@ -50,67 +57,97 @@ export function NodeForm({ element, topology, frames, onChange }: FormProps<Topo
     patch({ presentation: { ...element.presentation, ...changes } });
 
   const { presentation } = element;
+  const value = element.value;
+  const metricMode = !element.trigger?.enabled;
+  // `fromState` ausente: ligado, a menos que haja o `field` unico de antes da v1.4.
+  const fromState = value ? (value.fromState ?? !value.field) : false;
+  const extras = value ? [...(value.field ? [value.field] : []), ...(value.fields ?? [])] : [];
+  const writeExtras = (fields: string[]) => patch({ value: { ...value, field: undefined, fromState, fields } });
 
   return (
     <>
+      <SectionHead>Conteúdo</SectionHead>
       <TextDimensionField
         label="Texto primário"
+        info="Fixo ou o valor de um field. Nome nunca é truncado."
         frames={frames}
         value={presentation.primaryText}
+        placeholder="Nome do equipamento"
         onChange={(primaryText) => patchPresentation({ primaryText })}
       />
 
-      {/*
-        Os campos opcionais do no sao governados pela **presenca do valor**, nao
-        por uma flag separada: `secondaryText` e `value` ausentes ja significavam
-        "desligado" no schema. Desligar o toggle apaga o campo — e o preco de nao
-        ter um segundo estado para manter em sincronia. O que se perde e o texto
-        digitado antes, nao a configuracao do no.
-      */}
       <ToggleField
         label="Texto secundário"
+        description="Ex.: IP. Desligar apaga o conteúdo."
         enabled={presentation.secondaryText !== undefined}
         onToggle={(on) => patchPresentation({ secondaryText: on ? { mode: 'fixed', fixed: '' } : undefined })}
       >
         <TextDimensionField
           frames={frames}
           value={presentation.secondaryText ?? { mode: 'fixed', fixed: '' }}
+          placeholder="Ex.: 10.0.0.1"
           onChange={(secondaryText) => patchPresentation({ secondaryText })}
         />
       </ToggleField>
 
-      {/* As regras de estado sobem para junto do radio que as governa: com o
-          bloco unico, "Estado" deixou de ficar numa ponta do formulario e os
-          thresholds na outra, separados por campos que nao tem relacao com cor. */}
       <StateSection
         frames={frames}
         trigger={element.trigger}
         color={element.color}
         thresholds={element.thresholds}
+        extraMetrics={element.extraMetrics}
         alert={element.alert}
+        isNode
         chart={element.chart}
         onChartChange={(chart) => patch({ chart })}
         onTriggerChange={(trigger) => patch({ trigger })}
         onColorChange={(color) => patch({ color })}
         onThresholdsChange={(thresholds) => patch({ thresholds })}
+        onExtraMetricsChange={(extraMetrics) => patch({ extraMetrics })}
+        onMetricsChange={(next) => patch(next)}
         onAlertChange={(alert) => patch({ alert })}
       />
 
+      <SectionHead>Exibição</SectionHead>
       <ToggleField
         label="Exibir valor"
-        info="O último valor da métrica aparece dentro do nó."
-        enabled={element.value !== undefined}
-        onToggle={(on) => patch({ value: on ? {} : undefined })}
+        description="Mostra o último valor das métricas no nó."
+        enabled={value !== undefined}
+        onToggle={(on) => patch({ value: on ? { fromState: true, fields: [] } : undefined })}
       >
-        <TopoFieldPicker
-          frames={frames}
-          extras={metricasDoZabbix}
-          loadExtras={catalogoDoZabbix}
-          value={element.value?.field}
-          onChange={(field) => patch({ value: { field } })}
-          placeholder="Sem métrica"
-          filter={isNumericField}
-        />
+        {metricMode && (
+          <ToggleField
+            label="Métricas do estado"
+            description="Exibe as métricas configuradas em Estado."
+            enabled={fromState}
+            onToggle={(on) => patch({ value: { ...value, fromState: on } })}
+          />
+        )}
+
+        {extras.map((field, index) => (
+          <div key={index} className={styles.svRow}>
+            <TopoFieldPicker
+              frames={frames}
+              extras={metricasDoZabbix}
+              loadExtras={catalogoDoZabbix}
+              value={field || undefined}
+              onChange={(next) => writeExtras(extras.map((f, i) => (i === index ? (next ?? '') : f)))}
+              placeholder="Escolha uma métrica"
+              filter={isNumericField}
+            />
+            <button
+              type="button"
+              className={styles.x}
+              title="Remover"
+              aria-label={`Remover a métrica ${index + 1}`}
+              onClick={() => writeExtras(extras.filter((_, i) => i !== index))}
+            >
+              ×
+            </button>
+          </div>
+        ))}
+        <DashedButton onClick={() => writeExtras([...extras, ''])}>+ Adicionar métrica</DashedButton>
+        {!(fromState && metricMode) && extras.filter(Boolean).length === 0 && <Note>Nenhuma métrica para exibir.</Note>}
       </ToggleField>
 
       <ToggleField
@@ -118,39 +155,31 @@ export function NodeForm({ element, topology, frames, onChange }: FormProps<Topo
         enabled={presentation.showIcon}
         onToggle={(showIcon) => patchPresentation({ showIcon })}
       >
-        <IconPicker
-          value={presentation.icon}
-          onChange={(icon) => patchPresentation({ icon })}
-          tone={presentation.iconTone}
-          onToneChange={(iconTone) => patchPresentation({ iconTone })}
-        />
+        <IconPicker label="" value={presentation.icon} onChange={(icon) => patchPresentation({ icon })} />
       </ToggleField>
 
-      {/* Largura e altura sao um par: lidas juntas, editadas juntas. Em linhas
-          separadas gastavam duas alturas de campo para dizer o tamanho de uma
-          caixa. `flex: 1` nos dois mantem as larguras iguais em qualquer painel,
-          e `minWidth: 0` impede que o `Input` numerico se recuse a encolher. */}
-      <Stack direction="row" gap={1}>
-        <div className={styles.halfField}>
+      <div className={styles.sizeBlock}>
+        <span className={styles.sizeLabel}>
+          <FieldLabel info="A altura é um mínimo: o nó cresce se o nome quebrar linha.">Tamanho</FieldLabel>
+        </span>
+        <div className={styles.pair}>
           <NumberField
             label="Largura"
+            inline
             value={element.size.width}
             min={1}
             onChange={(width) => patch({ size: { ...element.size, width } })}
           />
-        </div>
-        <div className={styles.halfField}>
           <NumberField
             label="Altura"
+            inline
             value={element.size.height}
             min={1}
             onChange={(height) => patch({ size: { ...element.size, height } })}
           />
         </div>
-      </Stack>
+      </div>
 
-      {/* Por ultimo, e nao junto do texto: o drill-down nao e uma propriedade do
-          no, e o que acontece **depois** de ele estar pronto. */}
       <DrilldownField value={element.drilldown} onChange={(drilldown) => patch({ drilldown })} />
     </>
   );
@@ -165,16 +194,32 @@ export function PointForm({ element, topology, frames, onChange }: FormProps<Top
       trigger={element.trigger}
       color={element.color}
       thresholds={element.thresholds}
+      extraMetrics={element.extraMetrics}
       alert={element.alert}
       chart={element.chart}
       onChartChange={(chart) => patch({ chart })}
       onTriggerChange={(trigger) => patch({ trigger })}
       onColorChange={(color) => patch({ color })}
       onThresholdsChange={(thresholds) => patch({ thresholds })}
+      onExtraMetricsChange={(extraMetrics) => patch({ extraMetrics })}
+      onMetricsChange={(next) => patch(next)}
       onAlertChange={(alert) => patch({ alert })}
     />
   );
 }
+
+const TITLE_POSITION_OPTIONS = [
+  { value: 'top-left' as const, label: '↖ Sup.' },
+  { value: 'top-right' as const, label: 'Sup. ↗' },
+  { value: 'bottom-left' as const, label: '↙ Inf.' },
+  { value: 'bottom-right' as const, label: 'Inf. ↘' },
+];
+
+export const STYLE_OPTIONS = [
+  { label: 'Sólida', value: 'solid' as const },
+  { label: 'Tracejada', value: 'dashed' as const },
+  { label: 'Pontilhada', value: 'dotted' as const },
+];
 
 export function PostitForm({ element, topology, onChange }: FormProps<TopoPostit>) {
   const patch = (changes: Partial<TopoPostit>) => onChange(updatePostit(topology, element.id, changes));
@@ -182,45 +227,46 @@ export function PostitForm({ element, topology, onChange }: FormProps<TopoPostit
   return (
     <>
       <Field label="Título">
-        <Input value={element.title ?? ''} onChange={(event) => patch({ title: event.currentTarget.value })} />
+        <Input
+          value={element.title ?? ''}
+          placeholder="Ex.: Filial Norte"
+          onChange={(event) => patch({ title: event.currentTarget.value })}
+        />
       </Field>
 
-      {/* Sem título não há tag para posicionar, e o campo só ocuparia espaço. */}
       {element.title && (
         <Field label="Posição do título">
-          <RadioButtonGroup
+          <Segmented
             options={TITLE_POSITION_OPTIONS}
             value={element.titlePosition}
             onChange={(titlePosition) => patch({ titlePosition })}
-            size="sm"
-            fullWidth
           />
         </Field>
       )}
 
-      {/* Sem seletor de field: postit e estatico por decisao do PRD, e o schema
-          guarda a cor como string simples justamente para impedir o contrario. */}
-      <Field label="Cor">
-        <div>
-          <ColorPicker color={element.color} onChange={(color) => patch({ color })} />
-        </div>
-      </Field>
+      <TfColorRow label="Cor" color={element.color} onChange={(color) => patch({ color })} />
 
-      <Field label="Opacidade">
-        <Slider min={0} max={1} step={0.05} value={element.opacity} onChange={(opacity) => patch({ opacity })} />
-      </Field>
+      <TfRange
+        label="Opacidade"
+        value={element.opacity}
+        min={0}
+        max={1}
+        step={0.05}
+        show={pct(element.opacity)}
+        onChange={(opacity) => patch({ opacity })}
+      />
 
       <Field label="Borda">
-        <RadioButtonGroup
-          options={BORDER_STYLE_OPTIONS}
+        <Segmented
+          options={STYLE_OPTIONS}
           value={element.borderStyle}
           onChange={(borderStyle) => patch({ borderStyle })}
-          fullWidth
         />
       </Field>
 
       <NumberField
         label="Espessura da borda"
+        inline
         value={element.borderWidth}
         min={0}
         max={10}
@@ -231,29 +277,8 @@ export function PostitForm({ element, topology, onChange }: FormProps<TopoPostit
   );
 }
 
-const BORDER_STYLE_OPTIONS: Array<SelectableValue<TopoPostit['borderStyle']>> = [
-  { value: 'solid', label: 'Sólida' },
-  { value: 'dashed', label: 'Tracejada' },
-  { value: 'dotted', label: 'Pontilhada' },
-];
-
-/**
- * Rotulos curtos porque sao quatro num painel estreito: o `RadioButtonGroup`
- * truncaria "Superior esquerdo" antes de a segunda opcao caber.
- */
-const TITLE_POSITION_OPTIONS: Array<SelectableValue<TopoPostit['titlePosition']>> = [
-  { value: 'top-left', label: '↖', description: 'Superior esquerdo' },
-  { value: 'top-right', label: '↗', description: 'Superior direito' },
-  { value: 'bottom-left', label: '↙', description: 'Inferior esquerdo' },
-  { value: 'bottom-right', label: '↘', description: 'Inferior direito' },
-];
-
-/**
- * Placa nova ja nasce visivel, mas discreta: `'text'` e nome de cor do tema, e
- * nao um hex, entao a placa acompanha claro/escuro em vez de congelar o tema em
- * que foi criada. Em 12% ela separa o texto do fundo sem virar caixa.
- */
-const NEW_TEXT_BACKGROUND: TextBackground = { color: 'text', opacity: 0.12 };
+/** A placa do texto, no mockup: escura e quase opaca, para separar o texto do canvas. */
+const NEW_TEXT_BACKGROUND: TextBackground = { color: '#14141C', opacity: 0.8 };
 
 export function TextForm({ element, topology, frames, onChange }: FormProps<TopoText>) {
   const patch = (changes: Partial<TopoText>) => onChange(updateText(topology, element.id, changes));
@@ -264,49 +289,49 @@ export function TextForm({ element, topology, frames, onChange }: FormProps<Topo
     <>
       <TextDimensionField
         label="Conteúdo"
+        info="Aceita ${field}."
         frames={frames}
         value={element.content}
-        // O Texto e o outro lugar onde combinar palavra e metrica foi pedido.
-        // O no ainda nao: la o texto e o nome do equipamento, e o campo curto de
-        // uma linha continua sendo o certo para isso.
         template
         onChange={(content) => patch({ content })}
       />
 
-      {/* Sem seletor de field: o Texto e decorativo por decisao, e nao tem
-          fonte de estado nenhuma — ver `topoTextSchema`. */}
-      <FixedColorField value={element.color} onChange={(color) => patch({ color })} />
+      <TfColorRow
+        label="Cor"
+        info="Cor fixa; nunca vem de dado."
+        color={element.color.fixed ?? '#A8A8B3'}
+        onChange={(fixed) => patch({ color: { ...element.color, fixed } })}
+      />
 
-      {/* Ausencia do valor e o desligado, como nos campos opcionais do no. */}
       <ToggleField
         label="Background"
-        info="Placa atrás do texto, para separá-lo de um canvas carregado."
+        description="Fundo para separar o texto de um canvas carregado."
         enabled={element.background !== undefined}
         onToggle={(on) => patch({ background: on ? NEW_TEXT_BACKGROUND : undefined })}
       >
-        <Stack direction="column" gap={1}>
-          <div>
-            <ColorPicker
-              color={element.background?.color ?? NEW_TEXT_BACKGROUND.color}
-              onChange={(color) => patchBackground({ color })}
-            />
-          </div>
-          <Slider
-            min={0}
-            max={1}
-            step={0.05}
-            value={element.background?.opacity ?? NEW_TEXT_BACKGROUND.opacity}
-            onChange={(opacity) => patchBackground({ opacity })}
-          />
-        </Stack>
+        <TfColorRow
+          label="Cor do fundo"
+          color={element.background?.color ?? NEW_TEXT_BACKGROUND.color}
+          onChange={(color) => patchBackground({ color })}
+        />
+        <TfRange
+          label="Opacidade"
+          value={element.background?.opacity ?? NEW_TEXT_BACKGROUND.opacity}
+          min={0}
+          max={1}
+          step={0.05}
+          show={pct(element.background?.opacity ?? NEW_TEXT_BACKGROUND.opacity)}
+          onChange={(opacity) => patchBackground({ opacity })}
+        />
       </ToggleField>
 
-      <NumberField
+      <TfRange
         label="Tamanho da fonte"
         value={element.fontSize}
         min={8}
         max={72}
-        suffix="px"
+        step={1}
+        show={`${element.fontSize} px`}
         onChange={(fontSize) => patch({ fontSize })}
       />
 
@@ -315,17 +340,8 @@ export function TextForm({ element, topology, frames, onChange }: FormProps<Topo
   );
 }
 
-/**
- * Placa nova nasce ligada no modo solido e opaca: quem acabou de ligar o toggle
- * quer **ver** a placa. Um fundo a 12% num logo escuro nao se distingue de fundo
- * nenhum, e o usuario concluiria que o toggle nao funciona.
- */
-const NEW_IMAGE_BACKGROUND: ImageBackground = { mode: 'fixed', color: 'text', opacity: 1 };
-
-const BACKGROUND_MODE_OPTIONS = [
-  { label: 'Sólido', value: 'fixed' as const },
-  { label: 'Estado', value: 'state' as const },
-];
+/** O fundo do mockup: pela cor do estado, 22% de opacidade. */
+const NEW_IMAGE_BACKGROUND: ImageBackground = { mode: 'state', color: '', opacity: 0.22 };
 
 const FIT_OPTIONS = [
   { label: 'Conter', value: 'contain' as const },
@@ -333,42 +349,26 @@ const FIT_OPTIONS = [
   { label: 'Esticar', value: 'fill' as const },
 ];
 
-/**
- * Imagem: arquivo, legenda com metrica e a placa opcional atras dela.
- *
- * A ordem dos campos e a da leitura — o que a imagem **e**, o que ela **diz**, e
- * so entao como ela **acende**. O bloco de estado inteiro (Metrica|Trigger,
- * campo, thresholds) vive dentro do modo `Estado` da placa, e nao solto no
- * formulario, porque fora dali ele nao teria onde pousar: sem placa, nao ha
- * superficie que possa mudar de cor.
- */
 export function ImageForm({ element, topology, frames, onChange }: FormProps<TopoImage>) {
   const patch = (changes: Partial<TopoImage>) => onChange(updateImage(topology, element.id, changes));
   const patchBackground = (changes: Partial<ImageBackground>) =>
     patch({ background: { ...(element.background ?? NEW_IMAGE_BACKGROUND), ...changes } });
 
   const background = element.background;
+  const library = isKnownIcon(element.src);
 
   return (
     <>
-      <ImageSourceField
-        value={element.src}
-        tone={element.iconTone}
-        onChange={(src) => patch({ src })}
-        onToneChange={(iconTone) => patch({ iconTone })}
-      />
+      <SectionHead>Figura</SectionHead>
+      <ImageSourceField value={element.src} onChange={(src) => patch({ src })} />
 
-      <Field label={<FieldLabel info="Como a figura ocupa a caixa. Conter preserva a proporção.">Ajuste</FieldLabel>}>
-        <RadioButtonGroup options={FIT_OPTIONS} value={element.fit} onChange={(fit) => patch({ fit })} fullWidth />
-      </Field>
+      {!library && (
+        <Field label="Ajuste">
+          <Segmented options={FIT_OPTIONS} value={element.fit} onChange={(fit) => patch({ fit })} />
+        </Field>
+      )}
 
-      <Field
-        label={
-          <FieldLabel info="Texto abaixo da imagem. Use ${nome do field} para exibir o valor de uma métrica.">
-            Texto
-          </FieldLabel>
-        }
-      >
+      <Field label={<FieldLabel info="Legenda abaixo da figura.">Texto</FieldLabel>}>
         <TemplateTextField
           frames={frames}
           value={element.text ?? ''}
@@ -378,86 +378,66 @@ export function ImageForm({ element, topology, frames, onChange }: FormProps<Top
         />
       </Field>
 
-      {/* Junto do campo que ele dimensiona, e nao no fim do formulario: a
-          legenda e o tamanho dela sao a mesma decisao. */}
-      <NumberField
+      <TfRange
         label="Tamanho da fonte"
         value={element.fontSize}
         min={8}
         max={72}
-        suffix="px"
+        step={1}
+        show={`${element.fontSize} px`}
         onChange={(fontSize) => patch({ fontSize })}
       />
 
-      {/* Ausencia do valor e o desligado, como nos demais campos opcionais. */}
+      <StateSection
+        frames={frames}
+        trigger={element.trigger}
+        color={element.color}
+        thresholds={element.thresholds}
+        extraMetrics={element.extraMetrics}
+        alert={element.alert}
+        chart={element.chart}
+        onChartChange={(chart) => patch({ chart })}
+        onTriggerChange={(trigger) => patch({ trigger })}
+        onColorChange={(color) => patch({ color })}
+        onThresholdsChange={(thresholds) => patch({ thresholds })}
+        onExtraMetricsChange={(extraMetrics) => patch({ extraMetrics })}
+        onMetricsChange={(next) => patch(next)}
+        onAlertChange={(alert) => patch({ alert })}
+      />
+
       <ToggleField
         label="Background"
-        info="Placa atrás da imagem. Sólida para identidade visual, ou pintada pelo estado da métrica/trigger."
+        description="Adiciona um fundo em volta da figura. A cor herda o estado."
         enabled={background !== undefined}
         onToggle={(on) => patch({ background: on ? NEW_IMAGE_BACKGROUND : undefined })}
       >
-        <Stack direction="column" gap={1}>
-          <RadioButtonGroup
-            options={BACKGROUND_MODE_OPTIONS}
-            value={background?.mode ?? NEW_IMAGE_BACKGROUND.mode}
-            onChange={(mode) => patchBackground({ mode })}
-            size="sm"
-            fullWidth
-          />
-
-          {/*
-            A cor solida so aparece no modo dela. No modo Estado quem escolhe a
-            cor sao as regras — um seletor de cor ali ao lado sugeriria uma
-            terceira fonte, que nao existe.
-          */}
-          {background?.mode !== 'state' && (
-            <div>
-              <ColorPicker
-                enableNamedColors
-                color={background?.color ?? NEW_IMAGE_BACKGROUND.color}
-                onChange={(color) => patchBackground({ color })}
-              />
-            </div>
-          )}
-
-          <Field label="Opacidade">
-            <Slider
-              min={0}
-              max={1}
-              step={0.05}
-              value={background?.opacity ?? NEW_IMAGE_BACKGROUND.opacity}
-              onChange={(opacity) => patchBackground({ opacity })}
+        {/* O modo solido e de antes da v1.4: quem o tem salvo continua podendo
+            ajustar a cor, ou passar para o fundo pelo estado. */}
+        {background?.mode === 'fixed' && (
+          <>
+            <TfColorRow
+              label="Cor do fundo"
+              color={background.color}
+              onChange={(color) => patchBackground({ color })}
             />
-          </Field>
-
-          {background?.mode === 'state' && (
-            <StateSection
-              frames={frames}
-              trigger={element.trigger}
-              color={element.color}
-              thresholds={element.thresholds}
-              alert={element.alert}
-              chart={element.chart}
-              onChartChange={(chart) => patch({ chart })}
-              onTriggerChange={(trigger) => patch({ trigger })}
-              onColorChange={(color) => patch({ color })}
-              onThresholdsChange={(thresholds) => patch({ thresholds })}
-              onAlertChange={(alert) => patch({ alert })}
-            />
-          )}
-        </Stack>
+            <TextLink onClick={() => patchBackground({ mode: 'state' })}>Usar a cor do estado</TextLink>
+          </>
+        )}
+        <TfRange
+          label="Opacidade do fundo"
+          value={background?.opacity ?? NEW_IMAGE_BACKGROUND.opacity}
+          min={0}
+          max={1}
+          step={0.05}
+          show={pct(background?.opacity ?? NEW_IMAGE_BACKGROUND.opacity)}
+          onChange={(opacity) => patchBackground({ opacity })}
+        />
       </ToggleField>
 
       <DrilldownField value={element.drilldown} onChange={(drilldown) => patch({ drilldown })} />
     </>
   );
 }
-
-export const STYLE_OPTIONS = [
-  { label: 'Sólida', value: 'solid' as const },
-  { label: 'Tracejada', value: 'dashed' as const },
-  { label: 'Pontilhada', value: 'dotted' as const },
-];
 
 export const SHAPE_OPTIONS = [
   { label: 'Curva', value: 'curved' as const },
@@ -473,36 +453,38 @@ export const ANIMATION_OPTIONS = [
 
 export function EdgeForm({ element, topology, frames, onChange }: FormProps<TopoEdge>) {
   const patch = (changes: Partial<TopoEdge>) => onChange(updateEdge(topology, element.id, changes));
+  const vertices = element.waypoints?.length ?? 0;
 
   return (
     <>
+      <SectionHead>Trajeto</SectionHead>
+      <Note>
+        {vertices
+          ? `${vertices} ${vertices > 1 ? 'vértices' : 'vértice'}. Arraste para mover. Duplo clique ou Delete remove.`
+          : 'Linha direta. Arraste o + sobre a linha selecionada ou dê duplo clique nela para criar um vértice.'}
+      </Note>
+      {vertices > 0 && <TextLink onClick={() => patch({ waypoints: undefined })}>Limpar trajeto</TextLink>}
+
+      <SectionHead>Linha</SectionHead>
       <Field label="Estilo">
-        <RadioButtonGroup
-          options={STYLE_OPTIONS}
-          value={element.style}
-          onChange={(style) => patch({ style })}
-          fullWidth
-        />
+        <Segmented options={STYLE_OPTIONS} value={element.style} onChange={(style) => patch({ style })} />
       </Field>
-      <Field label="Forma">
-        <RadioButtonGroup
-          options={SHAPE_OPTIONS}
-          value={element.shape}
-          onChange={(shape) => patch({ shape })}
-          fullWidth
-        />
-      </Field>
-      {/* Passo de 0.5 para que a espessura padrao (1.5) seja alcancavel. */}
-      <Field label="Espessura">
-        <Slider min={1} max={10} step={0.5} value={element.width} onChange={(width) => patch({ width })} />
-      </Field>
-      <Field
-        label={
-          <FieldLabel info="Texto sobre a conexão. Use ${nome do field} para exibir o valor de uma métrica, ou escolha uma no seletor abaixo.">
-            Rótulo
-          </FieldLabel>
-        }
-      >
+      {/* Com vertices a linha e uma polilinha: a forma nao se aplica. */}
+      {vertices === 0 && (
+        <Field label="Forma">
+          <Segmented options={SHAPE_OPTIONS} value={element.shape} onChange={(shape) => patch({ shape })} />
+        </Field>
+      )}
+      <TfRange
+        label="Espessura"
+        value={element.width}
+        min={1}
+        max={10}
+        step={0.5}
+        show={`${element.width} px`}
+        onChange={(width) => patch({ width })}
+      />
+      <Field label={<FieldLabel info="Aceita várias linhas e preserva espaços.">Rótulo</FieldLabel>}>
         <TemplateTextField
           frames={frames}
           value={element.label ?? ''}
@@ -511,112 +493,83 @@ export function EdgeForm({ element, topology, frames, onChange }: FormProps<Topo
           onChange={(label) => patch({ label: label || undefined })}
         />
       </Field>
-      <Field label="Animação">
-        <Combobox
-          options={ANIMATION_OPTIONS}
-          value={element.animation}
-          onChange={(selected) => patch({ animation: selected?.value ?? 'none' })}
-        />
-      </Field>
+      <TfSelect
+        label="Animação"
+        info="Em alerta, a animação da regra substitui a de fluxo."
+        value={element.animation}
+        options={ANIMATION_OPTIONS}
+        onChange={(animation) => patch({ animation })}
+      />
+
       <StateSection
         frames={frames}
         trigger={element.trigger}
         color={element.color}
         thresholds={element.thresholds}
+        extraMetrics={element.extraMetrics}
         alert={element.alert}
-        // A aresta e um traco: nao ha superficie de onde emitir onda, e o radar
-        // cairia na mesma respiracao do `pulse`. Melhor nao oferecer do que
-        // oferecer e entregar outra coisa.
         allowRadar={false}
+        showList={false}
         onTriggerChange={(trigger) => patch({ trigger })}
         onColorChange={(color) => patch({ color })}
         onThresholdsChange={(thresholds) => patch({ thresholds })}
+        onExtraMetricsChange={(extraMetrics) => patch({ extraMetrics })}
+        onMetricsChange={(next) => patch(next)}
         onAlertChange={(alert) => patch({ alert })}
       />
     </>
   );
 }
 
-/** Da biblioteca do plugin, ou um arquivo seu. */
+interface ImageSourceFieldProps {
+  value: string;
+  onChange: (src: string) => void;
+}
+
 const IMAGE_SOURCE_OPTIONS = [
   { label: 'Biblioteca', value: 'library' as const },
   { label: 'Arquivo ou URL', value: 'file' as const },
 ];
 
-interface ImageSourceFieldProps {
-  value: string;
-  tone: IconToneChoice | undefined;
-  onChange: (src: string) => void;
-  onToneChange: (tone: IconToneChoice | undefined) => void;
-}
-
 /**
  * De onde vem a figura da Imagem: a biblioteca de icones ou um arquivo.
  *
- * O modo nao e campo do schema — o proprio `src` ja diz o que ele e (chave
- * conhecida do catalogo ou nao), e um campo separado seria uma segunda fonte de
- * verdade para a mesma pergunta, livre para discordar. O estado local aqui e so
- * o desempate do `src` vazio, que nao pertence a modo nenhum.
- *
- * **Trocar de modo escreve na hora.** A versao anterior so escrevia quando o
- * usuario escolhia algo, e o resultado era o radio dizendo "Biblioteca" com o
- * canvas ainda exibindo o upload — o modo e o desenho discordando ate o proximo
- * clique. Agora a troca leva o `src` junto: para a biblioteca vai o icone
- * padrao, e o desenho muda no mesmo instante em que o radio muda.
- *
- * Nada e perdido: o valor do modo que se abandona fica guardado em `parked`, e
- * voltar para ele o restaura. E a mesma garantia de alternar Metrica <->
- * Trigger, so que paga com memoria de sessao em vez de silencio.
+ * O modo nao e campo do schema — o proprio `src` ja diz o que ele e. **Trocar
+ * de modo escreve na hora**, e o valor do modo abandonado fica guardado em
+ * `parked`: voltar para ele o restaura.
  */
-function ImageSourceField({ value, tone, onChange, onToneChange }: ImageSourceFieldProps) {
+function ImageSourceField({ value, onChange }: ImageSourceFieldProps) {
   const library = isKnownIcon(value);
   const [mode, setMode] = React.useState<'library' | 'file'>(library ? 'library' : 'file');
 
-  /**
-   * Ressincroniza quando o `src` muda por fora — undo do dashboard, Panel JSON,
-   * ou o mesmo formulario reaproveitado para outro elemento. Sem isto o modo
-   * ficava congelado na primeira montagem: era estado local respondendo a uma
-   * pergunta cuja resposta esta nos dados. Ajuste durante o render, como no
-   * `NumberField` e no `ElementsEditor`.
-   */
+  // Ressincroniza quando o `src` muda por fora (undo, Panel JSON, outro elemento).
   const [lastValue, setLastValue] = React.useState(value);
   if (value !== lastValue) {
     setLastValue(value);
     setMode(library ? 'library' : 'file');
   }
 
-  /** O `src` do modo abandonado, para que ir e voltar nao custe o upload. */
   const parked = React.useRef<{ library?: string; file?: string }>({});
 
   const handleMode = (next: 'library' | 'file') => {
     if (next === mode) {
       return;
     }
-
     parked.current[mode] = value;
     const nextValue = next === 'library' ? (parked.current.library ?? STARTER_ICON_REF) : (parked.current.file ?? '');
-
     setMode(next);
-    // Adianta o que o `onChange` vai trazer de volta: sem isto a ressincronia
-    // acima dispararia um segundo `setMode` com o mesmo valor no proximo render.
     setLastValue(nextValue);
     onChange(nextValue);
   };
 
   return (
     <>
-      <Field label={<FieldLabel info="Um ícone da biblioteca do plugin, ou uma imagem sua.">Figura</FieldLabel>}>
-        <RadioButtonGroup options={IMAGE_SOURCE_OPTIONS} value={mode} onChange={handleMode} size="sm" fullWidth />
+      <Field label={<FieldLabel info="Trocar de modo guarda o valor do outro.">Figura</FieldLabel>}>
+        <Segmented options={IMAGE_SOURCE_OPTIONS} value={mode} onChange={handleMode} />
       </Field>
 
       {mode === 'library' ? (
-        <IconPicker
-          label="Ícone"
-          value={isKnownIcon(value) ? value : undefined}
-          onChange={onChange}
-          tone={tone}
-          onToneChange={onToneChange}
-        />
+        <IconPicker label="Ícone" value={isKnownIcon(value) ? value : undefined} onChange={onChange} />
       ) : (
         <ImageUploadField value={isKnownIcon(value) ? '' : value} onChange={onChange} />
       )}
@@ -624,10 +577,20 @@ function ImageSourceField({ value, tone, onChange, onToneChange }: ImageSourceFi
   );
 }
 
-const getFormStyles = (theme: GrafanaTheme2) => ({
-  /** Metade de uma linha de dois campos, em qualquer largura de painel. */
-  halfField: css({
-    flex: 1,
-    minWidth: 0,
-  }),
-});
+const getFormStyles = (theme: GrafanaTheme2) => {
+  const p = tfPalette(theme);
+  return {
+    svRow: css({ display: 'flex', gap: 6, alignItems: 'center', '& > div': { flex: 1, minWidth: 0 } }),
+    x: css({
+      border: 0,
+      background: 'transparent',
+      color: p.apa,
+      font: `15px ${FONT_SANS}`,
+      cursor: 'pointer',
+      padding: '0 2px',
+    }),
+    sizeBlock: css({ display: 'flex', flexDirection: 'column', gap: 6 }),
+    sizeLabel: css({ font: `500 11.5px/1.35 ${FONT_SANS}`, color: p.rot }),
+    pair: css({ display: 'grid', gridTemplateColumns: 'minmax(0,1fr) minmax(0,1fr)', gap: 8 }),
+  };
+};

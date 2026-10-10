@@ -1,75 +1,60 @@
 import React from 'react';
-import { css, cx } from '@emotion/css';
+import { css } from '@emotion/css';
 import { GrafanaTheme2 } from '@grafana/data';
 import { useStyles2, useTheme2 } from '@grafana/ui';
-import { NodeProps, NodeResizer } from '@xyflow/react';
+import { NodeProps, NodeResizeControl, ResizeControlVariant } from '@xyflow/react';
 
 import { POSTIT_DEFAULT } from '../../model/sizes';
 import { TopoPostit } from '../../model/types';
 import { PostitFlowNode } from '../flowTypes';
-import { TRANSITION_FAST, alpha, selectionRing } from '../tokens';
+import { FONT_SANS, TfPalette, resolveTfColor, tfMix, tfPalette } from '../../theme/palette';
 
 /**
- * Retangulo de agrupamento, sempre atras dos demais elementos.
+ * Postit: a area de agrupamento, no desenho do mockup.
  *
- * Preenchimento leve em vez de solido: um retangulo saturado atras dos nos
- * compete com eles pela atencao e tapa a grade. A opacidade configurada modula
- * o tint, nao o elemento inteiro — modular o elemento apagaria tambem o titulo
- * e a borda.
- *
- * O titulo nao fica dentro do retangulo: e uma tag flutuando **sobre a borda**,
- * com fundo `background.canvas` que corta o traco. Assim ele nomeia o grupo sem
- * consumir a area util onde os nos ficam.
- *
- * Nao tem handles: postit nunca participa de conexao. Nao tem binding de dados
- * — `color` e uma string simples no schema, justamente para tornar isso
- * impossivel de configurar por engano.
+ * Retangulo de cantos 14px tingido pela cor (na opacidade escolhida), borda
+ * solida, tracejada ou pontilhada, e o titulo numa etiqueta com um quadradinho
+ * da cor — assentada **sobre** a borda, no canto escolhido. Selecionado no
+ * editor, ganha as quatro alcas de canto.
  */
+const CORNERS = ['top-left', 'top-right', 'bottom-left', 'bottom-right'] as const;
+
 export function PostitNode({ data, selected }: NodeProps<PostitFlowNode>) {
   const theme = useTheme2();
   const styles = useStyles2(getStyles);
+  const p = tfPalette(theme);
   const { element, editable } = data;
 
-  const accent = theme.visualization.getColorByName(element.color);
+  const color = resolveTfColor(element.color, theme);
 
   return (
     <>
-      {/*
-        A alca de redimensionamento so aparece com o postit selecionado e em modo
-        de edicao: num dashboard publicado nao ha o que redimensionar, e alcas
-        permanentes em todo postit poluiriam a cena.
-
-        Os minimos sao os mesmos do CSS (`POSTIT_DEFAULT`), senao a alca deixaria
-        arrastar ate um tamanho que o proprio retangulo se recusa a assumir — e o
-        que fica salvo divergiria do que se ve.
-      */}
-      {editable && (
-        <NodeResizer
-          isVisible={selected}
-          color={theme.colors.primary.main}
-          minWidth={POSTIT_DEFAULT.minWidth}
-          minHeight={POSTIT_DEFAULT.minHeight}
-        />
-      )}
+      {editable &&
+        selected &&
+        CORNERS.map((corner) => (
+          <NodeResizeControl
+            key={corner}
+            position={corner}
+            variant={ResizeControlVariant.Handle}
+            minWidth={POSTIT_DEFAULT.minWidth}
+            minHeight={POSTIT_DEFAULT.minHeight}
+            className={styles.handle}
+            style={{ background: p.ac, borderColor: p.fundo }}
+          />
+        ))}
 
       <div
         className={styles.wrapper}
+        data-selected={selected || undefined}
         style={{
-          background: alpha(accent, element.opacity),
-          // A borda nao muda ao selecionar: antes ela saturava para a cor do
-          // proprio postit, o que dizia "colorido", nao "selecionado" — e num
-          // postit azul o resultado era indistinguivel do estado de repouso. O
-          // sinal de selecao e o anel, na cor de selecao do tema.
-          border: `${element.borderWidth}px ${element.borderStyle} ${alpha(accent, 0.3)}`,
-          boxShadow: selected ? selectionRing(theme.colors.primary.main) : undefined,
+          background: tfMix(color, Math.round(element.opacity * 100)),
+          border: `${element.borderWidth}px ${element.borderStyle} ${color}`,
         }}
       >
         {element.title && (
-          <div
-            className={cx(styles.title, TITLE_POSITION[element.titlePosition])}
-            style={{ color: accent, borderColor: alpha(accent, 0.35) }}
-          >
-            {element.title}
+          <div className={styles.title} style={TITLE_POSITION[element.titlePosition]}>
+            <span className={styles.swatch} style={{ background: color }} />
+            <span className={styles.titleText}>{element.title}</span>
           </div>
         )}
       </div>
@@ -77,51 +62,53 @@ export function PostitNode({ data, selected }: NodeProps<PostitFlowNode>) {
   );
 }
 
-/** Deslocamento da tag para que ela fique montada sobre o traco da borda. */
-const TITLE_OFFSET = -11;
-const TITLE_INSET = 12;
-
-const TITLE_POSITION: Record<TopoPostit['titlePosition'], string> = {
-  'top-left': css({ top: TITLE_OFFSET, left: TITLE_INSET }),
-  'top-right': css({ top: TITLE_OFFSET, right: TITLE_INSET }),
-  'bottom-left': css({ bottom: TITLE_OFFSET, left: TITLE_INSET }),
-  'bottom-right': css({ bottom: TITLE_OFFSET, right: TITLE_INSET }),
+const TITLE_POSITION: Record<TopoPostit['titlePosition'], React.CSSProperties> = {
+  'top-left': { top: 0, left: 12, transform: 'translate(0, -50%)' },
+  'top-right': { top: 0, right: 12, transform: 'translate(0, -50%)' },
+  'bottom-left': { top: '100%', left: 12, transform: 'translate(0, -50%)' },
+  'bottom-right': { top: '100%', right: 12, transform: 'translate(0, -50%)' },
 };
 
-const getStyles = (theme: GrafanaTheme2) => ({
-  wrapper: css({
-    position: 'relative',
-    width: '100%',
-    height: '100%',
-    // Piso do relatorio (§4). Abaixo disso a tag de titulo nao cabe sobre a
-    // borda e o retangulo deixa de comportar qualquer no.
-    minWidth: POSTIT_DEFAULT.minWidth,
-    minHeight: POSTIT_DEFAULT.minHeight,
-    padding: theme.spacing(2),
-    borderRadius: theme.shape.radius.default,
-    transition: `border-color ${TRANSITION_FAST}, box-shadow ${TRANSITION_FAST}`,
-  }),
-  /**
-   * A tag flutua **sobre** a borda, e nao dentro do retangulo: e o deslocamento
-   * de 11px (metade da altura da tag) que faz o fundo opaco cortar o traco.
-   * O canto vem de `TITLE_POSITION`, que so troca quais dos quatro lados sao
-   * fixados — as medidas sao as mesmas nos quatro.
-   */
-  title: css({
-    position: 'absolute',
-    maxWidth: 'calc(100% - 24px)',
-    padding: '2px 8px',
-    // O fundo opaco e o que corta a borda do retangulo por baixo da tag.
-    background: theme.colors.background.canvas,
-    border: '1px solid',
-    borderRadius: theme.shape.radius.default,
-    fontFamily: theme.typography.fontFamilyMonospace,
-    fontSize: theme.typography.bodySmall.fontSize,
-    letterSpacing: '0.08em',
-    textTransform: 'uppercase',
-    lineHeight: 1.4,
-    whiteSpace: 'nowrap',
-    overflow: 'hidden',
-    textOverflow: 'ellipsis',
-  }),
-});
+const getStyles = (theme: GrafanaTheme2) => {
+  const p: TfPalette = tfPalette(theme);
+  return {
+    wrapper: css({
+      position: 'relative',
+      width: '100%',
+      height: '100%',
+      minWidth: POSTIT_DEFAULT.minWidth,
+      minHeight: POSTIT_DEFAULT.minHeight,
+      borderRadius: 14,
+      fontFamily: FONT_SANS,
+      '&[data-selected]': { outline: `2px solid ${p.ac}`, outlineOffset: 3 },
+    }),
+    title: css({
+      position: 'absolute',
+      maxWidth: 'calc(100% - 24px)',
+      display: 'flex',
+      alignItems: 'center',
+      gap: 6,
+      padding: '3px 9px',
+      background: p.fundo,
+      border: `1px solid ${p.borda}`,
+      borderRadius: 6,
+      whiteSpace: 'nowrap',
+    }),
+    swatch: css({ flex: 'none', width: 8, height: 8, borderRadius: 2 }),
+    titleText: css({
+      font: `600 12px ${FONT_SANS}`,
+      color: p.tx,
+      overflow: 'hidden',
+      textOverflow: 'ellipsis',
+    }),
+    handle: css({
+      '&&': {
+        width: 12,
+        height: 12,
+        border: '2px solid',
+        borderRadius: 3,
+        zIndex: 2,
+      },
+    }),
+  };
+};

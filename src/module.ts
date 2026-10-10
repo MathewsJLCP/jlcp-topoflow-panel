@@ -3,6 +3,9 @@ import { PanelPlugin } from '@grafana/data';
 import { TopoFlowOptions } from './model/types';
 import { TopoFlowPanel } from './panel/TopoFlowPanel';
 import { addTopoFlowOptions } from './panel/options';
+import { injectTopoFlowFonts } from './theme/fonts';
+
+injectTopoFlowFonts();
 
 export const plugin = new PanelPlugin<TopoFlowOptions>(TopoFlowPanel)
   // OBRIGATORIO (ADR-P03). Habilita unit, decimals, min/max, thresholds, value

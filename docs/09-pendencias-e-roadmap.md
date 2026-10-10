@@ -24,24 +24,6 @@ uma query que devolva as triggers saudáveis, e o Query Mode _Problems_ por
 definição não devolve. Com a lista de nomes salva no vínculo, o "quais deveriam
 estar lá" agora existe no modelo — falta a fonte de dados do lado OK.
 
-### Licença dos ícones de terceiros
-
-Bloqueia a assinatura do plugin. Duas frentes:
-
-- **Pack `zabbix`** — os ícones são GPL-2.0 (AGPL-3.0 a partir do Zabbix 7.0) e
-  este plugin é Apache-2.0. Redistribuí-los no mesmo pacote assinado é questão de
-  licença a resolver. Foi por isso que o pack ficou para depois quando os outros
-  três foram feitos; **entrou mesmo assim em 2026-09-10, por decisão do usuário**,
-  e a pendência continua aberta. Se a resposta vier negativa, remover custa
-  apagar `src/icons/packs/zabbix/` e a entrada em `ICON_PACKS`: as chaves salvas
-  caem no genérico sozinhas, que é o caso que `resolveIcon` existe para absorver.
-- **Pack `petrolifera`** — fotos e ilustrações de produto de terceiros (Ubiquiti,
-  Cambium). Mesma questão. Desde 2026-09-10 a foto do UniFi AC Lite está também
-  no pack `zabbix`, como `ap`: remover só um dos packs não resolve essa metade.
-
-Enquanto não resolvido, o plugin não deveria ser assinado e publicado com esses
-assets.
-
 ### Animação por métrica
 
 O Bloco B decidiu animação **só para trigger**. Estender para métrica esbarra num
@@ -62,18 +44,6 @@ não por elemento.
 O motivo é concreto: o mesmo logo em 20 nós entraria 20 vezes no JSON do
 dashboard, que viaja inteiro em toda leitura.
 
-### Contraste dos packs de figura
-
-Mesma causa nos dois: a placa da cápsula é `background.primary`, então arte que
-tende a um extremo some no tema daquele extremo.
-
-- `petrolifera` — o religador é traço preto (invisível no escuro) e os UniFi são
-  brancos (invisíveis no claro).
-- `zabbix` — os dois racks de 42U são arte preta, e somem no tema escuro; o `ap`
-  é branco e some no claro. O resto do pack é cinza/prata e vai bem nos dois.
-
-Precisa de uma placa própria por ícone, ou de variantes por tema.
-
 ---
 
 ## Limitações conhecidas (não são bugs)
@@ -89,6 +59,16 @@ Precisa de uma placa própria por ícone, ou de variantes por tema.
 | O modo percentual de threshold não existe              | depende de min/max do field, que nem sempre existe | `mode` pode entrar depois como campo opcional, sem migração             |
 
 ---
+
+## Resolvido na v1.4 (2026-10-09)
+
+- **Licença dos ícones de terceiros.** Os packs em PNG (`topoflow`, `zabbix`,
+  `petrolifera`) saíram. A biblioteca nova é o catálogo SVG do mockup, **arte
+  própria** (confirmado pelo usuário em 2026-10-09) — inclusive os 43 do pack
+  Zabbix, redesenhados. Não há mais asset de terceiro embutido além das fontes
+  IBM Plex (OFL, compatível com a assinatura).
+- **Contraste dos packs de figura.** Deixou de existir: todo ícone é SVG tingido
+  pela cor do estado, sem arte preta ou branca fixa.
 
 ## Descartado por decisão (não reabrir sem motivo novo)
 

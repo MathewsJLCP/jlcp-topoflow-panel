@@ -1,5 +1,4 @@
 import React from 'react';
-import { createTheme } from '@grafana/data';
 import { fireEvent, render, screen } from '@testing-library/react';
 
 import { ColorDimension, ElementAlert, ElementRule, ElementThresholds } from '../model/types';
@@ -60,7 +59,7 @@ describe('ThresholdsEditor — contrato de edição', () => {
 
     addRule('Threshold');
 
-    expect(rules()).toEqual([{ type: 'threshold', value: 80, color: 'yellow' }]);
+    expect(rules()).toEqual([{ type: 'threshold', value: 80, color: '#F59E0B' }]);
   });
 
   it('editar a condição reescreve só ela', () => {
@@ -111,21 +110,19 @@ describe('ThresholdsEditor — a linha Base', () => {
    * Base verde no editor — e a unica forma de faze-los concordar era abrir o
    * seletor e escolher a cor que ja parecia estar escolhida.
    */
-  it('sem cor escolhida, a amostra mostra o neutro do tema — nunca verde', () => {
-    const neutro = createTheme().colors.background.secondary;
+  it('sem cor escolhida, a Base diz que o elemento fica neutro — nunca verde', () => {
     setup(undefined, { field: 'cpu' });
 
-    const amostra = screen.getByTestId('data-testid-colorswatch').querySelector('button');
-
-    expect(amostra?.getAttribute('aria-label')?.toLowerCase()).toContain(neutro.toLowerCase());
+    expect(screen.queryByRole('button', { name: /color$/ })).not.toBeInTheDocument();
+    expect(screen.getByText('Sem cor: o elemento fica neutro.')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Definir cor' })).toBeInTheDocument();
   });
 
-  it('com cor escolhida, a amostra mostra a cor escolhida', () => {
+  it('com cor escolhida, a amostra mostra a cor escolhida, na paleta do tema', () => {
     setup(undefined, { fixed: 'red', field: 'cpu' });
 
-    const amostra = screen.getByTestId('data-testid-colorswatch').querySelector('button');
-
-    expect(amostra?.getAttribute('aria-label')?.toLowerCase()).toContain('red');
+    // A bolinha do Grafana se nomeia pela cor salva.
+    expect(screen.getByRole('button', { name: 'red color' })).toBeInTheDocument();
   });
 
   it('o aviso de "sem regra própria" vive no tooltip, não no corpo', () => {
@@ -182,7 +179,7 @@ describe('ThresholdsEditor — uma regra, uma linha', () => {
     expect(linha).toContainElement(condicao);
     expect(linha).toContainElement(animacao);
     // Antes do Bloco 2 a lixeira vivia num `ruleTop` que não continha o rótulo.
-    expect(linha).toHaveStyle({ display: 'flex', flexWrap: 'wrap' });
+    expect(linha).toHaveStyle({ display: 'flex' });
   });
 });
 
@@ -229,10 +226,10 @@ describe('ThresholdsEditor — animação por regra', () => {
     setup(withRule({ type: 'severity', atLeast: 4, color: 'red', animation: 'pulse' }), BASE, 'trigger');
 
     expect(screen.queryByLabelText('Animação da regra 1')).not.toBeInTheDocument();
-    expect(screen.getByLabelText('Animação de High')).toHaveValue('Pulsar');
+    expect(screen.getByLabelText('Animação de High')).toHaveValue('pulse');
     // `atLeast: 4` também alcança Disaster — a escada mostra o que valeria lá.
-    expect(screen.getByLabelText('Animação de Disaster')).toHaveValue('Pulsar');
-    expect(screen.getByLabelText('Animação de Average')).toHaveValue('Parado');
+    expect(screen.getByLabelText('Animação de Disaster')).toHaveValue('pulse');
+    expect(screen.getByLabelText('Animação de Average')).toHaveValue('none');
   });
 });
 
@@ -332,16 +329,16 @@ describe('ThresholdsEditor — escada de severidades', () => {
     it('aparece nas linhas que alcançava, e só nelas', () => {
       setup(undefined, BASE, 'trigger', ALERT);
 
-      expect(screen.getByLabelText('Animação de Disaster')).toHaveValue('Radar');
-      expect(screen.getByLabelText('Animação de High')).toHaveValue('Radar');
-      expect(screen.getByLabelText('Animação de Average')).toHaveValue('Parado');
+      expect(screen.getByLabelText('Animação de Disaster')).toHaveValue('radar');
+      expect(screen.getByLabelText('Animação de High')).toHaveValue('radar');
+      expect(screen.getByLabelText('Animação de Average')).toHaveValue('none');
     });
 
     /** Duas fontes de animação, uma invisível, seria o pior dos dois mundos. */
     it('é apagado na primeira escrita da escada', () => {
       const { onAlertChange } = setup(undefined, BASE, 'trigger', ALERT);
 
-      fireEvent.click(screen.getByRole('button', { name: /Restaurar padrão do Zabbix/ }));
+      fireEvent.click(screen.getByRole('button', { name: /Restaurar padrão/ }));
 
       expect(onAlertChange).toHaveBeenCalledWith(undefined);
     });
@@ -349,14 +346,14 @@ describe('ThresholdsEditor — escada de severidades', () => {
     it('sem alerta salvo, ninguém mexe no campo', () => {
       const { onAlertChange } = setup(withRule({ type: 'severity', atLeast: 5, color: 'purple' }), BASE, 'trigger');
 
-      fireEvent.click(screen.getByRole('button', { name: /Restaurar padrão do Zabbix/ }));
+      fireEvent.click(screen.getByRole('button', { name: /Restaurar padrão/ }));
 
       expect(onAlertChange).not.toHaveBeenCalled();
     });
   });
 
   describe('restaurar o padrão do Zabbix', () => {
-    const botao = () => screen.queryByRole('button', { name: /Restaurar padrão do Zabbix/ });
+    const botao = () => screen.queryByRole('button', { name: /Restaurar padrão/ });
 
     it('só aparece quando há cor customizada — é o desfazer da materialização', () => {
       setup(undefined, BASE, 'trigger');

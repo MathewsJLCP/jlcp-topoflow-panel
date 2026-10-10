@@ -1,440 +1,183 @@
-# Estilo dos Elementos do Canvas — TopoFlow
+# Estilo dos Elementos do Canvas — TopoFlow (v1.4)
 
-Briefing para reproduzir o visual dos elementos de topologia em outro projeto.
-Stack de origem: React + `@xyflow/react` (React Flow v12) + `@emotion/css` + `lucide-react`.
+Desde a v1.4 o desenho do painel **é o do mockup** feito no Claude Design
+(`TopoFlow v2 Figma.dc.html`, guardado fora do repositório em
+`temp/topoflow_new_design/`). Este documento registra os valores que o código usa,
+para que uma mudança futura seja uma decisão — e não uma divergência acidental.
 
-**Identidade visual: tema dark nativo do Grafana.** Nada de paleta própria — todo componente lê
-cor de `theme.colors.*` (via `useStyles2`), o que dá dark/light de graça. A tabela abaixo traz os
-valores já resolvidos, caso o projeto destino não tenha o tema do Grafana.
-
----
+Em caso de dúvida sobre um valor, o mockup manda; este documento e o código
+devem segui-lo.
 
 ## 1. Tokens
 
-| Papel | Token | Valor (dark) |
-|---|---|---|
-| Fundo do canvas | `background.canvas` | `#111217` |
-| Fundo do card (nó) | `background.secondary` | `#22252b` |
-| Fundo da cápsula de ícone | `background.primary` | `#181b1f` |
-| Borda em repouso | `border.weak` | `rgba(204,204,220,0.12)` |
-| Borda em hover | `border.medium` | `rgba(204,204,220,0.20)` |
-| **Acento / seleção** | `primary.main` | `#3d71d9` |
-| Texto primário | `text.primary` | `rgb(204,204,220)` |
-| Texto secundário | `text.secondary` | `rgba(204,204,220,0.65)` |
-| Texto desabilitado | `text.disabled` | `rgba(204,204,220,0.61)` |
-| Sombra repouso | `shadows.z1` | `0 1px 2px rgba(1,4,9,0.75)` |
-| Sombra hover | `shadows.z2` | `0 4px 8px rgba(1,4,9,0.75)` |
-| Raio padrão | `shape.radius.default` | `6px` |
-| Espaçamento | `theme.spacing(n)` | `n × 8px` |
-| Fonte | `typography.fontFamily` | `Inter, Helvetica, Arial, sans-serif` |
-| Fonte mono | `typography.fontFamilyMonospace` | `Roboto Mono, monospace` |
-| Corpo | `typography.body.fontSize` | `14px` |
-| Corpo pequeno | `typography.bodySmall.fontSize` | `12px` |
-| Peso médio | `typography.fontWeightMedium` | `500` |
-
-```ts
-export const transitions = { fast: '150ms ease', normal: '200ms ease', slow: '300ms ease' };
-export const dims = { handleSize: 8, handleSizeSmall: 6 };
-
-export const DEVICE_NODE_WIDTH = 180;
-export const DEVICE_NODE_HEIGHT = 60;
-export const POINT_NODE_SIZE = 14;
-export const POSTIT_DEFAULT = { width: 250, height: 170, minWidth: 160, minHeight: 100 };
-```
-
-### Regras que valem para todos os elementos
-
-1. **Zero cor literal no componente.** Só token de tema ou a cor resolvida pela cadeia de estado
-   (`src/data/elementColor.ts`). Em **qual superfície** essa cor pousa é assunto do §8 — e a
-   resposta mudou: hoje ela pinta o elemento inteiro.
-2. **Handles invisíveis em repouso** (`opacity: 0`), revelados no `:hover` do elemento.
-3. **Transições de 150 ms** em `border-color`, `box-shadow`, `transform`, `opacity`. Nada mais.
-4. Geometria vive em `node.position` / `node.width|height`; `data` guarda só apresentação.
-
----
-
-## 2. Nó (device)
-
-Card horizontal **180×60**: cápsula de ícone à esquerda, bloco de texto à direita.
-
-```
-┌────────────────────────────────┐
-│ ┌────┐  Core-SW-01             │   título: 14px / 500 / text.primary
-│ │ 32²│  10.0.0.1               │   sublinha: 12px mono / text.secondary
-│ └────┘                         │
-└────────────────────────────────┘
-  gap 10px · padding 8px 12px
-```
-
-- **Card**: fundo `background.secondary`, borda `1px solid border.weak`, raio `6px`,
-  `box-shadow: z1`, `cursor: default`.
-- **Hover**: `translateY(-1px)`, borda → `border.medium`, sombra → `z2`.
-- **Selecionado**: borda → `primary.main` + `box-shadow: 0 0 0 1px primary.main`.
-  O hover **não** sobrescreve a borda de seleção.
-- **Cápsula de ícone**: `32×32`, `flex: 0 0 32px`, raio `6px`, fundo `background.primary`,
-  ícone `size={20} strokeWidth={1.6}`, cor `text.secondary`. **Com estado**, os dois derivam do
-  token de contraste — ver §8.
-- **Texto multilinha**: `primaryText.split('\n')` → linha 1 é o título; as demais viram sublinhas
-  mono. `white-space: pre-wrap`, `word-break: break-word`.
-- **Handles**: 4 (Top target, Right source, Bottom target, Left source), `8×8`, círculo,
-  fundo `background.canvas`, borda `1px solid primary.main`.
-
-```tsx
-const getStyles = (theme: GrafanaTheme2) => ({
-  root: css({
-    position: 'relative',
-    width: DEVICE_NODE_WIDTH,
-    minHeight: DEVICE_NODE_HEIGHT,
-    '&:hover .react-flow__handle': { opacity: 1 },
-  }),
-  handle: css({
-    width: 8, height: 8,
-    background: theme.colors.background.canvas,
-    border: `1px solid ${theme.colors.primary.main}`,
-    borderRadius: '50%',
-    opacity: 0,
-    transition: `opacity ${transitions.fast}`,
-  }),
-  card: css({
-    position: 'relative',
-    width: '100%',
-    minHeight: DEVICE_NODE_HEIGHT,
-    background: theme.colors.background.secondary,
-    border: `1px solid ${theme.colors.border.weak}`,
-    borderRadius: theme.shape.radius.default,
-    display: 'flex',
-    alignItems: 'center',
-    gap: theme.spacing(1.25),
-    padding: theme.spacing(1, 1.5),
-    boxShadow: theme.shadows.z1,
-    cursor: 'default',
-    transition: `border-color ${transitions.fast}, box-shadow ${transitions.fast}, transform ${transitions.fast}`,
-    '&:hover': {
-      transform: 'translateY(-1px)',
-      borderColor: theme.colors.border.medium,
-      boxShadow: theme.shadows.z2,
-    },
-  }),
-  cardSelected: css({
-    borderColor: theme.colors.primary.main,
-    boxShadow: `0 0 0 1px ${theme.colors.primary.main}`,
-    '&:hover': { borderColor: theme.colors.primary.main },
-  }),
-  iconWrap: css({
-    flex: '0 0 32px', height: 32,
-    borderRadius: theme.shape.radius.default,
-    background: theme.colors.background.primary,
-    color: theme.colors.text.secondary,
-    display: 'flex', alignItems: 'center', justifyContent: 'center',
-  }),
-  textBlock: css({ display: 'flex', flexDirection: 'column', gap: 1, minWidth: 0 }),
-  primary: css({
-    fontSize: theme.typography.body.fontSize,
-    fontWeight: theme.typography.fontWeightMedium,
-    lineHeight: 1.3,
-    color: theme.colors.text.primary,
-    whiteSpace: 'pre-wrap', wordBreak: 'break-word',
-  }),
-  secondary: css({
-    fontSize: theme.typography.bodySmall.fontSize,
-    fontFamily: theme.typography.fontFamilyMonospace,
-    color: theme.colors.text.secondary,
-    lineHeight: 1.3,
-    whiteSpace: 'pre-wrap', wordBreak: 'break-word',
-  }),
-});
-```
-
-**Ícones**: `lucide-react` mapeados por nome em string (serializável no JSON da topologia), com
-fallback para `Server`. Conjunto usado: `Server, Network, Router, Database, Cloud, Shield, Box,
-Monitor, Wifi, HardDrive, Cpu, Globe, Laptop, Printer, Phone, Radio, Lock, Layers, GitBranch, Zap`.
-
----
-
-## 3. Point
-
-Vértice de roteamento — só dobra uma conexão. Sem texto, sem card.
-
-- **Bolinha** `14×14`, `border-radius: 50%`, fundo `background.canvas`,
-  borda `2px solid primary.main` (ou `defaultColor`).
-- **Halo** permanente `box-shadow: 0 0 0 4px alpha(primary.main, α)` com três níveis:
-  **repouso `0.10` · hover `0.22` · selecionado `0.28`**. Só o halo muda — o diâmetro é fixo.
-- **Handles** `6×6`, revelados pelo seletor irmão `&:hover ~ .react-flow__handle`.
-- Criado centralizado no cursor: `position = { x: cursor.x - 7, y: cursor.y - 7 }`.
-
-```tsx
-dot: css({
-  width: POINT_NODE_SIZE, height: POINT_NODE_SIZE,
-  borderRadius: '50%',
-  background: theme.colors.background.canvas,
-  border: `2px solid ${theme.colors.primary.main}`,
-  boxShadow: `0 0 0 4px ${alpha(theme.colors.primary.main, 0.1)}`,
-  cursor: 'default',
-  transition: `box-shadow ${transitions.fast}`,
-  '&:hover': { boxShadow: `0 0 0 4px ${alpha(theme.colors.primary.main, 0.22)}` },
-  '&:hover ~ .react-flow__handle': { opacity: 1 },
-}),
-dotSelected: css({ boxShadow: `0 0 0 4px ${alpha(theme.colors.primary.main, 0.28)}` }),
-```
-
----
-
-## 4. Postit (grupo / anotação)
-
-Retângulo redimensionável e semitransparente, atrás dos nós.
-
-```
- ┌─[ NOVO GRUPO ]──────────────┐   tag flutuante: top:-11, left:12
- │                             │
- │   arraste nós para cá       │   hint itálico quando vazio
- │                             │
- └────────────────────────────◪┘   resize 14×14, só se selecionado
-```
-
-- **`accent` = `data.defaultColor ?? theme.colors.primary.main`.**
-- **Card**: `100% × 100%`, mínimo `160×100`, `padding: 16px`, raio `6px`, flex column.
-- **Fundo**: `alpha(style.bgColor, style.bgOpacity/100)`; sem `bgColor` → `alpha(accent, 0.05)`.
-- **Borda**: `1.5px {solid|dashed|dotted} {selected ? accent : alpha(accent, 0.30)}`.
-- **Selecionado**: `box-shadow: 0 0 0 3px alpha(accent, 0.12)`.
-- **Tag de título** flutuando sobre a borda: `absolute; top: -11px; left: 12px`, mono `12px`,
-  `uppercase`, `letter-spacing: 0.08em`, `padding: 2px 8px`, raio `6px`,
-  fundo `background.canvas` (corta a borda), `border: 1px solid alpha(accent, 0.35)`,
-  cor `accent`, `ellipsis` com `max-width: calc(100% - 24px)`.
-- **Edição inline**: duplo clique troca o texto por `<textarea>` transparente
-  (`border/outline/resize: none`, `background: transparent`), com `className="nodrag nopan"` e
-  `stopPropagation` em `keydown`/`mousedown`. Grava no `onBlur`.
-- **Vazio**: hint centralizado, itálico, `text.secondary` — *"arraste nós para cá"*.
-- **Resize**: `<NodeResizeControl position="bottom-right">` só quando selecionado; handle `14×14`,
-  fundo `accent`, `border-radius: 4px 0 4px 0`, `opacity: 0.7`.
-  **Pausar o undo durante o resize** (`onResizeStart → temporal.pause()`, `onResizeEnd → resume()`).
-
-```tsx
-const accent = data.defaultColor ?? theme.colors.primary.main;
-const style = data.style ?? {};
-
-const cardStyle: React.CSSProperties = {
-  background: style.bgColor
-    ? alpha(style.bgColor, (style.bgOpacity ?? 100) / 100)
-    : alpha(accent, 0.05),
-  border: `1.5px ${style.borderStyle ?? 'solid'} ${selected ? accent : alpha(accent, 0.3)}`,
-  boxShadow: selected ? `0 0 0 3px ${alpha(accent, 0.12)}` : 'none',
-};
-```
-
----
-
-## 5. Text
-
-Rótulo livre. Sem card, sem fundo, sem borda — só texto.
-
-- `display: block`, `fontFamily` do tema, peso `500`, `line-height: 1.4`,
-  `min-width: 60px`, `min-height: 1.4em`, `white-space: pre`.
-- Cor `text.primary`, sobrescrita por `defaultColor`. `fontSize` de `data.style.fontSize` (default 14).
-- **Sem width/height na factory** — o nó encolhe ao conteúdo.
-- **Selecionado**: `outline: 1px dashed border.medium` + raio padrão. Sem preenchimento.
-- **Edição inline** por `contentEditable` no `<span>`: duplo clique entra, foca e põe o cursor no
-  fim (`Range` + `collapse(false)`); `borderBottom` transparente → `1px solid primary.main` durante a
-  edição; `Enter`/`Escape` dão blur, `Shift+Enter` quebra linha; grava no blur, texto vazio volta a
-  `'Texto'`; placeholder via `&:empty::before`.
-- **Handles** `6×6`, fundo transparente, borda `1px solid border.medium`, `opacity: 0 → 0.8` no hover
-  (mais discretos que os do nó, já que não há card para segurá-los).
-
-```tsx
-const textBase = {
-  display: 'block',
-  fontFamily: theme.typography.fontFamily,
-  fontWeight: theme.typography.fontWeightMedium,
-  lineHeight: 1.4,
-  minWidth: 60,
-  minHeight: '1.4em',
-  outline: 'none',
-  color: theme.colors.text.primary,
-  whiteSpace: 'pre' as const,
-  borderBottom: '1px solid transparent',
-  transition: `border-color ${transitions.fast}`,
-  '&:empty::before': { content: "'Texto'", color: theme.colors.text.disabled },
-};
-
-text:         css({ ...textBase, cursor: 'default' }),
-textEditing:  css({ ...textBase, cursor: 'text', borderBottom: `1px solid ${theme.colors.primary.main}` }),
-rootSelected: css({ outline: `1px dashed ${theme.colors.border.medium}`, borderRadius: theme.shape.radius.default }),
-```
-
----
-
-## 6. Conexões (edges)
-
-Edge customizada ligando **centro a centro** dos nós — não handle a handle. É o detalhe que dá o
-visual limpo: a linha aponta para o miolo do card e some por baixo dele.
-
-1. **Centro a centro**: ignore `sourceX/Y`/`targetX/Y` do React Flow e recalcule com
-   `node.position + measured.size / 2`.
-2. **Formato**: `straight` → `getStraightPath` (default); `curved` → `getBezierPath` com as
-   posições derivadas do eixo dominante (senão a curva vira ao contrário quando o alvo troca de lado).
-3. **Traço**: `stroke-width` `1.5px`, `2px` selecionado. Cor `data.color ?? border.medium`;
-   selecionado → `primary.main` + `filter: drop-shadow(0 0 5px alpha(primary.main, 0.6))`.
-4. **Estilo**: `solid` → sem dash · `dashed` → `6 4` · `dotted` → `2 4`.
-5. **Transição**: `stroke 120ms ease, stroke-width 120ms ease`.
-6. **Animações** (dirigidas por threshold):
-
-   | Tipo | Efeito |
-   |---|---|
-   | `none` | estática |
-   | `dash-flow` | `strokeDasharray: '7 5'` + `topoDashFlow 0.9s linear infinite` |
-   | `pulse` | `topoEdgePulse 1.2s ease-in-out infinite` |
-   | `flow` | linha em `stroke-opacity: 0.35` + 2 partículas `<circle r={3}>` com `<animateMotion dur="1.6s" repeatCount="indefinite" path={edgePath}/>`, a 2ª com `begin="0.8s"` e `opacity: 0.6` |
-
-   ```css
-   @keyframes topoDashFlow  { to { stroke-dashoffset: -24; } }
-   @keyframes topoEdgePulse { 0%, 100% { opacity: 0.35; } 50% { opacity: 1; } }
-   ```
-
-7. **Label** (`<EdgeLabelRenderer>`): pílula mono `12px`, `padding: 4px 9px`, raio `6px`,
-   fundo `background.secondary`, borda `1px solid border.weak` (→ `primary.main` se selecionada),
-   `box-shadow: z2`, `nowrap`, `className="nodrag nopan"`, `pointer-events: all`.
-   Posição: `transform: translate(-50%,-50%) translate(${labelX}px, ${labelY}px)`.
-
-```tsx
-function autoPositions(sx, sy, tx, ty): [Position, Position] {
-  const dx = tx - sx, dy = ty - sy;
-  if (Math.abs(dx) >= Math.abs(dy)) {
-    return dx >= 0 ? [Position.Right, Position.Left] : [Position.Left, Position.Right];
-  }
-  return dy >= 0 ? [Position.Bottom, Position.Top] : [Position.Top, Position.Bottom];
-}
-
-const sx = src ? src.position.x + (src.measured?.width  ?? 0) / 2 : sourceX;
-const sy = src ? src.position.y + (src.measured?.height ?? 0) / 2 : sourceY;
-const tx = tgt ? tgt.position.x + (tgt.measured?.width  ?? 0) / 2 : targetX;
-const ty = tgt ? tgt.position.y + (tgt.measured?.height ?? 0) / 2 : targetY;
-
-<BaseEdge
-  id={id}
-  path={edgePath}
-  markerEnd={markerEnd}
-  style={{
-    stroke: selected ? theme.colors.primary.main : (data?.color ?? theme.colors.border.medium),
-    strokeWidth: selected ? 2 : 1.5,
-    strokeDasharray,
-    strokeOpacity: animation === 'flow' ? 0.35 : undefined,
-    animation: cssAnimation,
-    filter: selected ? `drop-shadow(0 0 5px ${alpha(theme.colors.primary.main, 0.6)})` : undefined,
-    transition: 'stroke 120ms ease, stroke-width 120ms ease',
-  }}
-/>
-```
-
-**Canvas**: fundo `background.canvas`, `<Background variant="dots" gap={20} size={1}/>` com a cor
-dos pontos forçada para `border.weak` (`'& .react-flow__background': { color: theme.colors.border.weak }`).
-
----
-
-## 7. Seleção
-
-**Regra:** elemento selecionado exibe **2px de `primary.main`** em volta de si. O que unifica os
-cinco tipos é a *leitura* — 2px de azul de seleção —, não a propriedade CSS: cada elemento usa o
-mecanismo que sua forma comporta.
-
-| Tipo | Mecanismo | Por quê |
-|---|---|---|
-| **Nó** | `border-color: primary.main` + `box-shadow: 0 0 0 1px primary.main` | Já tem borda para recolorir. Borda (1px) + anel (1px) somam os mesmos 2px; empilhar um anel de 2px daria 3px só nele. |
-| **Point** | `box-shadow: 0 0 0 2px primary.main, 0 0 0 6px alpha(accent, 0.28)` | O anel entra por dentro do halo, que é empurrado de 4px para 6px para não ser encoberto. |
-| **Postit** | `box-shadow: 0 0 0 2px primary.main` | A borda **não** muda ao selecionar. |
-| **Text** | `box-shadow: 0 0 0 2px primary.main` | Anel, nunca preenchimento: o Text não tem superfície própria e um fundo o transformaria num card. `box-shadow` não ocupa espaço, então selecionar não desloca o texto. |
-| **Conexão** | `stroke: primary.main` + `drop-shadow(0 0 5px alpha(primary.main, 0.6))` + `stroke-width + 0.5` | Anel em volta de uma linha não existe. |
-
-O helper é `selectionRing(color)` em `src/canvas/tokens.ts`.
-
-### Duas armadilhas que a regra existe para evitar
-
-1. **Não sinalizar seleção com a cor do próprio elemento.** O Postit saturava a borda para o seu
-   próprio accent ao ser selecionado — num postit azul, indistinguível do repouso. Seleção é estado
-   de UI e usa a cor de seleção do tema, nunca a cor de identidade do elemento.
-2. **Não sinalizar por variação de opacidade.** O Point subia o halo de `0.28` para `0.22` de
-   opacidade entre hover e selecionado: diferença imperceptível, e ainda variável conforme a cor do
-   elemento. O sinal precisa ser uma adição, não um ajuste.
-
-### Sincronia com o painel de Layers
-
-A seleção é bidirecional entre canvas e Layer, pelo `instanceState` do `PanelContext`
-(`src/panel/instanceState.ts`). Clicar no canvas abre e rola até a linha correspondente; abrir uma
-linha seleciona e **centraliza** o elemento no canvas, preservando o zoom atual — `fitView` sobre um
-elemento só daria um salto de zoom desconcertante.
-
-A API é `@alpha` e documentada como suportada apenas em contexto de dashboard, então todo acesso é
-opcional dos dois lados: sem o canal, cada lado funciona isolado. O que se perde é a sincronia,
-nunca a edição.
-
----
-
-## 8. Cor de estado
-
-> ⚠️ **Esta seção reverte a regra A.2 original**, que dizia: *"a cor de estado incide apenas em
-> ícone, cápsula e badge — nunca no fill do card"*. A justificativa de então era o excesso de
-> saturação: num NOC com 30 alarmes simultâneos, 30 retângulos vermelhos viram letreiro. A reversão
-> vem do PRD de UX (item 6.2) e tem justificativa oposta e igualmente concreta: numa topologia de
-> parede, lida a metros de distância, um ícone de 20px não carrega o sinal — a área carrega.
-> O custo continua existindo; foi aceito conscientemente.
-
-**Regra:** o elemento com estado assume a cor de estado no **fundo inteiro**, e todo conteúdo sobre
-ele (texto, ícone, cápsula, badge) passa a derivar do token de contraste.
-
-### Quais elementos preenchem
-
-| Tipo | Superfície de estado |
-|---|---|
-| **Nó** | O card inteiro. É o elemento a que a regra se refere. |
-| **Point** | Já preenchido: com 14px, borda de 2px mais halo, o estado ocupa o elemento inteiro por construção. |
-| **Text** | Nunca. Não tem superfície própria — a cor pousa no glifo. Preenchê-lo o transformaria num card, exatamente como acontece na seleção (§7). |
-| **Conexão** | Nunca. Um traço não tem fundo; o estado é o próprio `stroke`. |
-| **Postit** | Fora do modelo de estado: sua cor é escolha estática do usuário, com opacidade própria. |
-
-### Estados que **não** preenchem
-
-`nodata` e `neutral` não são cor clara nem escura — são **ausência de estado**, e o elemento fica
-com o fundo neutro do tema. É o que preserva A.4: um painel mudo tem que continuar visivelmente
-distinto de um painel saudável, e preenchê-lo com qualquer cor apagaria a diferença.
-
-`fixed` (a linha **Base** do editor de Thresholds) **preenche**. Depois que a cor de repouso passou
-a ser a Base da lista de regras, ela é o estado "nenhuma regra casou" — e não mais um acento de
-identidade. Consequência a conhecer: um nó com cor Base definida e nenhuma regra vira um card
-inteiramente daquela cor.
-
-### Contraste (WCAG AA)
-
-O par fundo + texto sai junto de `stateFill()` (`src/canvas/stateFill.ts`). Sair junto é o ponto:
-foi a separação dos dois — card preenchido, texto preso a `text.primary` — que tornou a regra A.2
-necessária em primeiro lugar.
-
-**`theme.colors.getContrastText(bg)` sozinho não serve.** Ele usa o `contrastThreshold` do tema,
-que vale `3` — o critério AA para *texto grande* (24px, ou 18.66px em negrito). O texto do nó é
-14px e 12px, então o critério aplicável é **4.5**. A diferença é real e cai justo nas duas cores
-mais frequentes de um NOC:
-
-| Fundo | `getContrastText` | Razão | Melhor candidato | Razão |
-|---|---|---|---|---|
-| `red` `#F2495C` | claro | **3.57** ✗ | escuro | 5.88 ✓ |
-| `blue` `#5794F2` | claro | **3.03** ✗ | escuro | 6.92 ✓ |
-| `yellow` `#FADE2A` | escuro | 15.54 ✓ | escuro | 15.54 ✓ |
-| `dark-red` `#C4162A` | claro | 6.00 ✓ | claro | 6.00 ✓ |
-
-Então o helper mede **os dois** candidatos e fica com o de maior contraste. Os candidatos vêm do
-próprio tema, forçados por limiar (`getContrastText(bg, 1)` → claro, `getContrastText(bg, 22)` →
-escuro), e não de `#fff`/`#000` literais — a regra 1 do §1 vale aqui também.
-
-A alternativa seria escurecer o fundo até o texto claro alcançar 4.5, mas aí a cor do card deixaria
-de ser a cor que o usuário escolheu e que o swatch do editor mostra. Preferir o texto escuro mantém
-a cor de estado intacta. `src/canvas/stateFill.test.ts` prova AA para o mapa de severidade e a
-paleta do editor, nos dois temas.
-
-### Hierarquia sobre o fundo preenchido
-
-- **Texto secundário**: `alpha(fill.text, 0.8)` — mesma cor de contraste, não `text.secondary`,
-  que só tem contraste garantido sobre o fundo neutro.
-- **Cápsula de ícone**: `alpha(fill.text, 0.15)` de fundo, `inset 0 0 0 1px alpha(fill.text, 0.25)`.
-- **Badge**: sempre o token de contraste, **inclusive quando teria cor própria** — a cor própria do
-  badge é justamente a do fundo nos estados de trigger e threshold.
-- **Badge sem rótulo**: com o card preenchido, some. O dot existia para dizer "há estado aqui", e
-  180×60 de cor já dizem isso.
-- **Borda**: o fill não a toca. É dela que saem o hover e o anel de seleção (§7), e um estilo inline
-  venceria as duas classes.
+**Cor literal só existe em `src/theme/palette.ts`.** A regra antiga ("zero cor
+literal, só `theme.colors.*`") virou "cor literal só na paleta": os tokens do
+Grafana não chegam nos valores do mockup. O que continua vindo do Grafana é
+**qual** paleta vale — `theme.isDark` escolhe entre `TF_DARK` e `TF_LIGHT`.
+
+| Token | Uso | Escuro | Claro |
+| --- | --- | --- | --- |
+| `fundo` | o mais fundo (anel do círculo de status, etiqueta do postit) | `#0A0A0F` | `#F6F7FB` |
+| `sup` | superfície: canvas, cartões, popovers | `#14141C` | `#FFFFFF` |
+| `elev` | campos, controles | `#1A1A22` | `#EEF0F8` |
+| `borda` / `linha` | contorno / divisória | `#2C2C36` / `#3D3D48` | `#DCDFEE` / `#E4E6F1` |
+| `tf` `tx` `tx2` `rot` `apa` | texto, do título ao apagado | `#EDEDF2` … `#6F6F7B` | `#25255A` … `#7B7DA8` |
+| `ok` `at` `la` `cr` `in` | verde, âmbar, laranja, vermelho, azul | `#22C55E` `#F59E0B` `#F97316` `#EF4444` `#3B82F6` | `#00B929` `#F2A000` `#F26A12` `#FF2D2E` `#023AFF` |
+| `ac` | acento violeta: seleção, foco, botão primário | `#8B7CF6` | `#6E3AD8` |
+
+O sufixo `-t` é a versão para texto; `on-*` é o texto sobre a cor cheia.
+
+- **Cores nomeadas salvas** (`red`, `orange`, `yellow`, `blue`, `green`,
+  `purple`, `gray` e os `dark-*`) resolvem para os tokens em `resolveTfColor`; as
+  demais seguem no `getColorByName` do Grafana. Toda resolução de cor passa por
+  ali.
+- **Severidade → token** (`theme/severity.ts`): Disaster e High `cr`, Average
+  `la`, Warning `at`, Information `in`, Not classified `apa`. Siglas da pílula:
+  `DIS`, `HIGH`, `AVG`, `WARN`, `INFO`, `N/C`.
+- `color-mix` em **oklab** (`tfMix`), como o mockup.
+
+**Fontes:** IBM Plex Sans (400–700) e Mono (400–600), **embutidas** via
+`@fontsource` (`theme/fonts.ts`) — subconjuntos `latin` + `latin-ext`, só woff2.
+NOC sem internet não carregaria Google Fonts.
+
+**Animações** (`theme/motion.ts`, todas sob `prefers-reduced-motion`):
+
+| Nome | Efeito | Tempo |
+| --- | --- | --- |
+| Pulsar (`pulse`) | `scale(1)` → `1.05` | 1.4s ease-in-out |
+| Piscar (`blink`) | opacidade 1 → 0.4 | 2.6s ease-in-out |
+| Radar | anel com a forma do elemento, `scale(1.35, 1.7)`, 0.75 → 0 | 2s ease-out |
+| Radar do point | anel circular, `scale(3.2)` | 2s ease-out |
+
+Na conexão, Pulsar e Piscar viram respiração do traço (1.1s / 2.6s).
+
+## 2. Como cada estado pousa (`canvas/look.ts`)
+
+Um helper só para todos os elementos. Estados da cadeia → mockup: `trigger` e
+`threshold` → alarme, `fixed` → Base, `nodata`, `neutral`.
+
+| Estado | Borda do nó | Fundo do nó | Círculo de status |
+| --- | --- | --- | --- |
+| Neutro | 1px `rot` a 55% | `sup` | vazio, `sup`, borda 1.5px `linha` |
+| Sem dados | 1.5px tracejada `apa` | hachurado 135° `sup`/`elev` (7px) | `–` em `tx2`, borda tracejada |
+| Base | 1.5px na cor | `sup` | `✓` sobre a cor |
+| Alarme | 1.5px na cor | 12% da cor sobre `sup` | `!` sobre a cor |
+| Disaster | **2.5px** na cor | **30%** da cor | `!!` |
+
+O círculo tem 20px, borda de 2px `fundo` e glifo 800 10.5px. No formato
+**Contador** ele mostra o número de problemas.
+
+## 3. Nó
+
+- Cartão de cantos **16px**, padding `16px 14px 14px`, coluna com `gap: 10`,
+  sombra `0 4px 14px shadow`. Tamanho padrão 184×64; a altura é mínima.
+- Círculo de status em `left: 24, top: 0`, centrado na quina.
+- Cabeça: ícone (caixa 30×30, desenho SVG de 34px), nome **600 14px/1.3 `tf`**, secundário 12px
+  `tx2`. No dashboard, com drill-down, um `↗` em `rot`.
+- **Bloco de valores** (`canvas/nodeStats.ts`), depois de uma divisória de 1px
+  `rot` a 22%:
+  - uma métrica: rótulo 500 12px `tx`, número **700 22px** na cor da regra que
+    casou (ou `tf`), unidade 600 11.5px `tx2`, barra de 6px;
+  - várias: uma linha por métrica, número 700 15px, barra de 5px;
+  - a barra existe quando há onde ancorá-la: unidade `%` (0–100) ou regras de
+    threshold (marcas de 2px onde cada uma começa). Trilho `ac` a 16% sobre
+    `elev`; preenchimento em gradiente da cor (45% → 100%);
+  - o rótulo é o item, sem o host (`HOST: item` → `item`).
+- Seleção: `outline` 2px `ac`, offset 4px. Linkagem: alvo válido tracejado
+  (sólido no hover), inválido a 32% de opacidade.
+- Alças: círculos de 10px, `sup` com borda 2px `ac`, nas quatro bordas, no hover
+  em modo de edição.
+
+## 4. Problemas junto ao elemento (`canvas/Problems.tsx`)
+
+| Formato | Onde | Desenho |
+| --- | --- | --- |
+| Dentro do nó | no cartão | divisória + até 3 linhas: barra de cor 3×14, sigla mono 9.5px, nome 12px `tf`, idade 10.5px mono |
+| Faixa | no cartão | barra segmentada de 5px, um segmento por problema, + contagem e o pior |
+| Contador | no cartão | número no círculo de status + pílula e o pior problema, "+N no hover" |
+| Total | no cartão (nó) / pendurado | pílula do pior + "N incidentes ativos" |
+| Lista | pendurado | cartão de 236px, borda 1.5px na cor, conector de 2×10px, até 3 linhas com pílula, nome e idade |
+
+Imagem e point só têm Lista e Total. O cartão pendurado fica a 8px (acima/abaixo)
+ou 10px (lados) do elemento; o do point não tem conector.
+
+## 5. Imagem
+
+- Caixa de cantos 12px; o desenho da biblioteca ocupa **84%**, em `contain`. Arquivo/URL segue o Ajuste escolhido. Sem figura:
+  "Sem imagem" num quadro tracejado.
+- O estado **sempre** vale: pinta o ícone e o círculo de status.
+- Fundo opcional (`background.mode: 'state'`): borda 2px na cor do estado e
+  fundo na cor, na opacidade escolhida (sem estado: `rot` a 60% dela; sem dados:
+  hachurado). O fundo sólido de antes da v1.4 continua valendo.
+- Sem fundo, o círculo de status pousa no canto da **silhueta** do desenho
+  (`icons/iconMask.ts`), e a conexão para a 4px da tinta.
+- Legenda 500 no tamanho escolhido, `tx`, 6px abaixo, centralizada.
+
+## 6. Point
+
+Contêiner de 16px. Ponto de 14px — 16px em alarme, **20px** em Disaster. Neutro:
+`sup` com borda 2px `rot`; sem dados: `elev`, borda tracejada `apa`; Base: cheio;
+alarme: cheio com anel de 3px da cor a 40%. Alça única acima, a 12px.
+
+## 7. Postit
+
+Cantos 14px, fundo na cor a `opacity`, borda na espessura/estilo escolhidos e na
+cor cheia. Título numa etiqueta (`fundo`, borda `borda`, cantos 6px, 600 12px
+`tx`, quadradinho de 8px da cor) **assentada sobre a borda**, no canto escolhido,
+a 12px da lateral. Selecionado: outline 2px `ac` offset 3 e quatro alças de canto
+(12×12, `ac`, borda 2px `fundo`).
+
+## 8. Texto
+
+500 no tamanho escolhido, line-height 1.35, `white-space: pre`. Com fundo:
+padding `4px 8px`, cantos 6px, cor a `opacity`. Com drill-down: sublinhado.
+
+## 9. Conexões (`canvas/edges/path.ts`, `TopoEdge.tsx`)
+
+- A linha sai do **centro** de cada elemento e é recortada na borda, 1.5px para
+  fora (point: círculo de 9px; imagem sem fundo: silhueta).
+- **Curva**: quadrática com controle a 20% do comprimento, à esquerda do sentido.
+- **Paralelas** entre o mesmo par se afastam 20px (sobre a normal do sentido
+  canônico, id menor → maior); o rótulo de cada uma vai para fora do par.
+- **Vértices**: polilinha; seta no fim e uma no meio de cada segmento (a 80% no
+  mais longo, onde fica o rótulo).
+- Seta: `M-1.7z,-0.75z L0,0 L-1.7z,0.75z Z`, com `z = max(5, 2.2 × espessura)`,
+  na cor do traço, contorno 1px `fundo`.
+- Traço: cor do estado; `rot` em repouso sem Base; `apa` sem dados. Tracejado
+  `4w 2.5w`; pontilhado `0.01 2.4w` com ponta redonda.
+- Animações de fluxo: Dash-flow (`max(8,4w) max(6,3w)`, 1.4s), Flow (três
+  bolinhas de `max(2.5, 0.85w)`, 2.4s, defasadas 0.8s), Pulse (respiração 3s).
+  Em alerta, a animação da regra substitui a de fluxo.
+- Rótulo: 500 11px/1.35 mono, `tx` sobre `sup`, borda `borda` (`ac`
+  selecionada), cantos 5px, padding `3px 7px`.
+- Selecionada: traço `ac` a 40% com 8px a mais por baixo. No editor, `+` a 30% de
+  cada segmento com mais de 44px na tela e os vértices em quadrados de 10px.
+
+## 10. Canvas
+
+- Fundo `sup`, grade de pontos `grid` (1.6px) no espaçamento configurado.
+- Controles: coluna de quadrados 32×32 colados (1px), cantos 2px, `elev`
+  (`linha` no hover), a 22px do canto inferior esquerdo — aproximar, afastar,
+  enquadrar tudo, baixar a imagem.
+- Menu de contexto: cartão `sup` cantos 9px, título mono 10.5px `apa` (o id ou
+  "canvas"), itens 13px sem ícone, "Excluir" em `cr-t`.
+- Popover de hover: dentro do canvas, à direita do elemento (à esquerda perto da
+  borda), cartão `sup` cantos 10px. Incidentes (300px): título + contagem,
+  linhas com pílula da severidade, nome e idade; "Fixado · Esc ou clique fora
+  para soltar". Gráfico (470px): área com gradiente `ac` 28% → 0, linha 1.6px,
+  thresholds tracejados `4 3` com "≥ valor", legenda Name / Last * / Max / Mean.
+- Aviso no topo: cartão com borda `at` a 60% e a pílula "AVISO".
+- Dica do Linkar: chip centralizado no topo, borda `ac`.
+- Seleção por área: borda `ac`, fundo `ac` a 10%.
+
+## 11. Editor (categoria Layer)
+
+Componentes próprios em `src/editors/ui/`: `Segmented` (trilho `elev`,
+escolhido cheio em `ac`), `TfSwitch` (30×18), `SectionHead` (mono 10px
+maiúsculo com linha), `Note`, `DashedButton`, `TfSelect`, `TfRange`,
+`TfColorRow`. Os campos do Grafana que ficaram (inputs, `Combobox`) vestem a
+paleta pela pele `ui/skin.ts`, com escopo na raiz do editor.
+
+Estrutura: "+ Adicionar elemento" (Nó, Postit, Texto, Imagem) → cartão do
+elemento aberto (borda `ac`, cabeçalho com glifo, nome, tipo + id, Duplicar,
+Excluir, ×) → lista "Elementos" agrupada por tipo, com a bolinha da cor do estado.

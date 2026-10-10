@@ -131,7 +131,7 @@ describe('ImageForm — figura da biblioteca', () => {
     fireEvent.click(screen.getByLabelText('Ícone'));
     fireEvent.click(screen.getByRole('option', { name: 'Servidor' }));
 
-    expect(result()?.src).toBe('topoflow/server');
+    expect(result()?.src).toBe('padrao/servidor');
   });
 
   /**
@@ -162,14 +162,6 @@ describe('ImageForm — figura da biblioteca', () => {
     expect(result()?.src).toBe('data:image/png;base64,AAA');
   });
 
-  it('o campo de cor aparece para ícone com variantes', () => {
-    const { result } = setup({ src: 'topoflow/router' });
-
-    fireEvent.click(screen.getByRole('radio', { name: 'Vermelho' }));
-
-    expect(result()?.iconTone).toBe('red');
-  });
-
   it('em Arquivo não há campo de cor — não há variante a escolher', () => {
     setup({ src: 'https://exemplo.com/logo.png' });
 
@@ -185,50 +177,37 @@ describe('ImageForm — background', () => {
     expect(screen.queryByRole('radio', { name: 'Sólido' })).not.toBeInTheDocument();
   });
 
-  /** Ligar tem de **mostrar** a placa: opaca, senão o toggle parece não funcionar. */
-  it('ligar cria a placa sólida e opaca', () => {
+  /** O fundo do mockup: pela cor do estado, a 22%. */
+  it('ligar cria o fundo pela cor do estado', () => {
     const { result } = setup();
 
     fireEvent.click(toggle());
 
-    expect(result()?.background).toEqual({ mode: 'fixed', color: 'text', opacity: 1 });
+    expect(result()?.background).toEqual({ mode: 'state', color: '', opacity: 0.22 });
   });
 
   it('desligar apaga o objeto inteiro', () => {
-    const { result } = setup({ background: { mode: 'fixed', color: 'blue', opacity: 1 } });
+    const { result } = setup({ background: { mode: 'state', color: '', opacity: 0.22 } });
 
     fireEvent.click(toggle());
 
     expect(result()?.background).toBeUndefined();
   });
 
-  it('no modo Sólido não há bloco de estado', () => {
-    setup({ background: { mode: 'fixed', color: 'blue', opacity: 1 } });
-
-    expect(screen.getByRole('radio', { name: 'Sólido' })).toBeChecked();
-    // "Estado" continua na tela como o **outro modo** da placa; o que não pode
-    // estar aqui é o bloco que ele abre.
-    expect(screen.queryByRole('radio', { name: 'Métrica' })).not.toBeInTheDocument();
-    expect(screen.queryByText('Thresholds')).not.toBeInTheDocument();
-  });
-
-  /**
-   * O modo Estado traz o bloco inteiro que os outros elementos já têm:
-   * Métrica|Trigger, o campo e os thresholds.
-   */
-  it('no modo Estado aparecem métrica, trigger e thresholds', () => {
-    setup({ background: { mode: 'state', color: 'blue', opacity: 1 } });
+  /** O estado vale sempre na imagem: pinta o ícone e o círculo, com ou sem fundo. */
+  it('o bloco de estado está sempre na tela', () => {
+    setup();
 
     expect(screen.getByRole('radio', { name: 'Métrica' })).toBeInTheDocument();
     expect(screen.getByRole('radio', { name: 'Trigger' })).toBeInTheDocument();
     expect(screen.getByText('Thresholds')).toBeInTheDocument();
   });
 
-  /** No modo Estado quem escolhe a cor são as regras — não um seletor ao lado. */
-  it('no modo Estado a cor sólida sai da tela, mas continua salva', () => {
+  /** O fundo sólido de antes da v1.4 continua ajustável, e pode passar a seguir o estado. */
+  it('fundo sólido salvo pode passar a seguir o estado, mantendo a cor', () => {
     const { result } = setup({ background: { mode: 'fixed', color: 'blue', opacity: 1 } });
 
-    fireEvent.click(screen.getByRole('radio', { name: 'Estado' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Usar a cor do estado' }));
 
     expect(result()?.background).toEqual({ mode: 'state', color: 'blue', opacity: 1 });
   });

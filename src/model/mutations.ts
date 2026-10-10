@@ -186,7 +186,7 @@ export function moveElements(topology: Topology, updates: PositionUpdate[]): Top
       return position ? { ...item, position } : item;
     });
 
-  return {
+  const next = {
     ...topology,
     nodes: move(topology.nodes),
     points: move(topology.points),
@@ -194,6 +194,44 @@ export function moveElements(topology: Topology, updates: PositionUpdate[]): Top
     texts: move(topology.texts),
     images: move(topology.images),
   };
+
+  return { ...next, edges: carryWaypoints(topology, next) };
+}
+
+/**
+ * Vertices acompanham a conexao quando as **duas** pontas andam juntas, pelo
+ * mesmo deslocamento — arrastar um grupo inteiro nao pode deixar o trajeto para
+ * tras. Com uma ponta so se movendo, o trajeto fica: e ele que o usuario
+ * desenhou para contornar alguma coisa.
+ */
+function carryWaypoints(before: Topology, after: Topology): Topology['edges'] {
+  const where = (topology: Topology) => {
+    const map = new Map<string, XYPosition>();
+    for (const items of [topology.nodes, topology.points, topology.images]) {
+      for (const item of items) {
+        map.set(item.id, item.position);
+      }
+    }
+    return map;
+  };
+  const was = where(before);
+  const is = where(after);
+
+  return after.edges.map((edge) => {
+    if (!edge.waypoints?.length) {
+      return edge;
+    }
+    const [s0, s1, t0, t1] = [was.get(edge.source), is.get(edge.source), was.get(edge.target), is.get(edge.target)];
+    if (!s0 || !s1 || !t0 || !t1) {
+      return edge;
+    }
+    const dx = s1.x - s0.x;
+    const dy = s1.y - s0.y;
+    if ((!dx && !dy) || t1.x - t0.x !== dx || t1.y - t0.y !== dy) {
+      return edge;
+    }
+    return { ...edge, waypoints: edge.waypoints.map((w) => ({ x: w.x + dx, y: w.y + dy })) };
+  });
 }
 
 /**
@@ -287,7 +325,12 @@ export function reverseEdge(topology: Topology, id: string): Topology {
     return topology;
   }
 
-  return updateEdge(topology, id, { source: edge.target, target: edge.source });
+  return updateEdge(topology, id, {
+    source: edge.target,
+    target: edge.source,
+    // O trajeto vai da origem ao destino: invertido o sentido, inverte a ordem.
+    ...(edge.waypoints?.length ? { waypoints: [...edge.waypoints].reverse() } : {}),
+  });
 }
 
 /**

@@ -67,7 +67,7 @@ describe('TextForm — background', () => {
 
     fireEvent.click(toggle());
 
-    expect(result()?.background).toEqual({ color: 'text', opacity: 0.12 });
+    expect(result()?.background).toEqual({ color: '#14141C', opacity: 0.8 });
   });
 
   it('desligar apaga a placa inteira — ausência é o transparente', () => {
@@ -80,44 +80,20 @@ describe('TextForm — background', () => {
 });
 
 describe('TextForm — tamanho da fonte', () => {
-  it('persiste o valor digitado', () => {
+  /** A faixa do mockup: de 8 a 72, o valor escrito ao lado. */
+  it('persiste o valor da faixa', () => {
     const { result } = setup({ fontSize: 16 });
 
-    fireEvent.change(screen.getByDisplayValue('16'), { target: { value: '24' } });
+    fireEvent.change(screen.getByLabelText('Tamanho da fonte'), { target: { value: '24' } });
 
     expect(result()?.fontSize).toBe(24);
   });
 
-  /**
-   * Fora da faixa do schema, nada e escrito. Nao e capricho: um `fontSize: 900`
-   * gravado reprovaria no Zod e derrubaria a topologia inteira para os defaults
-   * na proxima leitura do painel.
-   */
-  it('valor fora da faixa não chega ao modelo', () => {
-    const { onChange } = setup({ fontSize: 16 });
+  it('a faixa vai de 8 a 72, a do schema', () => {
+    setup({ fontSize: 16 });
+    const faixa = screen.getByLabelText('Tamanho da fonte');
 
-    fireEvent.change(screen.getByDisplayValue('16'), { target: { value: '900' } });
-
-    expect(onChange).not.toHaveBeenCalled();
-  });
-
-  /**
-   * O bug que motivou o `NumberField`: para trocar 16 por 24 o usuario digita
-   * "2" antes, e "2" esta abaixo do minimo de 8. Se esse passo reverter o campo,
-   * nenhum numero comecado abaixo do minimo e alcancavel.
-   */
-  it('digitar um dígito abaixo do mínimo não reverte o campo', () => {
-    const { onChange } = setup({ fontSize: 16 });
-    const campo = screen.getByDisplayValue('16');
-
-    fireEvent.change(campo, { target: { value: '2' } });
-    expect(onChange).not.toHaveBeenCalled();
-    // O passo intermediário continua na tela, senão o segundo dígito editaria "16".
-    expect(campo).toHaveValue(2);
-
-    fireEvent.change(campo, { target: { value: '24' } });
-
-    expect(onChange).toHaveBeenCalled();
-    expect(onChange.mock.calls.at(-1)?.[0].texts[0].fontSize).toBe(24);
+    expect(faixa).toHaveAttribute('min', '8');
+    expect(faixa).toHaveAttribute('max', '72');
   });
 });

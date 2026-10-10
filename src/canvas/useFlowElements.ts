@@ -3,6 +3,7 @@ import { DataFrame } from '@grafana/data';
 
 import { Topology } from '../model/types';
 import { EDGE_Z_INDEX, NODE_Z_OFFSET, POSTIT_Z_OFFSET, TopoFlowEdge, TopoFlowNode } from './flowTypes';
+import { Parallel } from './edges/path';
 
 /** Converte a topologia do modelo nos arrays que o React Flow consome. */
 export function useFlowElements(
@@ -70,12 +71,34 @@ export function toFlowNodes(topology: Topology, frames: DataFrame[], editable: b
 }
 
 export function toFlowEdges(topology: Topology, frames: DataFrame[], editable: boolean): TopoFlowEdge[] {
+  const parallels = parallelIndex(topology.edges);
   return topology.edges.map((element) => ({
     id: element.id,
     type: 'topoEdge',
     source: element.source,
     target: element.target,
-    data: { element, frames, editable },
+    data: { element, frames, editable, parallel: parallels.get(element.id) },
     zIndex: EDGE_Z_INDEX,
   }));
+}
+
+/**
+ * Conexoes entre o mesmo par de elementos, em qualquer sentido, se afastam umas
+ * das outras (`edges/path.ts`). Aqui cada uma ganha a posicao dela no grupo, na
+ * ordem da topologia, e o sentido em relacao ao canonico do par (id menor ->
+ * id maior) — assim o afastamento nao inverte quando uma delas e invertida.
+ */
+export function parallelIndex(edges: Topology['edges']): Map<string, Parallel> {
+  const keyOf = (edge: Topology['edges'][number]) => [edge.source, edge.target].sort().join('\u0000');
+  const groups = new Map<string, string[]>();
+  for (const edge of edges) {
+    groups.set(keyOf(edge), [...(groups.get(keyOf(edge)) ?? []), edge.id]);
+  }
+
+  const out = new Map<string, Parallel>();
+  for (const edge of edges) {
+    const ids = groups.get(keyOf(edge))!;
+    out.set(edge.id, { index: ids.indexOf(edge.id), count: ids.length, canonical: edge.source < edge.target });
+  }
+  return out;
 }

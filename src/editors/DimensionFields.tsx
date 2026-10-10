@@ -1,12 +1,14 @@
 import React from 'react';
 import { DataFrame } from '@grafana/data';
-import { Field, Input, RadioButtonGroup, Stack } from '@grafana/ui';
+import { Field, Input, Stack } from '@grafana/ui';
 
 import { TextDimension } from '../model/types';
 import { isDisplayableField } from '../data/dimensions';
+import { FieldLabel } from './FieldLabel';
 import { TemplateTextField } from './TemplateTextField';
 import { TopoFieldPicker } from './TopoFieldPicker';
 import { useZabbixItemCatalog, useZabbixMetricNames } from './zabbixSource';
+import { Segmented } from './ui/Segmented';
 
 /**
  * Controles do padrao "Dimension" (ADR-P04): um seletor fixo/field e o controle
@@ -25,6 +27,10 @@ interface TextDimensionFieldProps {
    * espaco dizendo a mesma coisa duas vezes.
    */
   label?: string;
+  /** Dica do "i" ao lado do rotulo. */
+  info?: string;
+  /** Placeholder do modo Fixo. */
+  placeholder?: string;
   frames: DataFrame[];
   value: TextDimension;
   /**
@@ -41,14 +47,22 @@ interface TextDimensionFieldProps {
   onChange: (next: TextDimension) => void;
 }
 
-export function TextDimensionField({ label, frames, value, template, onChange }: TextDimensionFieldProps) {
+export function TextDimensionField({
+  label,
+  info,
+  placeholder,
+  frames,
+  value,
+  template,
+  onChange,
+}: TextDimensionFieldProps) {
   const doZabbix = useZabbixMetricNames();
   const catalogo = useZabbixItemCatalog();
 
   return (
-    <Field label={label}>
+    <Field label={label && <FieldLabel info={info}>{label}</FieldLabel>}>
       <Stack direction="column" gap={1}>
-        <RadioButtonGroup
+        <Segmented
           options={MODE_OPTIONS}
           value={value.mode}
           onChange={(mode) => onChange({ ...value, mode })}
@@ -68,7 +82,7 @@ export function TextDimensionField({ label, frames, value, template, onChange }:
             <Input
               value={value.fixed ?? ''}
               onChange={(event) => onChange({ ...value, fixed: event.currentTarget.value })}
-              placeholder="Texto"
+              placeholder={placeholder ?? 'Texto'}
             />
           )
         ) : (
@@ -78,7 +92,7 @@ export function TextDimensionField({ label, frames, value, template, onChange }:
             loadExtras={catalogo}
             value={value.field}
             onChange={(field) => onChange({ ...value, field })}
-            placeholder="Selecione um field"
+            placeholder="Escolha um field"
             filter={isDisplayableField}
           />
         )}

@@ -104,8 +104,8 @@ test('a regra do elemento pinta; o pipeline nativo formata o valor', async ({
   await gotoPanelEditPage({ dashboard, id: '1', ...nav });
 
   /**
-   * A cor de estado pousa no **fundo do card** desde que o elemento passou a se
-   * pintar inteiro. O gancho e `topo-card`, que existe justamente para o
+   * A cor de estado pousa na **borda do card** (o fundo e 12% dela sobre a
+   * superficie, desde a v1.4). O gancho e `topo-card`, que existe justamente para o
    * seletor: o nome do Emotion muda entre builds, e `> div` pega o wrapper de
    * hover, cuja borda e neutra em todo no — foi assim que este teste passou a
    * medir a superficie errada.
@@ -116,12 +116,14 @@ test('a regra do elemento pinta; o pipeline nativo formata o valor', async ({
       .filter({ hasText: name })
       .locator('.topo-card')
       .first()
-      .evaluate((el) => getComputedStyle(el).backgroundColor);
+      .evaluate((el) => getComputedStyle(el).borderTopColor);
 
-  const RED = 'rgb(242, 73, 92)';
-  const GREEN = 'rgb(115, 191, 105)';
-  const PURPLE = 'rgb(184, 119, 217)';
-  const BLUE = 'rgb(87, 148, 242)';
+  // A paleta do mockup (tema escuro): `red`, `green`, `purple` e `blue` salvos
+  // resolvem para os tokens dela.
+  const RED = 'rgb(239, 68, 68)';
+  const GREEN = 'rgb(34, 197, 94)';
+  const PURPLE = 'rgb(139, 124, 246)';
+  const BLUE = 'rgb(59, 130, 246)';
 
   // Dois hosts na mesma query, desambiguados por `getFieldDisplayName`.
   // A regra do proprio no dispara em 85, e o valor no badge sai formatado pelo

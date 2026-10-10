@@ -3,6 +3,8 @@ import { DataFrame, Field, FieldType, createTheme, toDataFrame } from '@grafana/
 import { TriggerBinding } from '../model/types';
 import { ZabbixProblem } from './problems';
 import { UNNAMED_TRIGGER, resolveTriggerState, severityColor } from './triggerState';
+import { resolveTfColor } from '../theme/palette';
+import { severityTfColor } from '../theme/severity';
 
 const theme = createTheme();
 
@@ -36,22 +38,23 @@ const binding = (overrides: Partial<TriggerBinding> = {}): TriggerBinding => ({
 });
 
 describe('severityColor', () => {
-  it('resolve 1..5 por nome de cor do tema', () => {
-    expect(severityColor(4, theme)).toBe(theme.visualization.getColorByName('red'));
-    expect(severityColor(5, theme)).toBe(theme.visualization.getColorByName('dark-red'));
+  it('segue a paleta do mockup: Disaster e High no vermelho', () => {
+    expect(severityColor(5, theme)).toBe(severityTfColor(5, theme));
+    expect(severityColor(4, theme)).toBe(severityTfColor(4, theme));
+    expect(severityColor(3, theme)).toBe(resolveTfColor('orange', theme));
+    expect(severityColor(1, theme)).toBe(resolveTfColor('blue', theme));
   });
 
-  /** Regressao: `'text'` resolveria para `text.primary`, quase branco no dark. */
-  it('severidade 0 usa `text.secondary`, nao um nome de cor', () => {
-    expect(severityColor(0, theme)).toBe(theme.colors.text.secondary);
-    expect(severityColor(0, theme)).not.toBe(theme.visualization.getColorByName('text'));
+  /** Not classified e o cinza apagado, nunca o branco de `text`. */
+  it('severidade 0 usa o cinza da paleta', () => {
+    expect(severityColor(0, theme)).toBe(resolveTfColor('gray', theme));
   });
 });
 
 describe('resolveTriggerState — trigger alarmando', () => {
   it('acende com a cor e o rotulo da severidade', () => {
     expect(resolveTriggerState(binding(), [problemsFrame([ICMP])], theme)).toEqual({
-      color: theme.visualization.getColorByName('red'),
+      color: resolveTfColor('red', theme),
       severity: 4,
       label: 'High',
       problems: [
@@ -59,7 +62,7 @@ describe('resolveTriggerState — trigger alarmando', () => {
           name: 'Unavailable by ICMP ping',
           severity: 4,
           label: 'High',
-          color: theme.visualization.getColorByName('red'),
+          color: resolveTfColor('red', theme),
           since: undefined,
         },
       ],
@@ -96,7 +99,7 @@ describe('resolveTriggerState — multiplas triggers ativas', () => {
     const accent = resolveTriggerState(binding(), [problemsFrame(problems)], theme);
 
     expect(accent).toMatchObject({
-      color: theme.visualization.getColorByName('dark-red'),
+      color: resolveTfColor('dark-red', theme),
       severity: 5,
       label: 'Disaster',
     });
@@ -156,7 +159,7 @@ describe('resolveTriggerState — lista de problemas ativos', () => {
 
     expect(accent?.problems[0]).toMatchObject({
       label: 'High',
-      color: theme.visualization.getColorByName('red'),
+      color: resolveTfColor('red', theme),
     });
   });
 

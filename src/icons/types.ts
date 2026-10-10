@@ -1,45 +1,23 @@
-import { ReactNode } from 'react';
-
 /**
  * Vocabulario da biblioteca de icones.
  *
- * Um icone tem **natureza**, e ela nao e um rotulo: e o que decide se ele pode
- * acender junto com o estado do elemento.
+ * Desde a v1.4 **todo icone acompanha o estado**: todos vem do catalogo do
+ * mockup (*Padrão*, *Infra*, *Petrolífera*, *Formas*, *Planos*), desenhos com
+ * volume cujas faces leem seis variaveis de tom (`--tf-t1..t4`, `--tf-ink`,
+ * `--tf-hl`). Quem desenha deriva os seis da cor do estado (`svg/tones.ts`).
  *
- *   - **glifo** — desenhado inline num `<svg>` que herda `currentColor`. Fica
- *     vermelho no alarme, cinza no repouso, sempre legivel sobre o card
- *     preenchido porque a cor vem de quem o renderiza.
- *   - **figura** — arte com cores proprias (SVG colorido, PNG, upload do
- *     usuario). Nao ha como tingi-la, entao ela nunca anuncia estado; quem
- *     anuncia e a superficie atras dela.
- *
- * Nao existe campo `tint` separado de proposito. Ele seria derivavel de `kind`
- * nos dois sentidos — uma `<img>` nao aceita `currentColor`, e um glifo nao tem
- * cor propria para preservar — e um campo derivavel e um convite a duas fontes
- * de verdade discordando.
+ * As figuras de cor fixa (PNG em variantes, fotos) sairam com os packs antigos,
+ * e os glifos de traco dos *Clássicos* tambem: as chaves deles resolvem no
+ * desenho equivalente (`LEGACY` em `registry.ts`).
  */
 export type IconArt =
-  /** Shapes de um `viewBox` 24x24, sem cor propria. Ver as regras em `packs/classic`. */
-  | { kind: 'glyph'; shape: ReactNode }
-  /** URL do asset ou data URI. */
-  | { kind: 'image'; src: string }
-  /**
-   * A mesma figura em varias cores, uma por arquivo.
-   *
-   * E a terceira natureza, e ela desfaz a oposicao entre as duas primeiras: a
-   * arte continua sem poder ser tingida, mas **passa a anunciar estado** —
-   * trocando o arquivo, e nao a cor. E como os mapas do Zabbix sempre
-   * funcionaram, e o que permite a um PNG de 96px acompanhar um alarme.
-   */
-  | { kind: 'variants'; tones: Partial<Record<IconTone, string>>; base: IconTone };
+  /** Corpo de um `<svg>` com o `viewBox` dele, pintado pelas variaveis de tom. */
+  { kind: 'svg'; viewBox: string; body: string };
 
 /**
- * Os tons em que uma figura pode existir.
- *
- * Deliberadamente curto e ligado ao **material disponivel**, nao a escala de
- * severidade do Zabbix: nao adianta um tom `orange` se nenhum pack traz o
- * arquivo. Quem traduz severidade (ou cor de threshold) para um destes e o
- * canvas, em `canvas/iconTone.ts`, onde a cadeia de cor ja e conhecida.
+ * Cor fixa que o usuario pode ter escolhido para o icone antes da v1.4
+ * (`presentation.iconTone`). O editor nao oferece mais a escolha — no mockup o
+ * icone sempre acompanha o estado —, mas o valor salvo continua respeitado.
  */
 export type IconTone = 'gray' | 'blue' | 'green' | 'yellow' | 'orange' | 'red';
 
@@ -49,12 +27,14 @@ export interface IconEntry {
   /** Nome exibido no seletor. */
   label: string;
   art: IconArt;
+  /** Agrupamento dentro do pack (Rede, Segurança...), quando o pack tem. */
+  group?: string;
   /** Termos extras de busca — sinonimos e o nome em ingles. */
   keywords?: string[];
 }
 
 /**
- * Uma "pasta" de icones. O `id` entra na chave salva (`zabbix/router`), entao
+ * Uma "pasta" de icones. O `id` entra na chave salva (`infra/roteador`), entao
  * renomea-lo quebra topologias — trate-o como parte do formato, nao como texto.
  */
 export interface IconPack {

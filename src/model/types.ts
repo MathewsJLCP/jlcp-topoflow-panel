@@ -7,6 +7,7 @@ import {
   elementAlertSchema,
   elementThresholdsSchema,
   imageBackgroundSchema,
+  metricBindingSchema,
   severitySchema,
   textBackgroundSchema,
   textDimensionSchema,
@@ -32,6 +33,9 @@ export type ZabbixOptions = z.infer<typeof zabbixOptionsSchema>;
 export type ColorDimension = z.infer<typeof colorDimensionSchema>;
 export type TextDimension = z.infer<typeof textDimensionSchema>;
 export type ValueDimension = z.infer<typeof valueDimensionSchema>;
+/** Metrica de estado alem da primeira (v1.4). */
+export type MetricBinding = z.infer<typeof metricBindingSchema>;
+export type Waypoint = NonNullable<TopoEdge['waypoints']>[number];
 export type TriggerBinding = z.infer<typeof triggerBindingSchema>;
 export type TextBackground = z.infer<typeof textBackgroundSchema>;
 /** Para onde o clique no elemento leva. Ausente significa desligado. */

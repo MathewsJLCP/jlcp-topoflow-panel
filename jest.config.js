@@ -10,6 +10,6 @@ module.exports = {
   transform: {
     ...base.transform,
     // Imagens importadas viram o nome do arquivo — ver `jest-file-transform.js`.
-    '^.+\\.(png|jpe?g|gif|webp)$': require.resolve('./jest-file-transform.js'),
+    '^.+\\.(png|jpe?g|gif|webp|woff2?)$': require.resolve('./jest-file-transform.js'),
   },
 };

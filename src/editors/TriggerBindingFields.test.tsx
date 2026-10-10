@@ -309,40 +309,55 @@ describe('TriggerBindingField — exibir triggers ativas', () => {
 });
 
 /**
- * Nomes ou so o total. `list` e o default porque era o unico formato possivel
- * ate aqui — nenhuma topologia salva muda de aparencia.
+ * Formato dos problemas. `list` e o default porque era o unico formato possivel
+ * ate a v1.3 — nenhuma topologia salva muda de aparencia. `count` e o Total de
+ * antes, e aparece como Total.
  */
-describe('TriggerBindingField — formato da lista', () => {
-  const formato = (rotulo: string) => screen.getByRole('radio', { name: rotulo });
+describe('TriggerBindingField — formato dos problemas', () => {
+  const formato = () => screen.getByRole('combobox', { name: 'Formato dos problemas' }) as HTMLSelectElement;
+  const opcoes = () => Array.from(formato().options).map((o) => o.textContent);
 
   it('aparece com a lista ligada e some com ela desligada', () => {
     setup({ value: enabled });
-    expect(screen.getByText('Formato da lista')).toBeInTheDocument();
+    expect(screen.getByText('Formato dos problemas')).toBeInTheDocument();
 
     cleanup();
 
     setup({ value: { ...enabled, showActive: false } });
-    expect(screen.queryByText('Formato da lista')).not.toBeInTheDocument();
+    expect(screen.queryByText('Formato dos problemas')).not.toBeInTheDocument();
   });
 
-  it('vínculo sem formato salvo mostra Lista marcado', () => {
+  it('vínculo sem formato salvo mostra Lista', () => {
     setup({ value: enabled });
 
-    expect(formato('Lista')).toBeChecked();
+    expect(formato().value).toBe('list');
   });
 
   it('escolher Total grava no vínculo', () => {
     const { onChange } = setup({ value: enabled });
 
-    fireEvent.click(formato('Total'));
+    fireEvent.change(formato(), { target: { value: 'total' } });
 
-    expect(onChange).toHaveBeenCalledWith({ ...enabled, activeDisplay: 'count' });
+    expect(onChange).toHaveBeenCalledWith({ ...enabled, activeDisplay: 'total' });
   });
 
-  it('vínculo salvo em Total volta marcado nele', () => {
+  it('vínculo salvo no Total de antes da v1.4 volta como Total', () => {
     setup({ value: { ...enabled, activeDisplay: 'count' } });
 
-    expect(formato('Total')).toBeChecked();
+    expect(formato().value).toBe('total');
+  });
+
+  /** Dentro do nó, Faixa e Contador vivem no cartão: só o nó os oferece. */
+  it('fora do nó, só Lista e Total', () => {
+    setup({ value: enabled });
+
+    expect(opcoes()).toEqual(['Lista', 'Total']);
+  });
+
+  it('no nó, os cinco formatos do mockup', () => {
+    setup({ value: enabled, isNode: true });
+
+    expect(opcoes()).toEqual(['Dentro do nó', 'Faixa', 'Contador', 'Lista', 'Total']);
   });
 });
 
@@ -351,8 +366,7 @@ describe('TriggerBindingField — formato da lista', () => {
  * para fora da área visível, e um nó com vizinho logo abaixo cobre o vizinho.
  */
 describe('TriggerBindingField — posição da lista', () => {
-  /** O rótulo visível é a seta; o nome completo vive no tooltip, como no postit. */
-  const posicao = (seta: string) => screen.getByRole('radio', { name: seta });
+  const posicao = (lado: string) => screen.getByRole('radio', { name: lado });
 
   it('aparece com a lista ligada e some com ela desligada', () => {
     setup({ value: enabled });
@@ -365,16 +379,16 @@ describe('TriggerBindingField — posição da lista', () => {
   });
 
   /** `bottom` era o único lugar possível até aqui — daí ser o padrão. */
-  it('vínculo sem posição salva mostra Inferior marcado', () => {
+  it('vínculo sem posição salva mostra Abaixo marcado', () => {
     setup({ value: enabled });
 
-    expect(posicao('↓')).toBeChecked();
+    expect(posicao('Abaixo')).toBeChecked();
   });
 
   it('escolher um lado grava no vínculo', () => {
     const { onChange } = setup({ value: enabled });
 
-    fireEvent.click(posicao('→'));
+    fireEvent.click(posicao('Direita'));
 
     expect(onChange).toHaveBeenCalledWith({ ...enabled, activePosition: 'right' });
   });
@@ -382,9 +396,16 @@ describe('TriggerBindingField — posição da lista', () => {
   it('os quatro lados estão na tela', () => {
     setup({ value: enabled });
 
-    for (const seta of ['↑', '↓', '←', '→']) {
-      expect(posicao(seta)).toBeInTheDocument();
+    for (const lado of ['Acima', 'Abaixo', 'Esquerda', 'Direita']) {
+      expect(posicao(lado)).toBeInTheDocument();
     }
+  });
+
+  /** No nó, os formatos de dentro do cartão não têm lado: a posição some. */
+  it('no nó, a posição só vale para a Lista', () => {
+    setup({ value: { ...enabled, activeDisplay: 'strip' }, isNode: true });
+
+    expect(screen.queryByText('Posição da lista')).not.toBeInTheDocument();
   });
 });
 

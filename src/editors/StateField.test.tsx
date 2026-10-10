@@ -154,7 +154,7 @@ describe('EdgeForm — seletor de métrica', () => {
     const severidade = { type: 'severity' as const, atLeast: 5 as const, color: 'purple' };
     const { result } = setupEdge({ trigger: TRIGGER_ON, thresholds: { steps: [metrica, severidade] } });
 
-    fireEvent.click(screen.getByRole('button', { name: /Restaurar padrão do Zabbix/ }));
+    fireEvent.click(screen.getByRole('button', { name: /Restaurar padrão/ }));
 
     expect(result()?.thresholds?.steps).toEqual([metrica]);
   });
@@ -189,7 +189,7 @@ describe('thresholds em Conexão e Point', () => {
 
     addRule('Threshold');
 
-    expect(result()?.thresholds?.steps).toEqual([{ type: 'threshold', value: 80, color: 'yellow' }]);
+    expect(result()?.thresholds?.steps).toEqual([{ type: 'threshold', value: 80, color: '#F59E0B' }]);
   });
 
   it('a conexão aceita regra própria', () => {
@@ -197,7 +197,7 @@ describe('thresholds em Conexão e Point', () => {
 
     addRule('Threshold');
 
-    expect(result()?.thresholds?.steps).toEqual([{ type: 'threshold', value: 80, color: 'yellow' }]);
+    expect(result()?.thresholds?.steps).toEqual([{ type: 'threshold', value: 80, color: '#F59E0B' }]);
   });
 
   /** A Base grava em `color.fixed`, o mesmo campo que o antigo controle "Cor". */
@@ -227,15 +227,15 @@ describe('animação de alerta', () => {
   it('o alerta salvo aparece nas linhas da escada que ele alcançava', () => {
     setupPoint({ trigger: TRIGGER_ON, alert: { animation: 'radar', fromSeverity: 4 } });
 
-    expect(screen.getByLabelText('Animação de Disaster')).toHaveValue('Radar');
-    expect(screen.getByLabelText('Animação de High')).toHaveValue('Radar');
-    expect(screen.getByLabelText('Animação de Average')).toHaveValue('Parado');
+    expect(screen.getByLabelText('Animação de Disaster')).toHaveValue('radar');
+    expect(screen.getByLabelText('Animação de High')).toHaveValue('radar');
+    expect(screen.getByLabelText('Animação de Average')).toHaveValue('none');
   });
 
   it('a conexão também tem a coluna, uma por severidade', () => {
     setupEdge({ trigger: TRIGGER_ON });
 
-    expect(screen.getByLabelText('Animação de Disaster')).toHaveValue('Parado');
-    expect(screen.getByLabelText('Animação de Not classified')).toHaveValue('Parado');
+    expect(screen.getByLabelText('Animação de Disaster')).toHaveValue('none');
+    expect(screen.getByLabelText('Animação de Not classified')).toHaveValue('none');
   });
 });

@@ -1,4 +1,14 @@
-import { DEFAULT_ICON_REF, ICON_PACKS, iconRef, isKnownIcon, listIcons, resolveIcon, splitRef } from './index';
+import {
+  DEFAULT_ICON_REF,
+  ICON_PACKS,
+  STARTER_ICON_REF,
+  iconRef,
+  isKnownIcon,
+  listIcons,
+  resolveIcon,
+  splitRef,
+} from './index';
+import { LEGACY } from './registry';
 
 /**
  * O registry e o unico lugar que traduz a chave salva em arte. Errar aqui e
@@ -11,7 +21,7 @@ describe('splitRef', () => {
   });
 
   /** Chave sem pack e o formato de tudo que foi salvo antes de existirem pastas. */
-  it('chave sem pack pertence aos clássicos', () => {
+  it('chave sem pack pertence aos clássicos (que saíram — ver LEGACY)', () => {
     expect(splitRef('router')).toEqual(['classic', 'router']);
     expect(splitRef(undefined)).toEqual(['classic', '']);
   });
@@ -23,14 +33,17 @@ describe('splitRef', () => {
 });
 
 describe('resolveIcon', () => {
+  /** Os Clássicos saíram na v1.4: a chave curta resolve no desenho equivalente. */
   it('aceita a chave curta que já está salva nos dashboards', () => {
-    expect(resolveIcon('firewall').ref).toBe('classic/firewall');
-    expect(resolveIcon('load-balancer').ref).toBe('classic/load-balancer');
+    expect(resolveIcon('firewall').ref).toBe('padrao/firewall');
+    expect(resolveIcon('load-balancer').ref).toBe('planos/load-balancer');
+    expect(resolveIcon('generic').ref).toBe(DEFAULT_ICON_REF);
   });
 
   it('aceita a chave canônica, com pack', () => {
-    expect(resolveIcon('classic/router').name).toBe('router');
-    expect(resolveIcon('classic/router').packLabel).toBe('Clássicos');
+    expect(resolveIcon('padrao/roteador').name).toBe('roteador');
+    expect(resolveIcon('padrao/roteador').packLabel).toBe('Padrão');
+    expect(resolveIcon('classic/router').ref).toBe('padrao/roteador');
   });
 
   /**
@@ -70,6 +83,7 @@ describe('isKnownIcon', () => {
   it('separa o que existe do que só parece existir', () => {
     expect(isKnownIcon('server')).toBe(true);
     expect(isKnownIcon('classic/server')).toBe(true);
+    expect(isKnownIcon('infra/servidor')).toBe(true);
     expect(isKnownIcon('sitemap')).toBe(false);
     expect(isKnownIcon('pack-inexistente/server')).toBe(false);
     expect(isKnownIcon('zabbix/server')).toBe(true);
@@ -105,70 +119,56 @@ describe('catálogo', () => {
   });
 
   it('iconRef monta a chave canônica', () => {
-    expect(iconRef('classic', 'router')).toBe('classic/router');
+    expect(iconRef('padrao', 'roteador')).toBe('padrao/roteador');
   });
 });
 
-describe('pack Petrolífera', () => {
-  it('resolve pela chave com pack', () => {
-    const sonda = resolveIcon('petrolifera/sonda');
-
-    expect(sonda.name).toBe('sonda');
-    expect(sonda.packLabel).toBe('Petrolífera');
+describe('catálogo do mockup (v1.4)', () => {
+  /** As pastas e as contagens do mockup — sai um desenho, cai o teste. */
+  it('traz os packs do mockup, na ordem dele', () => {
+    expect(ICON_PACKS.map((pack) => [pack.id, pack.icons.length])).toEqual([
+      ['padrao', 28],
+      ['infra', 43],
+      ['petro', 9],
+      ['formas', 15],
+      ['planos', 164],
+    ]);
   });
 
-  /**
-   * Sao fotos e ilustracoes de produto: nao ha a mesma arte em varios tons. E a
-   * natureza que a interface consulta — o `DeviceNode` so poe a placa opaca sob
-   * uma figura, e o campo "Cor do ícone" so aparece para quem tem variantes.
-   */
-  it('todo ícone do pack é figura, não variante', () => {
-    const pack = ICON_PACKS.find((p) => p.id === 'petrolifera')!;
-
-    for (const icon of pack.icons) {
-      expect(icon.art.kind).toBe('image');
+  it('todo ícone é svg tingível', () => {
+    for (const icon of listIcons()) {
+      expect(icon.art.kind).toBe('svg');
     }
+  });
+
+  /** Nó novo nasce com o Roteador do pack Padrão, como no mockup. */
+  it('o ícone inicial é o Roteador do Padrão', () => {
+    expect(STARTER_ICON_REF).toBe('padrao/roteador');
   });
 });
 
-describe('pack Zabbix', () => {
-  it('resolve pela chave com pack', () => {
-    const router = resolveIcon('zabbix/router');
-
-    expect(router.name).toBe('router');
-    expect(router.packLabel).toBe('Zabbix');
-  });
-
+describe('chaves anteriores à v1.4', () => {
   /**
-   * O pack tem `router`, `firewall` e `server`, que os *Clássicos* tambem tem.
-   * Sao icones diferentes, e so o pack na chave os separa — se `splitRef` um dia
-   * deixar de separar, este teste cai antes de um dashboard mostrar o desenho
-   * errado calado.
+   * Um destino que não existe cairia no genérico em silêncio — o dashboard
+   * abriria com um quadrado onde havia um rack.
    */
-  it('não se confunde com o ícone homônimo dos Clássicos', () => {
-    expect(resolveIcon('zabbix/router').pack).toBe('zabbix');
-    expect(resolveIcon('classic/router').pack).toBe('classic');
-    expect(resolveIcon('router').pack).toBe('classic');
-  });
-
-  /** Sao renderizacoes 3D com cor propria: nao ha a mesma arte em seis tons. */
-  it('todo ícone do pack é figura, não variante', () => {
-    const pack = ICON_PACKS.find((p) => p.id === 'zabbix')!;
-
-    for (const icon of pack.icons) {
-      expect(icon.art.kind).toBe('image');
+  it('todo destino da tabela existe no catálogo', () => {
+    for (const [antiga, nova] of Object.entries(LEGACY)) {
+      expect([antiga, resolveIcon(antiga).ref]).toEqual([antiga, nova]);
     }
   });
 
-  /**
-   * O conjunto do Zabbix entrou inteiro (43 arquivos), por decisão do usuário em
-   * 2026-09-10, mais o `ap` — a foto do UniFi que o conjunto original não tem e
-   * que o usuário pediu no mesmo dia. Daí 44, e não 43.
-   */
-  it('traz os 43 ícones do conjunto original mais o AP', () => {
-    const pack = ICON_PACKS.find((p) => p.id === 'zabbix')!;
+  it('os packs em PNG resolvem para o desenho equivalente', () => {
+    expect(resolveIcon('topoflow/router').ref).toBe('padrao/roteador');
+    expect(resolveIcon('zabbix/rack-42-with-door').ref).toBe('infra/rack-42u-porta');
+    expect(resolveIcon('petrolifera/unifi-ac-mesh').ref).toBe('petro/unifi');
+    expect(isKnownIcon('topoflow/world')).toBe(true);
+  });
 
-    expect(pack.icons).toHaveLength(44);
-    expect(pack.icons.filter((icon) => icon.name === 'ap')).toHaveLength(1);
+  /** O pack Zabbix virou Infra: `zabbix/<nome>` sem entrada na tabela vai para `infra/<nome>`. */
+  it('chave do Zabbix resolve no Infra', () => {
+    expect(resolveIcon('zabbix/switch').ref).toBe('infra/switch');
+    expect(resolveIcon('zabbix/notebook').ref).toBe('infra/notebook');
+    expect(resolveIcon('zabbix/switch').packLabel).toBe('Infra');
   });
 });

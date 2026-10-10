@@ -1,8 +1,8 @@
 import { DataFrame, GrafanaTheme2 } from '@grafana/data';
 
 import { TriggerBinding } from '../model/types';
+import { severityTfColor } from '../theme/severity';
 import {
-  SEVERITY_COLOR,
   SEVERITY_LABEL,
   Severity,
   ZabbixProblem,
@@ -35,8 +35,7 @@ import {
  * quase branco no dark, o bug que a cadeia de cor existiu para matar.
  */
 export function severityColor(severity: Severity, theme: GrafanaTheme2): string {
-  const name = SEVERITY_COLOR[severity];
-  return name ? theme.visualization.getColorByName(name) : theme.colors.text.secondary;
+  return severityTfColor(severity, theme);
 }
 
 /**

@@ -1,20 +1,7 @@
-import React from 'react';
-import { css, cx } from '@emotion/css';
-import { GrafanaTheme2, SelectableValue } from '@grafana/data';
-import {
-  Button,
-  Checkbox,
-  ColorPicker,
-  Combobox,
-  ComboboxOption,
-  Dropdown,
-  Field,
-  IconButton,
-  Input,
-  Menu,
-  useStyles2,
-  useTheme2,
-} from '@grafana/ui';
+import React, { useEffect, useRef, useState } from 'react';
+import { css } from '@emotion/css';
+import { GrafanaTheme2, colorManipulator } from '@grafana/data';
+import { ColorPicker, Combobox, ComboboxOption, IconButton, Input, useStyles2, useTheme2 } from '@grafana/ui';
 
 import { hasStateBinding } from '../data/dimensions';
 import { SEVERITY_LABEL } from '../data/problems';
@@ -37,46 +24,28 @@ import {
   Severity,
   SpecialMatch,
 } from '../model/types';
+import { FONT_SANS, TfPalette, resolveTfColor, tfPalette } from '../theme/palette';
 import { FieldLabel } from './FieldLabel';
+import { DashedButton } from './ui/Section';
+import { TfSelect } from './ui/TfSelect';
 
 /**
- * Regras que mudam a cor do elemento conforme o valor da metrica.
+ * As regras de estado de uma metrica (eixo Metrica) ou a escada de severidades
+ * (eixo Trigger), no desenho do mockup.
  *
- * O seletor da metrica **nao** esta aqui: ele e o `StateFieldPicker`, e quem o
- * renderiza e o formulario, logo acima deste bloco. Enquanto ele morava dentro
- * daqui, so o no tinha seletor de metrica — ver o comentario la.
- *
- * Junta numa lista so o que o Grafana mantem em dois lugares — **Thresholds**
- * (faixa aberta) e **Value mappings** (valor exato, faixa, regex, especiais) —,
- * mais a cor de repouso, que aparece como a linha **Base** ao pe da lista,
- * exatamente onde o editor de thresholds do Grafana a coloca.
- *
- * A ordem da lista **e** a ordem de avaliacao: mapeamentos primeiro, na ordem
- * em que foram criados, depois os thresholds do maior para o menor. E a mesma
- * precedencia do core, com a diferenca de que aqui ela esta visivel na tela em
- * vez de escrita na documentacao.
- *
- * A linha Base grava em `color.fixed` — o mesmo campo de sempre. Nada foi
- * migrado; so mudou onde ele aparece.
- *
- * **Este bloco e a unica fonte de cor por metrica do elemento.** O Thresholds do
- * painel de opcoes do Grafana nao concorre com ele desde 2026-09-02: enquanto
- * concorria, uma Base escolhida aqui podia ser ignorada em favor de um step
- * configurado em outra tela, sem nada nesta dizer isso. Ver a cadeia em
- * `data/elementColor`.
+ *   - Metrica: uma linha por regra — cor, condicao, animacao, lixeira — e
+ *     "+ Adicionar regra" com os cinco tipos. A linha da regra continua a de
+ *     antes da v1.4 (seletor de cor do Grafana, com as cores nomeadas; `Input`;
+ *     `Combobox`), a pedido: o resto do bloco segue o mockup.
+ *   - Trigger: as seis severidades do Zabbix, cada uma com "atender", cor e
+ *     animacao; "Restaurar padrao" desfaz a customizacao.
+ *   - Base: a cor quando nada casa (ou nao ha alarme). Com varias metricas ela
+ *     sai daqui e vai para o fim do bloco de estado (`showBase={false}`).
  */
 
-/** Escala usada ao adicionar thresholds em sequencia, do mais leve ao mais grave. */
-const THRESHOLD_COLORS = ['yellow', 'orange', 'red', 'dark-red'];
+const THRESHOLD_COLORS = ['#F59E0B', '#F97316', '#EF4444'];
+const MAPPING_COLOR = '#3B82F6';
 
-/** Mapeamentos nao tem gravidade implicita; azul e o neutro informativo. */
-const MAPPING_COLOR = 'blue';
-
-/**
- * Regra que o usuario adiciona a mao. A severidade fica de fora: no eixo de
- * Trigger a lista nao e montada regra a regra, e sim uma escada fixa com os seis
- * niveis do Zabbix (ver `SeverityLadder`).
- */
 type MetricRuleType = Exclude<ElementRuleType, 'severity'>;
 
 const METRIC_RULE_TYPES: Array<{ type: MetricRuleType; label: string; description: string }> = [
@@ -87,20 +56,17 @@ const METRIC_RULE_TYPES: Array<{ type: MetricRuleType; label: string; descriptio
   { type: 'special', label: 'Especial', description: 'Nulo, NaN, booleanos' },
 ];
 
-/**
- * O "sem animacao" precisa de valor proprio porque o `Combobox` nao aceita
- * `undefined` como opcao selecionavel; ele e traduzido de volta na escrita.
- */
 const NO_ANIMATION = 'none';
+type AnimationValue = AlertAnimation | typeof NO_ANIMATION;
 
-const RULE_ANIMATION_OPTIONS: Array<ComboboxOption<AlertAnimation | typeof NO_ANIMATION>> = [
+const ANIMATION_OPTIONS: Array<{ value: AnimationValue; label: string }> = [
   { value: NO_ANIMATION, label: 'Parado' },
   { value: 'pulse', label: 'Pulsar' },
   { value: 'blink', label: 'Piscar' },
   { value: 'radar', label: 'Radar' },
 ];
 
-const SPECIAL_OPTIONS: Array<SelectableValue<SpecialMatch>> = [
+const SPECIAL_OPTIONS: Array<{ value: SpecialMatch; label: string }> = [
   { value: 'null', label: 'Nulo' },
   { value: 'nan', label: 'NaN' },
   { value: 'null+nan', label: 'Nulo + NaN' },
@@ -110,25 +76,17 @@ const SPECIAL_OPTIONS: Array<SelectableValue<SpecialMatch>> = [
 ];
 
 interface ThresholdsEditorProps {
-  /**
-   * Eixo em que o elemento esta. Decide quais tipos de regra sao oferecidos e
-   * quais das regras salvas aparecem: as do outro eixo continuam no JSON, so nao
-   * ocupam a tela de quem nao esta olhando para elas.
-   */
   axis: 'metric' | 'trigger';
-  /** So para a linha Base, que edita `color.fixed`. O `field` quem escreve e o `StateFieldPicker`. */
   color: ColorDimension;
   thresholds: ElementThresholds | undefined;
-  /**
-   * Campo aposentado do elemento, so de leitura: a escada o exibe e o dobra para
-   * dentro das regras na primeira edicao. Ver `elementAlertSchema`.
-   */
   alert?: ElementAlert;
-  /** A aresta nao recebe anel de radar; ver `EDGE_CLASS` em `alertAnimation`. */
   allowRadar?: boolean;
+  /** Falso quando a Base e desenhada pelo bloco de estado (varias metricas). */
+  showBase?: boolean;
+  /** Presente quando ha mais de uma metrica: o link "Remover metrica". */
+  onRemoveMetric?: () => void;
   onColorChange: (next: ColorDimension) => void;
   onThresholdsChange: (next: ElementThresholds | undefined) => void;
-  /** Chamado com `undefined` quando o `alert` legado termina de ser dobrado. */
   onAlertChange?: (next: ElementAlert | undefined) => void;
 }
 
@@ -138,121 +96,83 @@ export function ThresholdsEditor({
   thresholds,
   alert,
   allowRadar = true,
+  showBase = true,
+  onRemoveMetric,
   onColorChange,
   onThresholdsChange,
   onAlertChange,
 }: ThresholdsEditorProps) {
   const styles = useStyles2(getStyles);
-  const theme = useTheme2();
   const ids = React.useId();
+  const [menu, setMenu] = useState(false);
 
-  /**
-   * A lista exibida e so a do eixo atual, mas toda escrita devolve **a lista
-   * inteira**: as regras do outro eixo viajam junto, intactas. Sem isso,
-   * adicionar uma cor de severidade apagaria os thresholds de metrica do mesmo
-   * elemento — e alternar os modos deixaria de ser gratuito, que e uma
-   * propriedade que o binding de trigger tem desde que existe.
-   */
   const hidden = axis === 'trigger' ? metricRules(thresholds) : severityRules(thresholds);
   const rules = metricRules(thresholds);
 
   const writeRules = (next: ElementRule[]) => {
     const all = [...hidden, ...next];
-    // Lista vazia grava `undefined`, e nao `{ steps: [] }`: e a ausencia de
-    // regra, e e ela que faz o elemento repousar na Base.
     onThresholdsChange(all.length > 0 ? { steps: sortRules(all) } : undefined);
   };
 
-  const addRule = (type: MetricRuleType) => writeRules([...rules, newRule(type, rules)]);
+  const addRule = (type: MetricRuleType) => {
+    setMenu(false);
+    writeRules([...rules, newRule(type, rules)]);
+  };
 
   const patchRule = (index: number, changes: Partial<ElementRule>) =>
     writeRules(rules.map((rule, i) => (i === index ? ({ ...rule, ...changes } as ElementRule) : rule)));
 
-  // So o aviso acionavel fica no corpo. O "sem regra propria" explica um estado
-  // normal, nao um problema, e por isso virou tooltip: ocupava uma linha
-  // permanente para dizer que nada esta errado.
-  /**
-   * Texto depende do eixo: em Trigger nao existe field escolhido, e o aviso de
-   * metrica mandaria o usuario procurar um campo que nao esta na tela.
-   */
   const info =
     axis === 'trigger'
-      ? 'Uma cor por severidade do Zabbix. Enquanto não mexer em nenhuma, valem as cores padrão do Zabbix.'
-      : 'As regras daqui são as únicas que pintam o elemento — o Thresholds do painel formata o valor, não a cor. Sem regra, vale a Base.';
+      ? 'Desmarcada, o elemento ignora alarmes daquele nível: não acende, não conta, não aparece na lista.'
+      : 'Regras desta métrica. Sem regra, vale a Base. O Thresholds do painel formata o valor, não a cor.';
 
-  const hint =
-    axis === 'metric' && !hasStateBinding(color) ? 'Escolha uma métrica acima para as regras terem efeito.' : undefined;
+  const animations = allowRadar ? ANIMATION_OPTIONS : ANIMATION_OPTIONS.filter((o) => o.value !== 'radar');
 
   return (
-    <Field label={<FieldLabel info={info}>Thresholds</FieldLabel>}>
-      <div className={styles.rules}>
-        {/*
-          Em Trigger nao ha o que adicionar: a lista de severidades do Zabbix e
-          fechada, e as seis linhas ja estao na tela. O botao so faz sentido no
-          eixo onde o usuario inventa as regras.
-        */}
-        {axis === 'metric' && (
-          <Dropdown
-            overlay={
-              <Menu>
-                {METRIC_RULE_TYPES.map(({ type, label, description }) => (
-                  <Menu.Item key={type} label={label} description={description} onClick={() => addRule(type)} />
-                ))}
-              </Menu>
+    <>
+      {axis === 'trigger' ? (
+        <SeverityLadder
+          info={info}
+          thresholds={thresholds}
+          alert={alert}
+          animations={animations}
+          onChange={(next) => {
+            writeRules(next);
+            if (alert) {
+              onAlertChange?.(undefined);
             }
-          >
-            <Button variant="secondary" size="sm" icon="plus" fullWidth>
-              Adicionar regra
-            </Button>
-          </Dropdown>
-        )}
+          }}
+        />
+      ) : (
+        <div className={styles.block}>
+          <div className={styles.label}>
+            <FieldLabel info={info}>Thresholds</FieldLabel>
+          </div>
 
-        {axis === 'trigger' && (
-          <SeverityLadder
-            thresholds={thresholds}
-            alert={alert}
-            allowRadar={allowRadar}
-            onChange={(next) => {
-              writeRules(next);
-              // O `alert` acabou de virar coluna das regras; deixa-lo no JSON
-              // seria uma segunda fonte de animacao, invisivel na tela.
-              if (alert) {
-                onAlertChange?.(undefined);
-              }
-            }}
-          />
-        )}
+          {!hasStateBinding(color) && (
+            <span className={styles.warn}>Escolha uma métrica acima para as regras terem efeito.</span>
+          )}
 
-        {axis === 'metric' &&
-          rules.map((rule, index) => (
+          {rules.map((rule, index) => (
             // O indice como chave e seguro aqui: a lista e reordenada a cada
-            // escrita, entao qualquer id estavel divergiria da ordem exibida no
-            // mesmo instante.
+            // escrita, entao qualquer id estavel divergiria da ordem exibida.
             <div key={index} className={styles.rule}>
               <ColorPicker
                 enableNamedColors
                 color={rule.color}
                 onChange={(next) => patchRule(index, { color: next })}
               />
-
               <div className={styles.condition}>
                 <RuleCondition rule={rule} index={index} onChange={(changes) => patchRule(index, changes)} />
               </div>
-
-              {/*
-                A animacao e por regra, e nao do elemento: e o que permite `>= 75`
-                pulsar e `> 90` fazer radar no mesmo campo. Tambem responde sozinha
-                a pergunta que travava a extensao para metrica — nem toda regra e
-                problema, e quem separa as que sao e o usuario.
-              */}
               <AnimationPicker
                 id={`${ids}-animation-${index}`}
                 label={`Animação da regra ${index + 1}`}
                 value={rule.animation}
-                allowRadar={allowRadar}
+                options={animations}
                 onChange={(animation) => patchRule(index, { animation })}
               />
-
               <IconButton
                 name="trash-alt"
                 tooltip="Remover regra"
@@ -261,57 +181,51 @@ export function ThresholdsEditor({
             </div>
           ))}
 
-        {/*
-          Base: nao e uma regra, e o que sobra quando nenhuma casa. Fica ao pe
-          da lista, sem lixeira, como no editor de thresholds do Grafana.
-
-          Sem cor escolhida, a amostra mostra a **superficie neutra do tema** —
-          que e o que o elemento de fato exibe em repouso —, e nao verde. O
-          verde de antes era um placeholder que o modelo nao guardava: ligar o
-          Background de uma imagem e passar para o modo Estado deixava a placa
-          neutra no canvas enquanto esta linha exibia verde, e a unica forma de
-          faze-los concordar era abrir o seletor e escolher a cor que ja parecia
-          estar escolhida. Verde ainda por cima e a pior cor possivel para um
-          placeholder num NOC: le-se "verificado OK" sem nada ter sido
-          verificado.
-        */}
-        <div className={styles.base}>
-          <ColorPicker
-            enableNamedColors
-            color={color.fixed ?? theme.colors.background.secondary}
-            onChange={(fixed) => onColorChange({ ...color, fixed })}
-          />
-          <span className={styles.baseLabel}>Base</span>
+          <div className={styles.addRow}>
+            <AddRuleMenu
+              open={menu}
+              onToggle={() => setMenu((m) => !m)}
+              onClose={() => setMenu(false)}
+              onAdd={addRule}
+            />
+            {onRemoveMetric && (
+              <button type="button" className={styles.removeMetric} onClick={onRemoveMetric}>
+                Remover métrica
+              </button>
+            )}
+          </div>
         </div>
+      )}
 
-        {hint && <div className={styles.empty}>{hint}</div>}
-      </div>
-    </Field>
+      {showBase && (
+        <BaseRow
+          color={color}
+          description={axis === 'trigger' ? 'Cor quando não há alarme.' : 'Cor quando nenhuma regra casa.'}
+          onChange={onColorChange}
+        />
+      )}
+    </>
   );
 }
 
-interface AnimationPickerProps {
+/**
+ * A animacao da regra. O rotulo e um `<label>` fora da tela: o `Combobox` so
+ * aceita `id`, e sem ele o controle fica sem nome acessivel.
+ */
+function AnimationPicker({
+  id,
+  label,
+  value,
+  options,
+  onChange,
+}: {
   id: string;
-  /** Nome acessivel do controle; nao aparece na tela. */
   label: string;
   value: AlertAnimation | undefined;
-  allowRadar: boolean;
+  options: Array<ComboboxOption<AnimationValue>>;
   onChange: (next: AlertAnimation | undefined) => void;
-}
-
-/**
- * A coluna de animacao, identica nos dois eixos — que e o ponto: a animacao
- * pertence a regra que casou, seja ela uma faixa de metrica ou uma severidade.
- *
- * O rotulo e um `<label>` de verdade fora da tela, e nao um `aria-labelledby`
- * com texto solto: o `Combobox` so aceita `id`, e sem isso o controle fica sem
- * nome acessivel — um leitor de tela anuncia "combobox" e mais nada, numa lista
- * com seis controles iguais.
- */
-function AnimationPicker({ id, label, value, allowRadar, onChange }: AnimationPickerProps) {
+}) {
   const styles = useStyles2(getStyles);
-  const options = allowRadar ? RULE_ANIMATION_OPTIONS : RULE_ANIMATION_OPTIONS.filter((o) => o.value !== 'radar');
-
   return (
     <div className={styles.ruleAnimation}>
       <label className={styles.srOnly} htmlFor={id}>
@@ -327,83 +241,184 @@ function AnimationPicker({ id, label, value, allowRadar, onChange }: AnimationPi
   );
 }
 
-interface SeverityLadderProps {
-  thresholds: ElementThresholds | undefined;
-  alert: ElementAlert | undefined;
-  allowRadar: boolean;
-  /** Recebe **so** as regras de severidade; o `writeRules` do pai junta o resto. */
-  onChange: (next: ElementRule[]) => void;
+function AddRuleMenu({
+  open,
+  onToggle,
+  onClose,
+  onAdd,
+}: {
+  open: boolean;
+  onToggle: () => void;
+  onClose: () => void;
+  onAdd: (type: MetricRuleType) => void;
+}) {
+  const styles = useStyles2(getStyles);
+  const ref = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!open) {
+      return;
+    }
+    const down = (event: MouseEvent) => {
+      if (ref.current && !ref.current.contains(event.target as Node)) {
+        onClose();
+      }
+    };
+    window.addEventListener('mousedown', down, true);
+    return () => window.removeEventListener('mousedown', down, true);
+  }, [open, onClose]);
+
+  return (
+    <div ref={ref} className={styles.menuWrap}>
+      <DashedButton onClick={onToggle}>+ Adicionar regra</DashedButton>
+      {open && (
+        <div className={styles.menu} role="menu">
+          {METRIC_RULE_TYPES.map(({ type, label, description }) => (
+            <button key={type} type="button" role="menuitem" className={styles.menuItem} onClick={() => onAdd(type)}>
+              <span className={styles.menuLabel}>{label}</span>
+              <span className={styles.menuDesc}>{description}</span>
+            </button>
+          ))}
+        </div>
+      )}
+    </div>
+  );
 }
 
 /**
- * As seis severidades do Zabbix, cada uma com a sua cor.
- *
- * Substitui o "Adicionar regra -> Severidade" que existia aqui. O menu era
- * tecnicamente completo e praticamente invisivel: um dropdown de uma opcao so,
- * numa lista que nascia vazia, para configurar um vocabulario **fechado** que o
- * usuario ja conhece de cor. Quem abria o modo Trigger via um bloco de
- * thresholds sem nada dentro e concluia — com razao — que ele nao servia para
- * trigger.
- *
- * A escada mostra o mapa inteiro de saida, ja preenchido com as cores padrao do
- * Zabbix, e a edicao vira o que ela aparenta ser: trocar a cor de uma linha.
- *
- * Enquanto ninguem toca em nada, nao ha regra salva e vale o mapa do Zabbix — a
- * primeira edicao materializa a escada inteira (ver `writeSeverityLadder`), e o
- * "Restaurar padrao" desfaz isso de uma vez.
+ * A linha Base: a cor de repouso, ou o circulo tracejado de "sem cor". A cor e
+ * a mesma bolinha do Grafana das regras, alinhada com elas.
  */
-function SeverityLadder({ thresholds, alert, allowRadar, onChange }: SeverityLadderProps) {
+export function BaseRow({
+  color,
+  description,
+  onChange,
+}: {
+  color: ColorDimension;
+  description: string;
+  onChange: (next: ColorDimension) => void;
+}) {
+  const styles = useStyles2(getStyles);
+  const has = Boolean(color.fixed);
+
+  return (
+    <div className={styles.base}>
+      {has ? (
+        <span className={styles.baseSwatch}>
+          <ColorPicker enableNamedColors color={color.fixed!} onChange={(fixed) => onChange({ ...color, fixed })} />
+        </span>
+      ) : (
+        <span className={styles.noBase} />
+      )}
+      <div className={styles.baseText}>
+        <span className={styles.baseTitle}>Base</span>
+        <span className={styles.baseDesc}>{has ? description : 'Sem cor: o elemento fica neutro.'}</span>
+      </div>
+      {has ? (
+        <button type="button" className={styles.baseAction} onClick={() => onChange({ ...color, fixed: undefined })}>
+          Limpar
+        </button>
+      ) : (
+        <button type="button" className={styles.baseDefine} onClick={() => onChange({ ...color, fixed: '#3B82F6' })}>
+          Definir cor
+        </button>
+      )}
+    </div>
+  );
+}
+
+interface SeverityLadderProps {
+  info: string;
+  thresholds: ElementThresholds | undefined;
+  alert: ElementAlert | undefined;
+  animations: Array<{ value: AnimationValue; label: string }>;
+  onChange: (next: ElementRule[]) => void;
+}
+
+function SeverityLadder({ info, thresholds, alert, animations, onChange }: SeverityLadderProps) {
   const styles = useStyles2(getStyles);
   const theme = useTheme2();
-  const ids = React.useId();
   const rows = severityLadder(thresholds, alert);
   const custom = severityRules(thresholds).length > 0 || alert !== undefined;
 
   const patch = (severity: Severity, changes: Partial<SeverityLadderRow>) =>
-    // `text.secondary` e o padrao de *Not classified*, o unico nivel sem cor no
-    // mapa do Zabbix; so chega aqui se o usuario editar aquela linha.
-    onChange(writeSeverityLadder(thresholds, severity, changes, theme.colors.text.secondary, alert));
+    onChange(writeSeverityLadder(thresholds, severity, changes, tfPalette(theme).apa, alert));
 
   return (
-    <>
+    <div className={styles.block}>
+      <div className={styles.ladderHead}>
+        <span className={styles.label}>
+          <FieldLabel info={info}>Severidades</FieldLabel>
+        </span>
+        {custom && (
+          <button type="button" className={styles.restore} onClick={() => onChange([])}>
+            Restaurar padrão
+          </button>
+        )}
+      </div>
       {rows.map(({ severity, color, animation, enabled }) => (
-        // A linha desligada continua editavel, so esmaecida: o usuario costuma
-        // desligar e religar o mesmo nivel enquanto ajusta o painel, e desativar
-        // os controles obrigaria a religar antes de trocar a cor.
-        <div key={severity} className={cx(styles.rule, !enabled && styles.ruleOff)}>
-          {/* Governa a linha inteira, entao abre a linha — e a leitura de uma
-              lista de itens que se incluem ou nao. */}
-          <Checkbox
-            value={enabled}
+        <div key={severity} className={styles.sev} data-off={!enabled || undefined}>
+          <input
+            type="checkbox"
+            checked={enabled}
             aria-label={`Atender ${SEVERITY_LABEL[severity]}`}
             onChange={(event) => patch(severity, { enabled: event.currentTarget.checked })}
           />
-
-          <ColorPicker
-            enableNamedColors
-            color={color ?? theme.colors.text.secondary}
+          <ColorSwatch
+            label={`Cor de ${SEVERITY_LABEL[severity]}`}
+            color={color ?? tfPalette(theme).apa}
+            small
             onChange={(next) => patch(severity, { color: next })}
           />
-
-          <span className={styles.severityName}>{SEVERITY_LABEL[severity]}</span>
-
-          <AnimationPicker
-            id={`${ids}-animation-${severity}`}
-            label={`Animação de ${SEVERITY_LABEL[severity]}`}
-            value={animation}
-            allowRadar={allowRadar}
-            onChange={(next) => patch(severity, { animation: next })}
+          <div className={styles.sevName}>
+            <span>{SEVERITY_LABEL[severity]}</span>
+            {!enabled && <span className={styles.ignored}>ignorada</span>}
+          </div>
+          <TfSelect
+            compact
+            aria-label={`Animação de ${SEVERITY_LABEL[severity]}`}
+            value={animation ?? NO_ANIMATION}
+            options={animations}
+            onChange={(next) => patch(severity, { animation: next === NO_ANIMATION ? undefined : next })}
           />
         </div>
       ))}
-
-      {custom && (
-        <Button variant="secondary" fill="text" size="sm" icon="history" onClick={() => onChange([])}>
-          Restaurar padrão do Zabbix
-        </Button>
-      )}
-    </>
+    </div>
   );
+}
+
+/** O quadrado de cor do mockup: um `input type=color`, com o valor salvo resolvido para hex. */
+function ColorSwatch({
+  label,
+  color,
+  small,
+  onChange,
+}: {
+  label: string;
+  color: string;
+  small?: boolean;
+  onChange: (next: string) => void;
+}) {
+  const styles = useStyles2(getStyles);
+  const theme = useTheme2();
+  const hex = toHex(resolveTfColor(color, theme));
+  return (
+    <input
+      type="color"
+      aria-label={label}
+      className={small ? styles.swatchSmall : styles.swatch}
+      value={hex}
+      onChange={(event) => onChange(event.currentTarget.value.toUpperCase())}
+    />
+  );
+}
+
+function toHex(color: string): string {
+  try {
+    return colorManipulator.asHexString(color).slice(0, 7);
+  } catch {
+    return '#000000';
+  }
 }
 
 interface RuleConditionProps {
@@ -412,13 +427,6 @@ interface RuleConditionProps {
   onChange: (changes: Partial<ElementRule>) => void;
 }
 
-/**
- * A condicao muda com o tipo; cor e texto exibido sao iguais para todos.
- *
- * Devolve os controles crus, sem wrapper: quem dimensiona e o `.condition` do
- * pai, e e o que permite `range` distribuir dois campos no mesmo espaco que os
- * outros tipos ocupam com um.
- */
 function RuleCondition({ rule, index, onChange }: RuleConditionProps) {
   const position = index + 1;
 
@@ -432,7 +440,6 @@ function RuleCondition({ rule, index, onChange }: RuleConditionProps) {
           onChange={(event) => onChange({ value: toNumber(event.currentTarget.value, rule.value) })}
         />
       );
-
     case 'value':
       return (
         <Input
@@ -442,7 +449,6 @@ function RuleCondition({ rule, index, onChange }: RuleConditionProps) {
           onChange={(event) => onChange({ match: event.currentTarget.value })}
         />
       );
-
     case 'range':
       return (
         <>
@@ -462,7 +468,6 @@ function RuleCondition({ rule, index, onChange }: RuleConditionProps) {
           />
         </>
       );
-
     case 'regex':
       return (
         <Input
@@ -472,24 +477,18 @@ function RuleCondition({ rule, index, onChange }: RuleConditionProps) {
           onChange={(event) => onChange({ pattern: event.currentTarget.value })}
         />
       );
-
     case 'special':
       return (
-        <Combobox
-          options={SPECIAL_OPTIONS as Array<{ value: SpecialMatch; label: string }>}
+        <TfSelect
+          aria-label={`Condição da regra ${position}`}
           value={rule.match}
-          aria-labelledby={`Condição da regra ${position}`}
-          onChange={(option) => onChange({ match: option.value })}
+          options={SPECIAL_OPTIONS}
+          onChange={(match) => onChange({ match })}
         />
       );
   }
 }
 
-/**
- * Regra nova ja nasce util: cada threshold entra 10 acima do mais alto e um
- * degrau de cor adiante, entao clicar tres vezes produz uma escala usavel sem
- * tocar nas cores.
- */
 function newRule(type: MetricRuleType, rules: ElementRule[]): MetricRule {
   const thresholds = rules.filter((rule) => rule.type === 'threshold');
   const highest = thresholds.reduce((max, rule) => Math.max(max, rule.value), Number.NEGATIVE_INFINITY);
@@ -504,7 +503,7 @@ function newRule(type: MetricRuleType, rules: ElementRule[]): MetricRule {
     case 'value':
       return { type, match: '', color: MAPPING_COLOR };
     case 'range':
-      return { type, from: 0, to: 10, color: MAPPING_COLOR };
+      return { type, from: 0, to: 100, color: MAPPING_COLOR };
     case 'regex':
       return { type, pattern: '', color: MAPPING_COLOR };
     case 'special':
@@ -512,134 +511,155 @@ function newRule(type: MetricRuleType, rules: ElementRule[]): MetricRule {
   }
 }
 
-/** Campo numerico vazio ou invalido nao pode quebrar a validacao Zod. */
 function toNumber(raw: string, fallback: number): number {
   const parsed = Number(raw);
-  return Number.isFinite(parsed) ? parsed : fallback;
+  return raw.trim() !== '' && Number.isFinite(parsed) ? parsed : fallback;
 }
 
-const getStyles = (theme: GrafanaTheme2) => ({
-  rules: css({
-    display: 'flex',
-    flexDirection: 'column',
-    gap: theme.spacing(0.5),
-  }),
-  /**
-   * Uma regra, uma linha: `[cor] [condicao] [rotulo] [lixeira]`.
-   *
-   * Sem card em volta. O card gastava borda e padding para agrupar dois
-   * controles que agora estao lado a lado — e numa lista de cinco regras isso
-   * eram cinco molduras competindo com o unico bloco que precisa de destaque, a
-   * Base.
-   *
-   * `flexWrap` e o que resolve o caso de dois campos (`range`) sem trata-lo como
-   * excecao no JSX. Numa linha de flex que quebra, os itens entram enquanto
-   * couberem pelo `flex-basis`; com `range`, a condicao ocupa o dobro e empurra
-   * rotulo e lixeira para a segunda linha. O layout se adapta a largura real do
-   * painel, e nao ao tipo da regra — que era a saida obvia e a errada, porque a
-   * mesma regra cabe ou nao cabe conforme o painel.
-   */
-  rule: css({
-    display: 'flex',
-    flexWrap: 'wrap',
-    alignItems: 'center',
-    gap: theme.spacing(0.5),
-    // Mesma moldura da Base: cada regra e uma linha de valor, e o fundo e o que
-    // as separa uma da outra numa lista de cinco. `background.primary` e nao
-    // `secondary` porque o acordeao do elemento ja e `secondary` — fundo igual
-    // sobre fundo igual nao se ve.
-    padding: theme.spacing(0.5),
-    background: theme.colors.background.primary,
-    border: `1px solid ${theme.colors.border.weak}`,
-    borderRadius: theme.shape.radius.default,
-  }),
-  /**
-   * `minWidth: 0` em toda parte: sem ele, o tamanho minimo automatico de um item
-   * de flex e o conteudo, e um `Input` com placeholder longo se recusaria a
-   * encolher — o overflow horizontal que o painel estreito nao perdoa.
-   */
-  condition: css({
-    flex: '1 1 88px',
-    minWidth: 0,
-    display: 'flex',
-    gap: theme.spacing(0.5),
-
-    // Os dois campos de `range` dividem o espaco em partes iguais.
-    '> *': {
-      flex: '1 1 0',
-      minWidth: 0,
-    },
-  }),
-  /**
-   * O nome da severidade ocupa o lugar da condicao, mas nao e um campo: nao ha o
-   * que escolher ali. `flex-basis` igual ao da condicao mantem as seis linhas
-   * alinhadas com as regras de metrica, e `nowrap` impede que *Not classified*
-   * quebre em duas linhas num painel estreito.
-   */
-  /**
-   * Esmaecida, e nao escondida: o nivel desligado continua na escada porque a
-   * escada e o mapa completo de severidades — sumir com a linha faria parecer
-   * que o Zabbix tem cinco niveis.
-   */
-  ruleOff: css({
-    opacity: 0.55,
-  }),
-  severityName: css({
-    flex: '1 1 88px',
-    minWidth: 0,
-    color: theme.colors.text.primary,
-    fontSize: theme.typography.bodySmall.fontSize,
-    whiteSpace: 'nowrap',
-    overflow: 'hidden',
-    textOverflow: 'ellipsis',
-  }),
-  /**
-   * Base menor que a do rotulo: o seletor de animacao tem quatro opcoes curtas e
-   * nao precisa da mesma largura de um campo de texto livre. E o item que quebra
-   * primeiro num painel estreito, que e o certo — ele e o mais dispensavel dos
-   * quatro na hora de ler a regra.
-   */
-  ruleAnimation: css({
-    flex: '1 1 72px',
-    minWidth: 0,
-  }),
-  /** Fora da tela, dentro da arvore de acessibilidade. */
-  srOnly: css({
-    position: 'absolute',
-    width: 1,
-    height: 1,
+const getStyles = (theme: GrafanaTheme2) => {
+  const p: TfPalette = tfPalette(theme);
+  const swatch = {
     padding: 0,
-    margin: -1,
-    overflow: 'hidden',
-    clip: 'rect(0, 0, 0, 0)',
-    whiteSpace: 'nowrap',
-    border: 0,
-  }),
-  /**
-   * A Base tem a mesma moldura de um `Input`, que e como o editor nativo do
-   * Grafana a desenha: e uma linha de valor, nao um item da lista de regras.
-   *
-   * `background.primary`, e nao `secondary`: o acordeao do elemento **ja e**
-   * `background.secondary` (ver `ElementsEditor`), entao a versao anterior
-   * pintava fundo igual sobre fundo igual e a Base ficava invisivel — o destaque
-   * existia no codigo e nao na tela.
-   */
-  base: css({
-    display: 'flex',
-    alignItems: 'center',
-    gap: theme.spacing(0.5),
-    padding: theme.spacing(0.5),
-    background: theme.colors.background.primary,
-    border: `1px solid ${theme.colors.border.weak}`,
-    borderRadius: theme.shape.radius.default,
-  }),
-  baseLabel: css({
-    color: theme.colors.text.secondary,
-    fontSize: theme.typography.bodySmall.fontSize,
-    fontWeight: theme.typography.fontWeightMedium,
-  }),
-  empty: css({
-    color: theme.colors.text.secondary,
-    fontSize: theme.typography.bodySmall.fontSize,
-  }),
-});
+    border: `1px solid ${p.borda}`,
+    background: 'none',
+    cursor: 'pointer',
+  };
+  return {
+    block: css({ display: 'flex', flexDirection: 'column', gap: 8 }),
+    label: css({ font: `500 11.5px/1.35 ${FONT_SANS}`, color: p.rot }),
+    warn: css({ font: `11.5px ${FONT_SANS}`, color: p['at-t'] }),
+    // A linha da regra de antes da v1.4: moldura propria, e `flexWrap` para a
+    // faixa (dois campos) empurrar animacao e lixeira para a linha de baixo
+    // num painel estreito.
+    rule: css({
+      display: 'flex',
+      flexWrap: 'wrap',
+      alignItems: 'center',
+      gap: theme.spacing(0.5),
+      padding: theme.spacing(0.5),
+      background: theme.colors.background.primary,
+      border: `1px solid ${theme.colors.border.weak}`,
+      borderRadius: theme.shape.radius.default,
+    }),
+    swatch: css({ ...swatch, width: 26, height: 26, borderRadius: 6 }),
+    swatchSmall: css({ ...swatch, width: 26, height: 22, borderRadius: 5 }),
+    condition: css({
+      flex: '1 1 88px',
+      minWidth: 0,
+      display: 'flex',
+      gap: theme.spacing(0.5),
+      '> *': { flex: '1 1 0', minWidth: 0 },
+    }),
+    ruleAnimation: css({ flex: '1 1 72px', minWidth: 0 }),
+    srOnly: css({
+      position: 'absolute',
+      width: 1,
+      height: 1,
+      padding: 0,
+      margin: -1,
+      overflow: 'hidden',
+      clip: 'rect(0, 0, 0, 0)',
+      whiteSpace: 'nowrap',
+      border: 0,
+    }),
+    addRow: css({ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8 }),
+    menuWrap: css({ position: 'relative' }),
+    menu: css({
+      position: 'absolute',
+      left: 0,
+      top: 'calc(100% + 4px)',
+      width: 230,
+      background: p.sup,
+      border: `1px solid ${p.borda}`,
+      borderRadius: 8,
+      boxShadow: `0 10px 28px ${p.shadow}`,
+      padding: 4,
+      zIndex: 10,
+    }),
+    menuItem: css({
+      display: 'flex',
+      flexDirection: 'column',
+      alignItems: 'flex-start',
+      gap: 1,
+      width: '100%',
+      border: 0,
+      background: 'transparent',
+      padding: '6px 9px',
+      borderRadius: 6,
+      cursor: 'pointer',
+      textAlign: 'left',
+      '&:hover': { background: p.elev },
+    }),
+    menuLabel: css({ font: `500 13px ${FONT_SANS}`, color: p.tx }),
+    menuDesc: css({ font: `11.5px ${FONT_SANS}`, color: p.apa }),
+    removeMetric: css({
+      border: 0,
+      background: 'transparent',
+      padding: 0,
+      font: `500 12px ${FONT_SANS}`,
+      color: p.tx2,
+      cursor: 'pointer',
+      whiteSpace: 'nowrap',
+    }),
+    base: css({
+      display: 'grid',
+      gridTemplateColumns: '26px minmax(0,1fr) auto',
+      gap: 8,
+      alignItems: 'center',
+      paddingTop: 8,
+      borderTop: `1px dashed ${p.linha}`,
+    }),
+    baseSwatch: css({ display: 'flex', justifySelf: 'center' }),
+    noBase: css({
+      justifySelf: 'center',
+      width: 16,
+      height: 16,
+      border: `1px dashed ${p.apa}`,
+      borderRadius: '50%',
+    }),
+    baseText: css({ display: 'flex', flexDirection: 'column' }),
+    baseTitle: css({ font: `600 12.5px ${FONT_SANS}`, color: p.tx }),
+    baseDesc: css({ font: `11.5px ${FONT_SANS}`, color: p.apa }),
+    baseAction: css({
+      border: 0,
+      background: 'transparent',
+      color: p.tx2,
+      font: `12px ${FONT_SANS}`,
+      cursor: 'pointer',
+    }),
+    baseDefine: css({
+      border: 0,
+      background: 'transparent',
+      color: p['ac-t'],
+      font: `500 12px ${FONT_SANS}`,
+      cursor: 'pointer',
+    }),
+    ladderHead: css({ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }),
+    restore: css({
+      border: 0,
+      background: 'transparent',
+      color: p['ac-t'],
+      font: `500 12px ${FONT_SANS}`,
+      cursor: 'pointer',
+      padding: 0,
+    }),
+    sev: css({
+      display: 'grid',
+      gridTemplateColumns: '18px 26px minmax(0,1fr) 76px',
+      gap: 7,
+      alignItems: 'center',
+      '&[data-off]': { opacity: 0.45 },
+      '& input[type="checkbox"]': { width: 15, height: 15, margin: 0, accentColor: p.ac },
+    }),
+    sevName: css({
+      display: 'flex',
+      alignItems: 'baseline',
+      gap: 6,
+      minWidth: 0,
+      font: `500 12.5px ${FONT_SANS}`,
+      color: p.tx,
+      whiteSpace: 'nowrap',
+    }),
+    ignored: css({ font: `italic 11px ${FONT_SANS}`, color: p.apa }),
+  };
+};

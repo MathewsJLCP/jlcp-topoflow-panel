@@ -1,202 +1,340 @@
-import React, { useMemo } from 'react';
+import React, { useId, useMemo } from 'react';
 import { css } from '@emotion/css';
-import { DataFrame, Field, FieldType, GrafanaTheme2, getFieldDisplayName } from '@grafana/data';
-import {
-  AxisPlacement,
-  GraphDrawStyle,
-  GraphGradientMode,
-  LegendDisplayMode,
-  LineInterpolation,
-  VisibilityMode,
-} from '@grafana/schema';
-import { TimeSeries, useStyles2 } from '@grafana/ui';
+import { DataFrame, Field, FieldType, GrafanaTheme2, dateTimeFormat } from '@grafana/data';
+import { useStyles2, useTheme2 } from '@grafana/ui';
 
-import { findFieldFrame, formatDisplayValue, resolveDisplayValue } from '../data/dimensions';
+import { findFieldFrame, formatDisplayValue, stateFieldName } from '../data/dimensions';
+import { StateMetric } from '../data/elementColor';
+import { metricRules } from '../data/thresholds';
+import { FONT_SANS, TfPalette, resolveTfColor, tfPalette } from '../theme/palette';
 import { useTopoTime } from './timeContext';
 
 /**
- * O grafico da metrica do elemento, dentro do painel de hover.
+ * O grafico do hover, no desenho do mockup.
  *
- * ## O que ele plota
+ * Uma serie por metrica de estado, na janela de tempo do dashboard: area com
+ * gradiente no violeta de acento, linha de 1.6px, as regras de threshold da
+ * metrica em linhas tracejadas com o rotulo `>= valor`. Com uma metrica, a
+ * legenda embaixo (Name, Last, Max, Mean); com varias, um grafico mais baixo
+ * por metrica, cada um com o nome e o ultimo valor no topo.
  *
- * A serie de `color.field` — a **mesma** metrica que decide a cor do elemento.
- * Nao ha segundo seletor de propósito: o grafico existe para responder "de onde
- * veio essa cor", e plotar outra serie transformaria o painel em dois numeros
- * sem nada dizendo qual e qual.
- *
- * ## A janela de tempo
- *
- * E a do dashboard, lida do contexto (`useTopoTime`). O grafico nao tem seletor
- * proprio nem intervalo fixo: quem mudou o time range do Grafana espera que
- * tudo na tela acompanhe, e um popup que ignora aquele controle mostraria um
- * periodo diferente do resto do dashboard sem avisar.
- *
- * ## Por que o frame e remontado
- *
- * O `TimeSeries` recebe uma serie de duas colunas — tempo e valor — construida
- * aqui, e nao o frame original. Dois motivos:
- *
- *   - o frame da query costuma trazer varias metricas, e todas apareceriam no
- *     grafico de um elemento que se vinculou a uma so;
- *   - `field.config.custom` chega **vazio**, porque `module.ts` chama
- *     `.useFieldConfig()` sem opcoes de grafico — e o `GraphNG` le dali como
- *     desenhar a linha. Sem preencher, a linha sairia com os defaults de um
- *     campo que ninguem configurou. Preenchendo, o traco e uma decisao nossa e
- *     nao um acidente.
- *
- * O que **nao** e reescrito: `unit`, `decimals`, `min`/`max`, thresholds e value
- * mappings do field original seguem valendo. Sao a configuracao do usuario, e o
- * eixo do grafico tem de falar a mesma lingua do valor que o elemento exibe.
+ * Os valores passam pelo `field.display` do Grafana: unidade, casas e value
+ * mappings do painel valem aqui tambem.
  */
-
-/** Cabe ao lado de um no sem cobrir o vizinho, e ainda mostra a forma da curva. */
-const CHART_WIDTH = 320;
-const CHART_HEIGHT = 140;
-
 interface MetricChartProps {
   frames: DataFrame[];
-  /** Display name do field, como em `color.field`. */
-  field?: string;
+  metrics: StateMetric[];
 }
 
-export function MetricChart({ frames, field }: MetricChartProps) {
+const W = 444;
+const L = 38;
+const R = 438;
+const T = 8;
+
+interface Series {
+  name: string;
+  field?: Field;
+  times?: number[];
+  values?: number[];
+  message?: string;
+  thresholds: Array<{ value: number; color: string }>;
+}
+
+function seriesOf(frames: DataFrame[], metric: StateMetric, theme: GrafanaTheme2): Series | undefined {
+  const name = stateFieldName(metric.dim, frames);
+  if (!name) {
+    return undefined;
+  }
+  const thresholds = metricRules(metric.thresholds).flatMap((rule) =>
+    rule.type === 'threshold' ? [{ value: rule.value, color: resolveTfColor(rule.color, theme) }] : []
+  );
+  const hit = findFieldFrame(frames, name);
+  if (!hit) {
+    return { name, thresholds, message: 'A métrica não está nas séries deste painel.' };
+  }
+  const time = hit.frame.fields.find((f) => f.type === FieldType.time);
+  if (!time || hit.field.type !== FieldType.number) {
+    return {
+      name,
+      field: hit.field,
+      thresholds,
+      message: 'A série não tem coluna de tempo — o gráfico precisa de uma.',
+    };
+  }
+  const times: number[] = [];
+  const values: number[] = [];
+  for (let i = 0; i < hit.field.values.length; i++) {
+    const v = hit.field.values[i];
+    const t = time.values[i];
+    if (typeof v === 'number' && Number.isFinite(v) && t != null) {
+      times.push(Number(t));
+      values.push(v);
+    }
+  }
+  if (!values.length) {
+    return { name, field: hit.field, thresholds, message: 'A métrica não tem valores nesta janela.' };
+  }
+  return { name, field: hit.field, times, values, thresholds };
+}
+
+export function MetricChart({ frames, metrics }: MetricChartProps) {
   const styles = useStyles2(getStyles);
-  const { timeRange, timeZone } = useTopoTime();
+  const theme = useTheme2();
 
-  const hit = useMemo(() => findFieldFrame(frames, field), [frames, field]);
-  const serie = useMemo(() => (hit ? toChartFrame(hit.frame, hit.field, frames) : undefined), [hit, frames]);
+  const series = useMemo(
+    () => metrics.map((m) => seriesOf(frames, m, theme)).filter((s): s is Series => Boolean(s)),
+    [frames, metrics, theme]
+  );
 
-  // O ultimo valor no cabecalho: e o numero que o elemento esta exibindo, e ve-lo
-  // ao lado da curva e o que liga o estado atual ao historico que o explica.
-  const atual = useMemo(() => resolveDisplayValue(frames, field), [frames, field]);
+  if (!series.length) {
+    return (
+      <div className={styles.wrap}>
+        <div className={styles.message}>Nenhuma métrica vinculada a este elemento.</div>
+      </div>
+    );
+  }
+
+  const multi = series.length > 1;
+  const fmt = (s: Series, v: number) => (s.field?.display ? formatDisplayValue(s.field.display(v)) : String(v));
 
   return (
-    <div className={styles.panel}>
-      <div className={styles.header}>
-        <span className={styles.title}>{field}</span>
-        {atual && <span className={styles.value}>{formatDisplayValue(atual)}</span>}
-      </div>
+    <div className={styles.wrap}>
+      {series.map((s) => (
+        <div key={s.name} className={styles.block}>
+          {multi && (
+            <div className={styles.head}>
+              <span className={styles.headName}>{s.name}</span>
+              <span className={styles.headLast}>{s.values ? fmt(s, s.values[s.values.length - 1]) : '—'}</span>
+            </div>
+          )}
+          {s.message ? (
+            <div className={styles.messageSmall}>{s.message}</div>
+          ) : (
+            <Plot series={s} multi={multi} fmt={fmt} />
+          )}
+        </div>
+      ))}
 
-      {serie ? (
-        <TimeSeries
-          frames={[serie]}
-          width={CHART_WIDTH}
-          height={CHART_HEIGHT}
-          timeRange={timeRange}
-          timeZone={timeZone}
-          legend={{ showLegend: false, displayMode: LegendDisplayMode.List, placement: 'bottom', calcs: [] }}
-        />
-      ) : (
-        <div className={styles.empty}>{motivo(hit, field)}</div>
+      {!multi && (
+        <div className={styles.legend}>
+          <span className={styles.lh}>Name</span>
+          <span className={styles.lhr}>Last *</span>
+          <span className={styles.lhr}>Max</span>
+          <span className={styles.lhr}>Mean</span>
+          <span className={styles.lname}>
+            <span className={styles.swatch} />
+            <span className={styles.ellipsis}>{series[0].name}</span>
+          </span>
+          {series[0].values ? (
+            <>
+              <span className={styles.lv}>{fmt(series[0], series[0].values[series[0].values.length - 1])}</span>
+              <span className={styles.lv}>{fmt(series[0], Math.max(...series[0].values))}</span>
+              <span className={styles.lv}>
+                {fmt(series[0], series[0].values.reduce((a, b) => a + b, 0) / series[0].values.length)}
+              </span>
+            </>
+          ) : (
+            <>
+              <span className={styles.lv}>—</span>
+              <span className={styles.lv}>—</span>
+              <span className={styles.lv}>—</span>
+            </>
+          )}
+        </div>
       )}
     </div>
   );
 }
 
 /**
- * Por que nao ha curva. Sao tres ausencias diferentes, e dizer qual delas e
- * evita a busca no lugar errado — o vinculo, a query ou o tipo do dado.
+ * Rotulo do eixo: o numero com no maximo uma casa (o passo do eixo e "redondo",
+ * as casas do campo nao se aplicam) e a unidade do campo — colada no `%`,
+ * separada por espaco nas demais. E o que o mockup faz.
  */
-function motivo(hit: ReturnType<typeof findFieldFrame>, field?: string): string {
-  if (!field) {
-    return 'Nenhuma métrica vinculada a este elemento.';
-  }
-  if (!hit) {
-    return 'A métrica não está nas séries deste painel.';
-  }
-  return 'A série não tem coluna de tempo — o gráfico precisa de uma.';
+function tickLabel(series: Series, v: number): string {
+  const unit = (series.field?.display?.(v).suffix ?? '').trim();
+  const number = Number.isInteger(v) ? String(v) : String(+v.toFixed(1));
+  return number + (unit === '%' ? '%' : unit ? ` ${unit}` : '');
 }
 
-/**
- * Monta a serie de duas colunas que o grafico consome: o tempo do frame e o
- * field escolhido, este ultimo com a configuracao de desenho preenchida.
- *
- * `undefined` quando o frame nao tem coluna de tempo. Acontece com dados
- * tabulares (uma query de instantaneo, o frame de Problems do Zabbix): ha valor,
- * mas nao ha "ao longo de", e um grafico de um ponto so nao diz nada.
- */
-export function toChartFrame(frame: DataFrame, field: Field, todos: DataFrame[]): DataFrame | undefined {
-  const tempo = frame.fields.find((candidate) => candidate.type === FieldType.time);
-  if (!tempo || field.type !== FieldType.number) {
-    return undefined;
+/** Rotulos de threshold acima da linha, empurrados para baixo quando se encostariam. */
+function stackLabels<T extends { y: number }>(lines: T[]): Array<T & { ly: number }> {
+  const out: Array<T & { ly: number }> = [];
+  for (const line of lines) {
+    const prev = out.length ? out[out.length - 1].ly : -99;
+    out.push({ ...line, ly: Math.max(line.y - 12, prev + 13) });
+  }
+  return out;
+}
+
+const TIME_STEPS = [60, 120, 300, 600, 900, 1800, 3600, 7200, 10800, 21600, 43200, 86400].map((s) => s * 1000);
+
+function Plot({ series, multi, fmt }: { series: Series; multi: boolean; fmt: (s: Series, v: number) => string }) {
+  const styles = useStyles2(getStyles);
+  const theme = useTheme2();
+  const p = tfPalette(theme);
+  const gid = useId().replace(/:/g, '');
+  const { timeRange, timeZone } = useTopoTime();
+
+  const H = multi ? 100 : 172;
+  const B = multi ? 78 : 150;
+  const values = series.values!;
+  const times = series.times!;
+
+  const raw = Math.max(...values, ...series.thresholds.map((t) => t.value)) * 1.08 || 1;
+  const st0 = raw / (multi ? 3 : 4);
+  const mag = Math.pow(10, Math.floor(Math.log10(st0)));
+  const step = [1, 2, 2.5, 5, 10].map((m) => m * mag).find((m) => m >= st0) ?? mag * 10;
+  const max = Math.ceil(raw / step) * step;
+
+  const from = timeRange.from.valueOf() || times[0];
+  const to = timeRange.to.valueOf() || times[times.length - 1];
+  const span = Math.max(1, to - from);
+  const X = (t: number) => L + ((t - from) / span) * (R - L);
+  const Y = (v: number) => B - (v / max) * (B - T);
+
+  const line = values.map((v, i) => `${X(times[i]).toFixed(1)},${Y(v).toFixed(1)}`).join(' ');
+  const area = `${X(times[0]).toFixed(1)},${B} ${line} ${X(times[times.length - 1]).toFixed(1)},${B}`;
+  const dots =
+    values.length <= 120
+      ? values.map((v, i) => ({ i, v })).filter(({ i }) => i % 3 === 2 || i === values.length - 1)
+      : [];
+
+  const yTicks: number[] = [];
+  for (let v = 0; v <= max + 1e-9; v += step) {
+    yTicks.push(v);
   }
 
+  const tStep = TIME_STEPS.find((s) => span / s <= 6) ?? 86400000;
+  const xTicks: number[] = [];
+  for (let t = Math.ceil(from / tStep) * tStep; t <= to; t += tStep) {
+    xTicks.push(t);
+  }
+  const timeFormat = span > 2 * 86400000 ? 'MM/DD HH:mm' : 'HH:mm';
+
+  const ths = stackLabels(
+    series.thresholds
+      .filter((t) => t.value <= max)
+      .map((t) => ({ ...t, y: Y(t.value) }))
+      .sort((a, b) => a.y - b.y)
+  );
+
+  return (
+    <div className={styles.plot} style={{ height: H }}>
+      <svg width={W} height={H} style={{ display: 'block', overflow: 'visible' }}>
+        <defs>
+          <linearGradient id={gid} x1="0" y1="0" x2="0" y2="1">
+            <stop offset="0" stopColor={p.ac} stopOpacity={0.28} />
+            <stop offset="1" stopColor={p.ac} stopOpacity={0} />
+          </linearGradient>
+        </defs>
+        {yTicks.map((v) => (
+          <line key={`y${v}`} x1={L} x2={R} y1={Y(v)} y2={Y(v)} stroke={p.linha} strokeWidth={1} opacity={0.55} />
+        ))}
+        {xTicks.map((t) => (
+          <line key={`x${t}`} x1={X(t)} x2={X(t)} y1={T} y2={B} stroke={p.linha} strokeWidth={1} opacity={0.55} />
+        ))}
+        <polygon points={area} fill={`url(#${gid})`} />
+        {ths.map((t) => (
+          <line
+            key={`t${t.value}`}
+            x1={L}
+            x2={R}
+            y1={t.y}
+            y2={t.y}
+            stroke={t.color}
+            strokeWidth={1.25}
+            strokeDasharray="4 3"
+          />
+        ))}
+        <polyline points={line} fill="none" stroke={p.ac} strokeWidth={1.6} strokeLinejoin="round" />
+        {dots.map(({ i, v }) => (
+          <circle key={i} cx={X(times[i])} cy={Y(v)} r={2.4} fill={p.ac} />
+        ))}
+      </svg>
+      {yTicks.map((v) => (
+        <div key={`yl${v}`} className={styles.yLabel} style={{ top: Y(v) }}>
+          {tickLabel(series, v)}
+        </div>
+      ))}
+      {xTicks.map((t) => (
+        <div
+          key={`xl${t}`}
+          className={styles.xLabel}
+          style={{ left: X(t), top: B + 6, transform: `translateX(${X(t) > R - 18 ? '-100%' : '-50%'})` }}
+        >
+          {dateTimeFormat(t, { format: timeFormat, timeZone })}
+        </div>
+      ))}
+      {ths.map((t) => (
+        <div key={`tl${t.value}`} className={styles.thLabel} style={{ top: t.ly, color: t.color }}>
+          {`≥ ${tickLabel(series, t.value)}`}
+        </div>
+      ))}
+    </div>
+  );
+}
+
+const getStyles = (theme: GrafanaTheme2) => {
+  const p: TfPalette = tfPalette(theme);
+  const ellipsis = { overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' as const };
   return {
-    ...frame,
-    fields: [
-      tempo,
-      {
-        ...field,
-        config: {
-          ...field.config,
-          // O nome de exibicao ja resolvido: o `GraphNG` o usa na legenda e no
-          // proprio tooltip do grafico, e recalcula-lo dentro de um frame de
-          // duas colunas daria outro nome — o field perderia a desambiguacao
-          // por host que so existe olhando para todas as series.
-          displayName: getFieldDisplayName(field, frame, todos),
-          custom: CHART_FIELD_CONFIG,
-        },
-      },
-    ],
-    length: frame.length,
+    wrap: css({ padding: '10px 12px 8px', display: 'flex', flexDirection: 'column', gap: 8, fontFamily: FONT_SANS }),
+    block: css({ display: 'flex', flexDirection: 'column', gap: 2 }),
+    head: css({ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', padding: '0 2px' }),
+    headName: css({ font: `500 12px ${FONT_SANS}`, color: p.tx2, ...ellipsis }),
+    headLast: css({ font: `600 12.5px ${FONT_SANS}`, color: p.tf }),
+    message: css({
+      padding: '22px 8px',
+      textAlign: 'center',
+      font: `12.5px ${FONT_SANS}`,
+      color: p.tx2,
+      border: `1px dashed ${p.linha}`,
+      borderRadius: 6,
+    }),
+    messageSmall: css({
+      padding: '16px 8px',
+      textAlign: 'center',
+      font: `12px ${FONT_SANS}`,
+      color: p.tx2,
+      border: `1px dashed ${p.linha}`,
+      borderRadius: 6,
+    }),
+    plot: css({ position: 'relative', width: W }),
+    yLabel: css({
+      position: 'absolute',
+      right: W - 34,
+      transform: 'translateY(-50%)',
+      font: `11.5px ${FONT_SANS}`,
+      color: p.tx2,
+      whiteSpace: 'nowrap',
+    }),
+    xLabel: css({ position: 'absolute', font: `11.5px ${FONT_SANS}`, color: p.tx2, whiteSpace: 'nowrap' }),
+    thLabel: css({
+      position: 'absolute',
+      right: 10,
+      font: `600 10.5px/12px ${FONT_SANS}`,
+      background: p.sup,
+      padding: '0 4px',
+      whiteSpace: 'nowrap',
+    }),
+    legend: css({
+      display: 'grid',
+      gridTemplateColumns: 'minmax(0,1fr) 72px 72px 72px',
+      columnGap: 8,
+      font: `12.5px ${FONT_SANS}`,
+    }),
+    lh: css({ padding: '4px 0 6px', fontWeight: 500, color: p['ac-t'], borderBottom: `1px solid ${p.linha}` }),
+    lhr: css({
+      padding: '4px 0 6px',
+      fontWeight: 500,
+      color: p['ac-t'],
+      textAlign: 'right',
+      borderBottom: `1px solid ${p.linha}`,
+    }),
+    lname: css({ display: 'flex', alignItems: 'center', gap: 8, padding: '6px 0', minWidth: 0, color: p.tx }),
+    swatch: css({ flex: 'none', width: 14, height: 3, borderRadius: 2, background: p.ac }),
+    ellipsis: css(ellipsis),
+    lv: css({ padding: '6px 0', textAlign: 'right', color: p.tx }),
   };
-}
-
-/**
- * Como a linha e desenhada.
- *
- * Explicito porque `field.config.custom` chega vazio (ver o topo do arquivo), e
- * escolhido para um grafico de 320x140 dentro de um popup: linha fina com um
- * preenchimento leve embaixo — o suficiente para a forma da curva se ler de
- * relance —, sem pontos, que num espaco desses viram ruido. O eixo Y fica a
- * esquerda e o X aparece embaixo, que e o que responde "quando".
- */
-const CHART_FIELD_CONFIG = {
-  drawStyle: GraphDrawStyle.Line,
-  lineInterpolation: LineInterpolation.Linear,
-  lineWidth: 1,
-  fillOpacity: 12,
-  gradientMode: GraphGradientMode.None,
-  showPoints: VisibilityMode.Never,
-  pointSize: 4,
-  axisPlacement: AxisPlacement.Auto,
-  // Buraco na serie e buraco no grafico: emendar a linha por cima de uma coleta
-  // que faltou esconderia justamente o que costuma explicar o alarme.
-  spanNulls: false,
 };
-
-const getStyles = (theme: GrafanaTheme2) => ({
-  panel: css({
-    width: CHART_WIDTH,
-    display: 'flex',
-    flexDirection: 'column',
-    gap: theme.spacing(0.5),
-  }),
-  header: css({
-    display: 'flex',
-    alignItems: 'baseline',
-    justifyContent: 'space-between',
-    gap: theme.spacing(1),
-  }),
-  title: css({
-    minWidth: 0,
-    overflow: 'hidden',
-    textOverflow: 'ellipsis',
-    whiteSpace: 'nowrap',
-    color: theme.colors.text.secondary,
-    fontSize: theme.typography.bodySmall.fontSize,
-  }),
-  value: css({
-    color: theme.colors.text.primary,
-    fontFamily: theme.typography.fontFamilyMonospace,
-    fontWeight: theme.typography.fontWeightMedium,
-    whiteSpace: 'nowrap',
-  }),
-  empty: css({
-    height: CHART_HEIGHT,
-    display: 'flex',
-    alignItems: 'center',
-    color: theme.colors.text.secondary,
-    fontSize: theme.typography.bodySmall.fontSize,
-  }),
-});

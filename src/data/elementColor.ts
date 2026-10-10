@@ -1,6 +1,7 @@
-import { DataFrame, GrafanaTheme2 } from '@grafana/data';
+import { DataFrame, GrafanaTheme2, colorManipulator } from '@grafana/data';
 
-import { AlertAnimation, ColorDimension, ElementThresholds, TriggerBinding } from '../model/types';
+import { AlertAnimation, ColorDimension, ElementThresholds, MetricBinding, TriggerBinding } from '../model/types';
+import { resolveTfColor } from '../theme/palette';
 import { getLastNotNullValue, stateFieldName } from './dimensions';
 import { Severity } from './problems';
 import {
@@ -77,7 +78,7 @@ export type ElementColor =
    * Threshold resolveu. `label` so existe quando a regra foi nomeada, e
    * `animation` so quando ela pediu movimento.
    */
-  | { state: 'threshold'; color: string; label?: string; animation?: AlertAnimation }
+  | { state: 'threshold'; color: string; label?: string; animation?: AlertAnimation; field?: string }
   /** Binding configurado, sem dado que sirva. Distinto de saudavel (A.4). */
   | { state: 'nodata' }
   /** Acento estatico escolhido no editor. */
@@ -114,7 +115,145 @@ export function accentColor(accent: ElementColor): string | undefined {
 export interface ElementStateSources {
   trigger?: TriggerBinding;
   thresholds?: ElementThresholds;
+  /** Metricas de estado alem da primeira (v1.4). */
+  extraMetrics?: MetricBinding[];
 }
+
+/** Uma metrica de estado: o vinculo dela e as regras que valem sobre ele. */
+export interface StateMetric {
+  dim: ColorDimension;
+  thresholds?: ElementThresholds;
+}
+
+/**
+ * As metricas que definem o estado, na ordem do editor: a primeira e a de
+ * sempre (`color` + `thresholds`), as demais vem de `extraMetrics`.
+ */
+export function stateMetrics(dim: ColorDimension, sources: ElementStateSources = {}): StateMetric[] {
+  return [
+    { dim, thresholds: sources.thresholds },
+    ...(sources.extraMetrics ?? []).map((metric) => ({
+      dim: { field: metric.field, metric: metric.metric },
+      thresholds: { steps: metric.steps },
+    })),
+  ];
+}
+
+export type MetricOutcome =
+  | { kind: 'hit'; color: string; label?: string; animation?: AlertAnimation; field: string }
+  | { kind: 'nodata' }
+  | { kind: 'rest' };
+
+/**
+ * Uma metrica, sozinha — a mesma avaliacao que a cadeia sempre fez quando so
+ * havia uma. `undefined` quando ela nem tem vinculo.
+ */
+export function evaluateMetric(
+  metric: StateMetric,
+  frames: DataFrame[],
+  theme: GrafanaTheme2
+): MetricOutcome | undefined {
+  const { dim, thresholds } = metric;
+  // `stateFieldName` e nao `dim.field`: a serie pode ter sido escolhida por
+  // host+item no catalogo do Zabbix, e so ele sabe traduzir isso para o nome que
+  // o frame usa.
+  const fieldName = stateFieldName(dim, frames);
+  if (!fieldName) {
+    return undefined;
+  }
+
+  const hit = getLastNotNullValue(frames, fieldName);
+
+  // Field ausente das series: nao ha valor nenhum a avaliar. Nao cai para
+  // `fixed` nem para verde — sem dado precisa ser visivelmente diferente de
+  // saudavel, senao um painel mudo passa por painel saudavel.
+  if (!hit) {
+    return { kind: 'nodata' };
+  }
+
+  // Field presente, sem valor util. A excecao e a regra `special`: quem
+  // configurou um mapeamento para nulo ou NaN pediu explicitamente para
+  // tratar a ausencia de dado, e o `nodata` generico atropelaria a escolha.
+  const semDado = hit.value == null || !hit.field.display;
+  if (semDado && !hasSpecialRule(thresholds)) {
+    return { kind: 'nodata' };
+  }
+
+  if (hasOwnThresholds(thresholds)) {
+    // Regra do elemento — a unica fonte de estado por metrica. Nenhuma regra
+    // ativa significa "nao casou com nada", e nao "consulte o field": abaixo de
+    // todas as regras o elemento esta em repouso, e repouso e a Base.
+    const rule = resolveOwnThreshold(thresholds, hit.value);
+    if (rule) {
+      return {
+        kind: 'hit',
+        color: resolveTfColor(rule.color, theme),
+        label: rule.label || undefined,
+        // `severity` nao chega aqui — este ramo so ve regras de metrica —,
+        // entao o acesso e seguro para todos os tipos que restam.
+        animation: 'animation' in rule ? rule.animation : undefined,
+        field: fieldName,
+      };
+    }
+
+    // Nenhuma regra casou e nao ha dado: o estado volta a ser ausencia.
+    if (semDado) {
+      return { kind: 'nodata' };
+    }
+  }
+
+  // Binding resolve mas nao ha regra que case: a metrica nao exibe estado.
+  return { kind: 'rest' };
+}
+
+/**
+ * Gravidade de uma cor de regra, pelo matiz — a ordem do mockup: vermelho ›
+ * laranja › ambar › (sem dados) › azul › verde. Cinza e cores fora da escala
+ * ficam junto do azul.
+ *
+ * E pelo matiz, e nao pela posicao da regra, porque com varias metricas as
+ * regras de uma nao sabem das outras: "CPU >= 90 vermelho" e "Ping = 1 verde"
+ * so se comparam pela cor que pedem.
+ */
+export function colorGravity(color: string): number {
+  let rgb: number[];
+  try {
+    rgb = colorManipulator
+      .decomposeColor(color)
+      .values.slice(0, 3)
+      .map((v: number) => v / 255);
+  } catch {
+    return 1.5;
+  }
+  const [r, g, b] = rgb;
+  const max = Math.max(r, g, b);
+  const min = Math.min(r, g, b);
+  const d = max - min;
+  if (d < 0.15) {
+    return 1.5;
+  }
+  let h = max === r ? ((g - b) / d) % 6 : max === g ? (b - r) / d + 2 : (r - g) / d + 4;
+  h = (h * 60 + 360) % 360;
+  if (h < 15 || h >= 330) {
+    return 5;
+  }
+  if (h < 32) {
+    return 4;
+  }
+  if (h < 62) {
+    return 3;
+  }
+  if (h >= 75 && h < 175) {
+    return 1;
+  }
+  if (h >= 185 && h < 265) {
+    return 2;
+  }
+  return 1.5;
+}
+
+/** Abaixo disto a regra perde para "sem dados" de outra metrica. */
+const NODATA_GRAVITY = 2.5;
 
 export function resolveElementColor(
   dim: ColorDimension,
@@ -145,7 +284,7 @@ export function resolveElementColor(
     if (rule) {
       return {
         state: 'trigger',
-        color: theme.visualization.getColorByName(rule.color),
+        color: resolveTfColor(rule.color, theme),
         severity: alarm.severity,
         label: rule.label || alarm.label,
         // A regra propria manda na cor e no rotulo do estado; ela nao tem
@@ -161,58 +300,41 @@ export function resolveElementColor(
   // Vinculo de trigger ligado desliga o nivel 1: sem isto, um elemento com
   // trigger OK voltaria a ser pintado pela metrica e a precedencia so valeria
   // durante o alarme — comportamento que muda sozinho conforme o Zabbix.
-  // `stateFieldName` e nao `dim.field`: a serie pode ter sido escolhida por
-  // host+item no catalogo do Zabbix, e so ele sabe traduzir isso para o nome que
-  // o frame usa.
-  const fieldName = stateFieldName(dim, frames);
+  if (!trigger?.enabled) {
+    let best: Extract<MetricOutcome, { kind: 'hit' }> | undefined;
+    let nodata = false;
 
-  if (fieldName && !trigger?.enabled) {
-    const hit = getLastNotNullValue(frames, fieldName);
-
-    // Field ausente das series: nao ha valor nenhum a avaliar. Nao cai para
-    // `fixed` nem para verde — sem dado precisa ser visivelmente diferente de
-    // saudavel, senao um painel mudo passa por painel saudavel.
-    if (!hit) {
-      return { state: 'nodata' };
-    }
-
-    // Field presente, sem valor util. A excecao e a regra `special`: quem
-    // configurou um mapeamento para nulo ou NaN pediu explicitamente para
-    // tratar a ausencia de dado, e o `nodata` generico atropelaria a escolha.
-    const semDado = hit.value == null || !hit.field.display;
-    if (semDado && !hasSpecialRule(thresholds)) {
-      return { state: 'nodata' };
-    }
-
-    if (hasOwnThresholds(thresholds)) {
-      // 1. Regra do elemento — a unica fonte de estado por metrica. Nenhuma
-      // regra ativa significa "nao casou com nada", e nao "consulte o field":
-      // abaixo de todas as regras o elemento esta em repouso, e repouso e a
-      // Base.
-      const rule = resolveOwnThreshold(thresholds, hit.value);
-      if (rule) {
-        return {
-          state: 'threshold',
-          color: theme.visualization.getColorByName(rule.color),
-          label: rule.label || undefined,
-          // `severity` nao chega aqui — este ramo so ve regras de metrica —,
-          // entao o acesso e seguro para todos os tipos que restam.
-          animation: 'animation' in rule ? rule.animation : undefined,
-        };
-      }
-
-      // Nenhuma regra casou e nao ha dado: o estado volta a ser ausencia.
-      if (semDado) {
-        return { state: 'nodata' };
+    for (const metric of stateMetrics(dim, sources)) {
+      const outcome = evaluateMetric(metric, frames, theme);
+      if (outcome?.kind === 'hit') {
+        if (!best || colorGravity(outcome.color) > colorGravity(best.color)) {
+          best = outcome;
+        }
+      } else if (outcome?.kind === 'nodata') {
+        nodata = true;
       }
     }
 
-    // Binding resolve mas nao ha regra de threshold definida: o elemento nao
-    // exibe estado e a cadeia continua nos niveis 2 e 3.
+    // Com varias metricas, vence a regra mais grave — mas uma metrica muda nao
+    // pode ser escondida por um verde de outra: abaixo do ambar, "sem dados"
+    // ganha. Com uma metrica so, isto e exatamente a cadeia de sempre.
+    if (best && !(nodata && colorGravity(best.color) < NODATA_GRAVITY)) {
+      return {
+        state: 'threshold',
+        color: best.color,
+        label: best.label,
+        animation: best.animation,
+        field: best.field,
+      };
+    }
+
+    if (nodata) {
+      return { state: 'nodata' };
+    }
   }
 
   if (dim.fixed) {
-    return { state: 'fixed', color: theme.visualization.getColorByName(dim.fixed) };
+    return { state: 'fixed', color: resolveTfColor(dim.fixed, theme) };
   }
 
   return { state: 'neutral' };

@@ -1,129 +1,85 @@
 import React from 'react';
 import { render, screen } from '@testing-library/react';
-import { DataFrame, FieldType, createTheme, getDisplayProcessor, toDataFrame } from '@grafana/data';
+import {
+  DataFrame,
+  FieldType,
+  cacheFieldDisplayNames,
+  createTheme,
+  getDisplayProcessor,
+  toDataFrame,
+} from '@grafana/data';
 
-import { MetricChart, toChartFrame } from './MetricChart';
+import { StateMetric } from '../data/elementColor';
+import { MetricChart } from './MetricChart';
 
 /**
- * O desenho em si e do uPlot, que nao roda em jsdom — o `<TimeSeries>` sai vazio
- * aqui, e testa-lo seria testar o Grafana. O que e nosso, e esta coberto: qual
- * serie vai para o grafico, e o que aparece no lugar dela quando nao ha serie.
+ * O grafico e SVG nosso (o desenho do mockup), entao da para conferir o que
+ * importa em jsdom: quais series entram, as linhas de threshold, a legenda e o
+ * que aparece no lugar da serie quando ela nao existe.
  */
-
 const theme = createTheme();
 
-/**
- * Como o Grafana entrega os frames ao painel: com `field.display` ja instalado
- * por `applyFieldOverrides`. Sem isso o cabecalho nao teria valor a exibir — e
- * seria uma falha do teste, nao do componente.
- */
-const serie = (nome: string, valores: number[] = [1, 2, 3]): DataFrame => {
+const serie = (nome: string, valores: number[] = [10, 20, 30]): DataFrame => {
   const frame = toDataFrame({
     fields: [
-      { name: 'Time', type: FieldType.time, values: valores.map((_, i) => 1000 + i) },
+      { name: 'Time', type: FieldType.time, values: valores.map((_, i) => 1000 + i * 1000) },
       { name: nome, type: FieldType.number, values: valores },
     ],
   });
-
   for (const field of frame.fields) {
     field.display = getDisplayProcessor({ field, theme });
   }
-
+  cacheFieldDisplayNames([frame]);
   return frame;
 };
 
-describe('toChartFrame', () => {
-  it('reduz o frame a duas colunas: o tempo e o field escolhido', () => {
-    const frame = toDataFrame({
-      fields: [
-        { name: 'Time', type: FieldType.time, values: [1, 2] },
-        { name: 'cpu', type: FieldType.number, values: [10, 20] },
-        { name: 'mem', type: FieldType.number, values: [30, 40] },
-      ],
-    });
-
-    const chart = toChartFrame(frame, frame.fields[1], [frame])!;
-
-    // Sem o corte, o gráfico de um elemento vinculado a `cpu` mostraria `mem`
-    // junto — e nada na tela diria qual linha é qual.
-    expect(chart.fields.map((f) => f.name)).toEqual(['Time', 'cpu']);
-    expect(chart.length).toBe(2);
-  });
-
-  /**
-   * `field.config.custom` chega vazio porque o painel usa `.useFieldConfig()`
-   * sem opcoes de grafico, e e dali que o GraphNG le como desenhar a linha.
-   */
-  it('preenche a configuração de desenho, que o painel não fornece', () => {
-    const frame = serie('cpu');
-    const chart = toChartFrame(frame, frame.fields[1], [frame])!;
-
-    expect(chart.fields[1].config.custom).toMatchObject({ drawStyle: 'line', showPoints: 'never' });
-  });
-
-  /** Unidade, casas decimais e mapeamentos são configuração do usuário. */
-  it('não mexe no resto da configuração do field', () => {
-    const frame = serie('cpu');
-    frame.fields[1].config = { ...frame.fields[1].config, unit: 'percent', decimals: 1 };
-
-    const chart = toChartFrame(frame, frame.fields[1], [frame])!;
-
-    expect(chart.fields[1].config).toMatchObject({ unit: 'percent', decimals: 1 });
-  });
-
-  /**
-   * Dado tabular — uma query de instantaneo, o frame de Problems do Zabbix — tem
-   * valor mas nao tem "ao longo de".
-   */
-  it('sem coluna de tempo não há série a desenhar', () => {
-    const frame = toDataFrame({ fields: [{ name: 'cpu', type: FieldType.number, values: [10] }] });
-
-    expect(toChartFrame(frame, frame.fields[0], [frame])).toBeUndefined();
-  });
-
-  it('field que não é número não vira gráfico', () => {
-    const frame = toDataFrame({
-      fields: [
-        { name: 'Time', type: FieldType.time, values: [1] },
-        { name: 'estado', type: FieldType.string, values: ['UP'] },
-      ],
-    });
-
-    expect(toChartFrame(frame, frame.fields[1], [frame])).toBeUndefined();
-  });
+const metric = (field: string, thresholds: number[] = []): StateMetric => ({
+  dim: { field },
+  thresholds: { steps: thresholds.map((value) => ({ type: 'threshold' as const, value, color: 'red' })) },
 });
 
-/**
- * As tres ausencias sao diferentes e mandam procurar em lugares diferentes — o
- * vinculo, a query, ou o tipo do dado. Uma mensagem generica faria o usuario
- * abrir o formulario quando o problema esta na query.
- */
-describe('MetricChart — o que aparece quando não há curva', () => {
-  it('sem métrica vinculada, aponta para o vínculo', () => {
-    render(<MetricChart frames={[serie('cpu')]} field={undefined} />);
+describe('MetricChart', () => {
+  it('sem métrica vinculada, diz isso', () => {
+    render(<MetricChart frames={[]} metrics={[{ dim: {} }]} />);
 
-    expect(screen.getByText(/Nenhuma métrica vinculada/)).toBeInTheDocument();
+    expect(screen.getByText('Nenhuma métrica vinculada a este elemento.')).toBeInTheDocument();
   });
 
-  it('métrica que sumiu das séries, aponta para o painel', () => {
-    render(<MetricChart frames={[serie('cpu')]} field="mem" />);
+  it('métrica fora das séries do painel', () => {
+    render(<MetricChart frames={[serie('outra')]} metrics={[metric('cpu')]} />);
 
-    expect(screen.getByText(/não está nas séries/)).toBeInTheDocument();
+    expect(screen.getByText('A métrica não está nas séries deste painel.')).toBeInTheDocument();
   });
 
-  it('série sem tempo, aponta para o formato do dado', () => {
-    const tabular = toDataFrame({ fields: [{ name: 'cpu', type: FieldType.number, values: [10] }] });
+  /** Uma métrica: a legenda Name / Last / Max / Mean, como no mockup. */
+  it('uma métrica: desenha a série e a legenda com último, máximo e média', () => {
+    const { container } = render(<MetricChart frames={[serie('cpu')]} metrics={[metric('cpu')]} />);
 
-    render(<MetricChart frames={[tabular]} field="cpu" />);
-
-    expect(screen.getByText(/coluna de tempo/)).toBeInTheDocument();
-  });
-
-  /** O número que o elemento exibe, ao lado da curva que o explica. */
-  it('mostra o nome da métrica e o último valor no cabeçalho', () => {
-    render(<MetricChart frames={[serie('cpu', [10, 20, 42])]} field="cpu" />);
-
+    expect(container.querySelector('polyline')).toBeInTheDocument();
+    expect(screen.getByText('Last *')).toBeInTheDocument();
     expect(screen.getByText('cpu')).toBeInTheDocument();
-    expect(screen.getByText('42')).toBeInTheDocument();
+    // Último 30, máximo 30 e média 20 na legenda (e os mesmos números nos ticks do eixo).
+    const legenda = container.querySelectorAll('[class*="css"] > span');
+    const textos = Array.from(legenda).map((el) => el.textContent);
+    expect(textos.filter((t) => t === '30').length).toBeGreaterThanOrEqual(2);
+    expect(textos).toContain('20');
+  });
+
+  it('as regras de threshold viram linhas tracejadas com rótulo', () => {
+    const { container } = render(<MetricChart frames={[serie('cpu')]} metrics={[metric('cpu', [25])]} />);
+
+    expect(container.querySelector('line[stroke-dasharray="4 3"]')).toBeInTheDocument();
+    expect(screen.getByText('≥ 25')).toBeInTheDocument();
+  });
+
+  /** Várias métricas: um gráfico por métrica, sem a legenda única. */
+  it('várias métricas: um gráfico para cada, com nome no topo', () => {
+    const { container } = render(
+      <MetricChart frames={[serie('cpu'), serie('mem', [1, 2, 3])]} metrics={[metric('cpu'), metric('mem')]} />
+    );
+
+    expect(container.querySelectorAll('polyline')).toHaveLength(2);
+    expect(screen.getByText('mem')).toBeInTheDocument();
+    expect(screen.queryByText('Last *')).not.toBeInTheDocument();
   });
 });

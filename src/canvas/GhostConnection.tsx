@@ -4,7 +4,7 @@ import { GrafanaTheme2 } from '@grafana/data';
 import { useStyles2 } from '@grafana/ui';
 import { ViewportPortal, XYPosition } from '@xyflow/react';
 
-import { DEFAULT_EDGE_WIDTH } from '../model/sizes';
+import { tfPalette } from '../theme/palette';
 
 interface Props {
   from: XYPosition;
@@ -46,9 +46,9 @@ const getStyles = (theme: GrafanaTheme2) => ({
     pointerEvents: 'none',
   }),
   line: css({
-    stroke: theme.colors.primary.main,
-    strokeWidth: DEFAULT_EDGE_WIDTH,
-    strokeDasharray: '6 4',
-    strokeOpacity: 0.6,
+    stroke: tfPalette(theme).ac,
+    strokeWidth: 2,
+    strokeDasharray: '6 5',
+    vectorEffect: 'non-scaling-stroke',
   }),
 });

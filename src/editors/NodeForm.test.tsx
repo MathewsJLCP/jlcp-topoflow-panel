@@ -33,9 +33,9 @@ describe('NodeForm — texto secundário', () => {
     setup({ presentation: { ...node.presentation, secondaryText: undefined } });
 
     expect(toggle('Texto secundário')).not.toBeChecked();
-    // Primário e secundário usam o mesmo placeholder; o que distingue é a
-    // contagem — desligado, só o campo do texto primário está na tela.
-    expect(screen.getAllByPlaceholderText('Texto')).toHaveLength(1);
+    // Desligado, o campo do secundário (o do IP) não está na tela.
+    expect(screen.queryByPlaceholderText('Ex.: 10.0.0.1')).not.toBeInTheDocument();
+    expect(screen.getByPlaceholderText('Nome do equipamento')).toBeInTheDocument();
   });
 
   /** O `ToggleField` já nomeia o campo na linha do switch. */
@@ -48,7 +48,8 @@ describe('NodeForm — texto secundário', () => {
   it('ligado, o campo aparece ao lado do primário', () => {
     setup({ presentation: { ...node.presentation, secondaryText: { mode: 'fixed', fixed: '10.0.0.1' } } });
 
-    expect(screen.getAllByPlaceholderText('Texto')).toHaveLength(2);
+    expect(screen.getByPlaceholderText('Nome do equipamento')).toBeInTheDocument();
+    expect(screen.getByPlaceholderText('Ex.: 10.0.0.1')).toBeInTheDocument();
   });
 
   it('vem ligado num nó salvo com o campo preenchido', () => {
@@ -94,7 +95,7 @@ describe('NodeForm — valor exibido', () => {
 
     fireEvent.click(toggle('Exibir valor'));
 
-    expect(result()?.value).toEqual({});
+    expect(result()?.value).toEqual({ fromState: true, fields: [] });
   });
 
   it('desligar apaga o vínculo inteiro, não só o field', () => {
@@ -160,16 +161,16 @@ describe('NodeForm — ícone', () => {
   });
 
   /** `resolveTopoIcon` já resolvia isso; o dropdown não pode ter perdido. */
-  it('ícone salvo que não existe mais cai em Genérico, sem quebrar', () => {
+  it('ícone salvo que não existe mais cai em Desconhecido, sem quebrar', () => {
     setup(comIcone('tolstoi'));
 
-    expect(screen.getByText('Genérico')).toBeInTheDocument();
+    expect(screen.getByText('Desconhecido')).toBeInTheDocument();
   });
 
-  it('nó sem ícone escolhido mostra Genérico', () => {
+  it('nó sem ícone escolhido mostra Desconhecido', () => {
     setup(comIcone(undefined));
 
-    expect(screen.getByText('Genérico')).toBeInTheDocument();
+    expect(screen.getByText('Desconhecido')).toBeInTheDocument();
   });
 
   it('escolher uma opção grava a chave, não o rótulo', () => {
@@ -180,17 +181,17 @@ describe('NodeForm — ícone', () => {
 
     // A chave canônica, com o pack: é ela que endereça o ícone agora que há
     // mais de uma pasta. As chaves curtas já salvas continuam sendo lidas.
-    expect(result()?.presentation.icon).toBe('topoflow/router');
+    expect(result()?.presentation.icon).toBe('padrao/roteador');
   });
 
   it('trocar de pasta e escolher grava a chave daquela pasta', () => {
     const { result } = setup(comIcone(undefined));
 
     abrirMenu();
-    fireEvent.click(screen.getByRole('button', { name: /Clássicos/ }));
-    fireEvent.click(screen.getByRole('option', { name: 'Load balancer' }));
+    fireEvent.click(screen.getByRole('button', { name: /Infra/ }));
+    fireEvent.click(screen.getByRole('option', { name: 'No-break' }));
 
-    expect(result()?.presentation.icon).toBe('classic/load-balancer');
+    expect(result()?.presentation.icon).toBe('infra/no-break');
   });
 
   it('a busca filtra por nome', () => {
@@ -267,7 +268,7 @@ describe('NodeForm — thresholds do elemento', () => {
 
     addRule('Threshold');
 
-    expect(result()?.thresholds?.steps).toEqual([{ type: 'threshold', value: 80, color: 'yellow' }]);
+    expect(result()?.thresholds?.steps).toEqual([{ type: 'threshold', value: 80, color: '#F59E0B' }]);
   });
 
   it('os thresholds ficam ordenados do maior para o menor', () => {
@@ -327,7 +328,7 @@ describe('NodeForm — tipos de regra vindos do Value mappings', () => {
 
     addRule('Valor');
 
-    expect(result()?.thresholds?.steps).toEqual([{ type: 'value', match: '', color: 'blue' }]);
+    expect(result()?.thresholds?.steps).toEqual([{ type: 'value', match: '', color: '#3B82F6' }]);
   });
 
   it('faixa', () => {
@@ -335,7 +336,7 @@ describe('NodeForm — tipos de regra vindos do Value mappings', () => {
 
     addRule('Faixa');
 
-    expect(result()?.thresholds?.steps).toEqual([{ type: 'range', from: 0, to: 10, color: 'blue' }]);
+    expect(result()?.thresholds?.steps).toEqual([{ type: 'range', from: 0, to: 100, color: '#3B82F6' }]);
   });
 
   it('regex', () => {
@@ -343,7 +344,7 @@ describe('NodeForm — tipos de regra vindos do Value mappings', () => {
 
     addRule('Regex');
 
-    expect(result()?.thresholds?.steps).toEqual([{ type: 'regex', pattern: '', color: 'blue' }]);
+    expect(result()?.thresholds?.steps).toEqual([{ type: 'regex', pattern: '', color: '#3B82F6' }]);
   });
 
   it('especial', () => {
@@ -351,7 +352,7 @@ describe('NodeForm — tipos de regra vindos do Value mappings', () => {
 
     addRule('Especial');
 
-    expect(result()?.thresholds?.steps).toEqual([{ type: 'special', match: 'null', color: 'blue' }]);
+    expect(result()?.thresholds?.steps).toEqual([{ type: 'special', match: 'null', color: '#3B82F6' }]);
   });
 
   it('cada tipo mostra a condição que lhe cabe', () => {
