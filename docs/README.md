@@ -17,6 +17,7 @@ Escrito para dois leitores: quem for manter o TopoFlow, e quem for começar
 | [07 — Build e instalação](07-build-e-instalacao.md) | Gerar o pacote, instalar em ambiente real, assinatura, atualização |
 | [08 — Histórico de decisões](08-historico-de-decisoes.md) | Cronologia da v1.0: o que foi decidido, quando, e por quê |
 | [09 — Pendências e roadmap](09-pendencias-e-roadmap.md) | O que ficou de fora da v1.0 e com que decisão pendente |
+| [10 — Submissão ao Grafana](10-submissao-grafana.md) | Publicar e atualizar no catálogo: pré-requisitos, formulário, assinatura, e o diário de cada submissão |
 | [PRD — Vínculo direto com o Zabbix](prd-zabbix-direto.md) | Rodada em curso: autocomplete de host/item/trigger pela API do Zabbix, e o painel executando a própria query |
 | [Estilo dos elementos](estilo-elementos-canvas.md) | Contrato visual de cada elemento do canvas (tokens, superfícies, contraste) |
 | [Especificação funcional](especificacao-funcional.md) | Inventário de tudo o que o produto faz — elementos, campos, interações, estados e mensagens —, sem referência visual. Base para o redesenho da v2.0 |

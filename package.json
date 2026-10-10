@@ -81,5 +81,8 @@
     "react-dom": "^18.3.0",
     "zod": "^4.4.3"
   },
+  "overrides": {
+    "basic-ftp": "^6.2.3"
+  },
   "packageManager": "npm@10.8.2"
 }
