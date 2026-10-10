@@ -3,7 +3,6 @@ import { css } from '@emotion/css';
 import { DataFrame, GrafanaTheme2 } from '@grafana/data';
 import { Field, Input, useStyles2 } from '@grafana/ui';
 
-import { isNumericField } from '../data/dimensions';
 import { STARTER_ICON_REF, isKnownIcon } from '../icons';
 import { updateEdge, updateImage, updateNode, updatePoint, updatePostit, updateText } from '../model/mutations';
 import {
@@ -19,6 +18,7 @@ import {
 } from '../model/types';
 import { FONT_SANS, tfPalette } from '../theme/palette';
 import { TextDimensionField } from './DimensionFields';
+import { DisplayMetricPicker } from './DisplayMetricPicker';
 import { DrilldownField } from './DrilldownField';
 import { FieldLabel } from './FieldLabel';
 import { IconPicker } from './IconPicker';
@@ -27,8 +27,6 @@ import { NumberField } from './NumberField';
 import { StateSection } from './StateSection';
 import { TemplateTextField } from './TemplateTextField';
 import { ToggleField } from './ToggleField';
-import { TopoFieldPicker } from './TopoFieldPicker';
-import { useZabbixItemCatalog, useZabbixMetricNames } from './zabbixSource';
 import { DashedButton, Note, SectionHead, TextLink } from './ui/Section';
 import { Segmented } from './ui/Segmented';
 import { TfColorRow, TfRange } from './ui/TfRange';
@@ -50,8 +48,6 @@ const pct = (v: number) => `${Math.round(v * 100)}%`;
 
 export function NodeForm({ element, topology, frames, onChange }: FormProps<TopoNode>) {
   const styles = useStyles2(getFormStyles);
-  const metricasDoZabbix = useZabbixMetricNames();
-  const catalogoDoZabbix = useZabbixItemCatalog();
   const patch = (changes: Partial<TopoNode>) => onChange(updateNode(topology, element.id, changes));
   const patchPresentation = (changes: Partial<TopoNode['presentation']>) =>
     patch({ presentation: { ...element.presentation, ...changes } });
@@ -126,15 +122,14 @@ export function NodeForm({ element, topology, frames, onChange }: FormProps<Topo
 
         {extras.map((field, index) => (
           <div key={index} className={styles.svRow}>
-            <TopoFieldPicker
-              frames={frames}
-              extras={metricasDoZabbix}
-              loadExtras={catalogoDoZabbix}
-              value={field || undefined}
-              onChange={(next) => writeExtras(extras.map((f, i) => (i === index ? (next ?? '') : f)))}
-              placeholder="Escolha uma métrica"
-              filter={isNumericField}
-            />
+            <div className={styles.svPicker}>
+              <DisplayMetricPicker
+                frames={frames}
+                index={index}
+                value={field}
+                onChange={(next) => writeExtras(extras.map((f, i) => (i === index ? (next ?? '') : f)))}
+              />
+            </div>
             <button
               type="button"
               className={styles.x}
@@ -539,7 +534,8 @@ const IMAGE_SOURCE_OPTIONS = [
  * `parked`: voltar para ele o restaura.
  */
 function ImageSourceField({ value, onChange }: ImageSourceFieldProps) {
-  const library = isKnownIcon(value);
+  // Sem figura nenhuma, o modo e a Biblioteca: e por onde a Imagem comeca.
+  const library = !value || isKnownIcon(value);
   const [mode, setMode] = React.useState<'library' | 'file'>(library ? 'library' : 'file');
 
   // Ressincroniza quando o `src` muda por fora (undo, Panel JSON, outro elemento).
@@ -580,14 +576,15 @@ function ImageSourceField({ value, onChange }: ImageSourceFieldProps) {
 const getFormStyles = (theme: GrafanaTheme2) => {
   const p = tfPalette(theme);
   return {
-    svRow: css({ display: 'flex', gap: 6, alignItems: 'center', '& > div': { flex: 1, minWidth: 0 } }),
+    svRow: css({ display: 'flex', gap: 6, alignItems: 'flex-start' }),
+    svPicker: css({ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column', gap: 4 }),
     x: css({
       border: 0,
       background: 'transparent',
       color: p.apa,
       font: `15px ${FONT_SANS}`,
       cursor: 'pointer',
-      padding: '0 2px',
+      padding: '6px 2px 0',
     }),
     sizeBlock: css({ display: 'flex', flexDirection: 'column', gap: 6 }),
     sizeLabel: css({ font: `500 11.5px/1.35 ${FONT_SANS}`, color: p.rot }),

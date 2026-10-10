@@ -72,6 +72,57 @@ de **todos** os elementos, do canvas e do editor; nada salvo precisa ser editado
 - O seletor "Cor do ícone" saiu (no mockup o ícone sempre acompanha o estado); a
   cor fixada antes continua respeitada.
 
+### Rodada de correções antes da submissão (2026-10-10)
+
+- **Agrupar elementos.** Com dois ou mais elementos selecionados, o botão direito
+  oferece **Agrupar**. O clique num membro seleciona o grupo inteiro, e arrastar
+  um arrasta todos. No membro, o botão direito oferece **Desagrupar**. A cópia
+  de um membro nasce fora do grupo. Topologias salvas antes disso não mudam (o
+  campo `groupId` é opcional).
+- **Conexão nos dois sentidos.** Com A → B já ligado, agora dá para criar
+  B → A. Só o mesmo sentido repetido continua sendo recusado. As duas aparecem
+  como paralelas.
+- **Linhas alinhadas ao grid.** Com o encaixe ligado, nó, point e imagem
+  encaixam pelo **centro**, que é de onde a conexão sai. Dois elementos de
+  tamanhos diferentes na mesma linha do grid passam a dar uma conexão reta. Os
+  vértices das conexões também encaixam no grid. Postit e texto continuam
+  encaixando pelo canto.
+- **Padrões de elemento novo:** Base verde (`#22C55E`) em nó, point, imagem e
+  conexão; ícone **Roteador** no nó; Figura da Imagem na **Biblioteca**, já com o
+  Roteador. "Definir cor" na Base também usa o verde. Elementos já salvos não
+  mudam.
+- **Mesma bolinha de cor do Grafana em todo o editor:** na escada de
+  severidades, na Cor do Postit, na Cor e na Cor do fundo do Texto.
+- **Thresholds: o valor só grava ao sair do campo (ou no Enter).** Antes, cada
+  tecla reordenava a lista, e o número seguinte caía na regra vizinha. Também
+  não dava para apagar o campo para digitar outro valor.
+- **Hover:** o gráfico não abre mais no modo de edição. O desenho passou a ser o
+  mesmo para uma métrica ou várias (nome e último valor no topo de cada
+  gráfico): o hover da Imagem e do Point ficou igual ao do Nó.
+- **Itens de texto do Zabbix.** O catálogo passa a listar itens de caractere,
+  log e texto, e o painel os busca pelo modo _Text_ do datasource. Eles servem
+  em "Exibir valor", em `${...}` e nas regras de Valor e Regex. O gráfico avisa
+  que métrica de texto não tem gráfico.
+- **"Exibir valor" com host e item do Zabbix.** Cada métrica extra oferece
+  "Usar um campo da query" ou "Escolher host e item no Zabbix", como no
+  Estado. Isso vale também para nó em modo Trigger. As métricas extras passaram
+  a entrar na query do painel; antes, uma métrica escolhida ali nunca era
+  buscada.
+- A seção **Zabbix** do painel de opções virou **Zabbix API**.
+- **Duplicar abre a cópia.** Pelo cartão, pela lista ou pelo menu do canvas, a
+  cópia sai selecionada e com o cartão aberto. Antes o cartão continuava no
+  original, e como a cópia nasce por cima dele, quem seguia editando mexia no
+  original achando que mexia na cópia. A cópia também passou a ser profunda (não
+  compartilha nenhum objeto com o original), e trocar de elemento recria o
+  formulário, sem levar o estado dos campos de um para o outro.
+- **Várias métricas de estado pelo Zabbix API.** Da segunda métrica em diante,
+  o elemento ficava "sem dados" mesmo com o Zabbix coletando: só a primeira
+  entrava na query do painel. Agora todas entram.
+- **O menu de Host e Item não se espalha mais pela tela.** A chave do item
+  (descrição de cada opção) é encurtada pelo meio. O menu do Grafana toma a
+  largura da opção mais longa, e uma chave de contador do Windows o deixava da
+  largura do canvas.
+
 ## 1.3.0 — 2026-09-10
 
 ### O painel busca os próprios problemas

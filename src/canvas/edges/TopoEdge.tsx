@@ -19,6 +19,7 @@ import { stateLook, strokeColor } from '../look';
 import { ElementHover } from '../ElementHover';
 import { EdgeActionsContext } from './EdgeActions';
 import { EndBox, Pt, arrowPath, edgeGeometry, waypointIndexAt } from './path';
+import { snapPoint } from '../grouping';
 
 /** Largura minima da faixa clicavel em volta da linha. */
 const HIT_WIDTH = 14;
@@ -163,7 +164,9 @@ export function TopoEdge({
 
   const toFlow = (event: { clientX: number; clientY: number }): Waypoint => {
     const point = screenToFlowPosition({ x: event.clientX, y: event.clientY });
-    return { x: Math.round(point.x), y: Math.round(point.y) };
+    // Com o grid ligado, o vertice encaixa nele como os elementos: e o que deixa
+    // o trajeto em angulos retos sem precisar acertar o pixel.
+    return snapPoint({ x: Math.round(point.x), y: Math.round(point.y) }, actions?.grid);
   };
 
   const startDrag = (event: React.PointerEvent, index: number, list: Waypoint[]) => {

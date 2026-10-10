@@ -1,10 +1,16 @@
+import { STARTER_ICON_REF } from '../icons/registry';
 import { sampleTopology } from './sampleTopology';
 import {
+  DEFAULT_BASE_COLOR,
   addElement,
   canConnect,
   connect,
   duplicateElement,
   findEdgeBetween,
+  groupElements,
+  groupMembers,
+  groupOf,
+  ungroupElements,
   moveElements,
   removeElements,
   resizeElement,
@@ -48,6 +54,84 @@ describe('addElement', () => {
   it('produz uma topologia que passa pelo schema', () => {
     const next = kinds.reduce((acc, kind) => addElement(acc, kind, { x: 0, y: 0 }), sampleTopology);
     expect(topologySchema.safeParse(next).success).toBe(true);
+  });
+
+  it('o nó nasce com o ícone Roteador e a Base verde', () => {
+    const node = addElement(sampleTopology, 'node', { x: 0, y: 0 }).nodes.at(-1)!;
+
+    expect(STARTER_ICON_REF).toBe('padrao/roteador');
+    expect(node.presentation.icon).toBe(STARTER_ICON_REF);
+    expect(node.color).toEqual({ fixed: DEFAULT_BASE_COLOR });
+  });
+
+  it('o point nasce com a Base verde; o texto, sem cor', () => {
+    const next = addElement(addElement(sampleTopology, 'point', { x: 0, y: 0 }), 'text', { x: 0, y: 0 });
+
+    expect(next.points.at(-1)!.color).toEqual({ fixed: DEFAULT_BASE_COLOR });
+    expect(next.texts.at(-1)!.color).toEqual({});
+  });
+});
+
+describe('groupElements e ungroupElements', () => {
+  const [a, b, c] = sampleTopology.nodes.map((node) => node.id);
+
+  it('junta os elementos num grupo novo', () => {
+    const next = groupElements(sampleTopology, [a, b]);
+    const groupId = groupOf(next).get(a)!;
+
+    expect(groupId).toBe('group-1');
+    expect(groupMembers(next, groupId)).toEqual([a, b]);
+    expect(topologySchema.safeParse(next).success).toBe(true);
+  });
+
+  it('menos de dois elementos não forma grupo', () => {
+    expect(groupElements(sampleTopology, [a])).toBe(sampleTopology);
+    expect(groupElements(sampleTopology, [a, 'nao-existe'])).toBe(sampleTopology);
+  });
+
+  it('agrupar um membro com outro elemento traz o grupo antigo inteiro', () => {
+    const once = groupElements(sampleTopology, [a, b]);
+    const twice = groupElements(once, [b, c]);
+    const groupId = groupOf(twice).get(c)!;
+
+    expect(groupMembers(twice, groupId)).toEqual([a, b, c]);
+    expect(new Set(groupOf(twice).values()).size).toBe(1);
+  });
+
+  it('desagrupar desfaz o grupo inteiro e apaga o campo', () => {
+    const grouped = groupElements(sampleTopology, [a, b]);
+    const next = ungroupElements(grouped, [b]);
+
+    expect(groupOf(next).size).toBe(0);
+    expect(next.nodes.every((node) => !('groupId' in node))).toBe(true);
+  });
+
+  it('desagrupar elemento sem grupo não muda nada', () => {
+    expect(ungroupElements(sampleTopology, [a])).toBe(sampleTopology);
+  });
+
+  /** O bug relatado: editar a cópia não pode mexer no original. */
+  it('a cópia não compartilha nenhum objeto com o original', () => {
+    const original = sampleTopology.nodes[0];
+    const copy = duplicateElement(sampleTopology, original.id).nodes.at(-1)!;
+
+    expect(copy.presentation).toEqual(original.presentation);
+    expect(copy.presentation).not.toBe(original.presentation);
+    expect(copy.color).not.toBe(original.color);
+    expect(copy.size).not.toBe(original.size);
+  });
+
+  it('a cópia de um membro nasce fora do grupo', () => {
+    const grouped = groupElements(sampleTopology, [a, b]);
+    const next = duplicateElement(grouped, a);
+
+    expect(next.nodes.at(-1)!.groupId).toBeUndefined();
+  });
+
+  /** Retrocompatibilidade: elemento salvo antes do grupo nao tem o campo. */
+  it('topologia sem groupId continua validando', () => {
+    expect(topologySchema.safeParse(sampleTopology).success).toBe(true);
+    expect(groupOf(sampleTopology).size).toBe(0);
   });
 });
 
@@ -212,9 +296,24 @@ describe('connect', () => {
     expect(connect(semArestas, 'app-server', 'app-server')).toBe(semArestas);
   });
 
-  it('rejeita par já conectado, em qualquer sentido', () => {
+  it('rejeita par já conectado no mesmo sentido', () => {
     expect(connect(sampleTopology, 'edge-router', 'app-server')).toBe(sampleTopology);
-    expect(connect(sampleTopology, 'app-server', 'edge-router')).toBe(sampleTopology);
+  });
+
+  /** A -> B e B -> A sao duas conexoes: dois enlaces, ou ida e volta. */
+  it('aceita o sentido inverso de um par já conectado', () => {
+    const next = connect(sampleTopology, 'app-server', 'edge-router');
+
+    expect(next.edges).toHaveLength(sampleTopology.edges.length + 1);
+    expect(next.edges.at(-1)).toMatchObject({ source: 'app-server', target: 'edge-router' });
+    // E o inverso do inverso volta a ser recusado.
+    expect(connect(next, 'app-server', 'edge-router')).toBe(next);
+  });
+
+  it('a conexão nova nasce com a Base verde', () => {
+    const next = connect(semArestas, 'edge-router', 'app-server');
+
+    expect(next.edges[0].color).toEqual({ fixed: DEFAULT_BASE_COLOR });
   });
 
   it('rejeita pontas que não aceitam conexão', () => {
@@ -244,9 +343,9 @@ describe('connect', () => {
     }
   });
 
-  it('canConnect recusa par já ligado em qualquer sentido', () => {
+  it('canConnect recusa par já ligado no mesmo sentido, e aceita o inverso', () => {
     expect(canConnect(sampleTopology, 'edge-router', 'app-server')).toBe(false);
-    expect(canConnect(sampleTopology, 'app-server', 'edge-router')).toBe(false);
+    expect(canConnect(sampleTopology, 'app-server', 'edge-router')).toBe(true);
   });
 
   it('conecta point a nó', () => {
@@ -310,8 +409,12 @@ function ordered(topology: Topology): string[] {
 describe('addElement — imagem', () => {
   const criada = (topology: Topology) => addElement(topology, 'image', { x: 10, y: 20 }).images.at(-1)!;
 
-  it('nasce sem arquivo, para o editor escolher', () => {
-    expect(criada(sampleTopology).src).toBe('');
+  it('nasce com a Figura na Biblioteca, no Roteador', () => {
+    expect(criada(sampleTopology).src).toBe(STARTER_ICON_REF);
+  });
+
+  it('nasce com a Base verde', () => {
+    expect(criada(sampleTopology).color).toEqual({ fixed: DEFAULT_BASE_COLOR });
   });
 
   /** O toggle desligado é o pedido: uma placa por padrão esconderia o PNG transparente. */
@@ -385,7 +488,7 @@ describe('resizeElement — imagem', () => {
   it('não toca no resto do elemento', () => {
     const next = resizeElement(comImagem, imageId, { width: 200, height: 120 });
 
-    expect(next.images[0]).toMatchObject({ src: '', fit: 'contain', position: { x: 0, y: 0 } });
+    expect(next.images[0]).toMatchObject({ src: STARTER_ICON_REF, fit: 'contain', position: { x: 0, y: 0 } });
   });
 });
 

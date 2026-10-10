@@ -2,7 +2,7 @@ import React, { useId, useState } from 'react';
 import { DataFrame } from '@grafana/data';
 import { Alert, Button, Combobox, Field } from '@grafana/ui';
 
-import { isNumericField } from '../data/dimensions';
+import { isDisplayableField } from '../data/dimensions';
 import { ColorDimension } from '../model/types';
 import { FieldLabel } from './FieldLabel';
 import { TopoFieldPicker } from './TopoFieldPicker';
@@ -83,7 +83,8 @@ export function StateFieldPicker({ frames, value, onChange }: StateFieldPickerPr
             value={value.field || undefined}
             onChange={(field) => onChange({ ...value, field, metric: undefined })}
             placeholder="Sem vínculo"
-            filter={isNumericField}
+            // Texto tambem: as regras de Valor e Regex avaliam palavras.
+            filter={isDisplayableField}
           />
         </Field>
 
@@ -111,7 +112,7 @@ export function StateFieldPicker({ frames, value, onChange }: StateFieldPickerPr
       </Field>
 
       <Field
-        label={<FieldLabel info="Item numérico do host. É a métrica que as regras de estado avaliam.">Item</FieldLabel>}
+        label={<FieldLabel info="Item do host. É a métrica que as regras de estado avaliam.">Item</FieldLabel>}
         htmlFor={itemId}
       >
         <Combobox
@@ -123,7 +124,7 @@ export function StateFieldPicker({ frames, value, onChange }: StateFieldPickerPr
           customValueDescription="Usar este nome de item"
           isClearable
           placeholder={host ? 'Selecione ou digite o item' : 'Escolha o host primeiro'}
-          noOptionsMessage={host ? 'Nenhum item numérico neste host' : 'Escolha o host primeiro'}
+          noOptionsMessage={host ? 'Nenhum item neste host' : 'Escolha o host primeiro'}
         />
       </Field>
 

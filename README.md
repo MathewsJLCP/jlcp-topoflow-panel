@@ -75,7 +75,7 @@ Ver [07 — Build e instalação](docs/07-build-e-instalacao.md). Resumo:
 
 ```bash
 npm ci && npm run build
-cd dist && zip -r ../jlcp-topoflow-panel-1.1.0.zip . && cd ..
+mkdir -p releases && cd dist && zip -r ../releases/jlcp-topoflow-panel-1.1.0.zip . && cd ..
 ```
 
 Descompacte numa pasta `jlcp-topoflow-panel/` dentro do diretório de plugins do

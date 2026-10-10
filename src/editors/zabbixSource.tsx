@@ -97,8 +97,8 @@ export function useZabbixMetricNames(): string[] {
  * `undefined` quando nao ha secao Zabbix ligada ou quando a topologia nao
  * menciona host nenhum — e ai o seletor volta a listar so os frames.
  *
- * So itens **numericos**, que e o que `listItems` traz: um item de texto no
- * combo prometeria uma serie que a query de metrica do painel nao busca.
+ * Numericos e de texto, que e o que `listItems` traz — a query do painel busca
+ * os dois modos (ver `metricTargets`).
  *
  * Os hosts sao consultados em **lotes**, e nao todos de uma vez: um mapa com
  * quarenta hosts dispararia oitenta requisicoes no instante em que alguem abre o
@@ -221,7 +221,9 @@ function useHostLoader(
 
         const doZabbix = hosts.map((h) => {
           const tecnico = h.host && h.host !== h.name ? h.host : undefined;
-          return tecnico ? { value: h.name, label: h.name, description: tecnico } : { value: h.name, label: h.name };
+          return tecnico
+            ? { value: h.name, label: h.name, description: encurtar(tecnico) }
+            : { value: h.name, label: h.name };
         });
 
         return unir(doZabbix, filtrar(fallback, input));
@@ -271,7 +273,7 @@ export function useZabbixMetric(host: string): ZabbixMetricOptions | undefined {
         return filtrar(
           items.map((item) =>
             item.key_
-              ? { value: item.name, label: item.name, description: item.key_ }
+              ? { value: item.name, label: item.name, description: encurtar(item.key_) }
               : { value: item.name, label: item.name }
           ),
           input
@@ -331,6 +333,30 @@ export function useZabbixCatalog({
           },
     [uid, hostOptions, triggerOptions, error, hostsFromFrames, triggersFromFrames, triggerLeading]
   );
+}
+
+/**
+ * Teto da descricao de uma opcao (a chave do item, o nome tecnico do host).
+ *
+ * O `Combobox` do Grafana mede o texto mais longo das opcoes e da essa largura
+ * ao menu, limitada so pela tela — e a chave de um contador do Windows
+ * (`perf_counter_en["\PhysicalDisk(0 C:)\Avg. Disk Write Queue Length",60]`)
+ * abria um menu da largura do canvas por cima do painel. O componente nao tem
+ * propriedade para a largura do menu, entao quem encurta e a opcao.
+ */
+const DESCRICAO_MAX = 40;
+
+/**
+ * Encurta pelo **meio**: o comeco diz o tipo da chave e o fim e o que distingue
+ * um item do vizinho (`...Disk Reads/sec",60]` x `...Disk Writes/sec",60]`).
+ * Exportada para teste.
+ */
+export function encurtar(texto: string, max = DESCRICAO_MAX): string {
+  if (texto.length <= max) {
+    return texto;
+  }
+  const fim = Math.ceil((max - 1) * 0.55);
+  return `${texto.slice(0, max - 1 - fim)}…${texto.slice(texto.length - fim)}`;
 }
 
 /**

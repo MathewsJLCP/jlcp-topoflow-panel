@@ -1,7 +1,7 @@
 import React from 'react';
 import { css } from '@emotion/css';
 import { GrafanaTheme2, colorManipulator } from '@grafana/data';
-import { PopoverContent, useStyles2, useTheme2 } from '@grafana/ui';
+import { ColorPicker, PopoverContent, useStyles2, useTheme2 } from '@grafana/ui';
 
 import { FONT_MONO, TfPalette, resolveTfColor, tfPalette } from '../../theme/palette';
 import { FieldLabel } from '../FieldLabel';
@@ -49,7 +49,14 @@ export function TfRange({ label, value, min, max, step, show, onChange, mixed }:
   );
 }
 
-/** Linha de cor do mockup: rotulo a esquerda; o hex e o quadrado de cor a direita. */
+/**
+ * Linha de cor: rotulo a esquerda; o hex e a **bolinha** de cor do Grafana a
+ * direita — a mesma das regras de threshold e da Base, com as cores nomeadas.
+ *
+ * Era um `input type=color` quadrado, do mockup. Trocado a pedido: dois
+ * seletores de cor diferentes no mesmo formulario (a bolinha nas regras, o
+ * quadrado no Postit e no Texto) pareciam duas coisas diferentes.
+ */
 interface TfColorRowProps {
   label: string;
   info?: PopoverContent;
@@ -69,18 +76,12 @@ export function TfColorRow({ label, info, color, onChange }: TfColorRowProps) {
   }
   return (
     <div className={styles.colorRow}>
-      <label htmlFor={id} className={styles.label}>
+      <span id={id} className={styles.label}>
         <FieldLabel info={info}>{label}</FieldLabel>
-      </label>
-      <div className={styles.colorRight}>
+      </span>
+      <div className={styles.colorRight} role="group" aria-labelledby={id}>
         <span className={styles.hex}>{hex}</span>
-        <input
-          id={id}
-          type="color"
-          className={styles.swatch}
-          value={hex}
-          onChange={(event) => onChange(event.currentTarget.value.toUpperCase())}
-        />
+        <ColorPicker enableNamedColors color={color || hex} onChange={onChange} />
       </div>
     </div>
   );
@@ -98,14 +99,5 @@ const getStyles = (theme: GrafanaTheme2) => {
     colorRow: css({ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10 }),
     colorRight: css({ display: 'flex', alignItems: 'center', gap: 8 }),
     hex: css({ font: `12px ${FONT_MONO}`, color: p.tx2 }),
-    swatch: css({
-      width: 28,
-      height: 24,
-      padding: 0,
-      border: `1px solid ${p.borda}`,
-      borderRadius: 5,
-      background: 'none',
-      cursor: 'pointer',
-    }),
   };
 };

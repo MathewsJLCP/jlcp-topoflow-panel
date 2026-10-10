@@ -193,11 +193,12 @@ describe('vínculo por métrica', () => {
     await waitFor(() => expect(query).toHaveBeenCalledTimes(1));
     const { targets } = query.mock.calls[0][0];
 
-    expect(targets).toHaveLength(3);
+    // Problems + (Metrics, Text) por host.
+    expect(targets).toHaveLength(5);
     expect(targets[0].queryType).toBe('5');
-    expect(targets.slice(1).map((t: { queryType: string }) => t.queryType)).toEqual(['0', '0']);
+    expect(targets.slice(1).map((t: { queryType: string }) => t.queryType)).toEqual(['0', '2', '0', '2']);
     // O host técnico entra na query já traduzido para o nome visível.
-    expect(targets[2].host.filter).toBe('/^(AGLIN-SRV-CONCILIACAO)$/');
+    expect(targets[3].host.filter).toBe('/^(AGLIN-SRV-CONCILIACAO)$/');
     expect(targets[1].item.filter).toBe('/^(CPU Usage)$/');
   });
 
@@ -207,7 +208,7 @@ describe('vínculo por métrica', () => {
     await waitFor(() => expect(query).toHaveBeenCalledTimes(1));
     const { targets } = query.mock.calls[0][0];
 
-    expect(targets.map((t: { queryType: string }) => t.queryType)).toEqual(['0', '0']);
+    expect(targets.map((t: { queryType: string }) => t.queryType)).toEqual(['0', '2', '0', '2']);
   });
 
   /** A série volta nomeada como o vínculo a procura — ver `nameMetricFields`. */

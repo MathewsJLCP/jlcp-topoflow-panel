@@ -3,6 +3,7 @@ import { DataFrame, FieldType, dateTime, toDataFrame } from '@grafana/data';
 import { sampleTopology } from '../model/sampleTopology';
 import { Topology, TriggerBinding } from '../model/types';
 import {
+  METRICS_REF_PREFIX,
   PROBLEMS_REF_ID,
   filterRegex,
   metricBindings,
@@ -241,6 +242,29 @@ describe('metricBindings', () => {
     ]);
   });
 
+  /** O bug relatado: a segunda métrica ficava "sem dados" porque nunca era pedida. */
+  it('colhe também as métricas de estado além da primeira', () => {
+    const no = {
+      ...comMetrica('a', 'SOFSRV001', 'CPU utilization'),
+      extraMetrics: [{ metric: { host: 'SOFSRV001', item: 'ICMP ping' }, steps: [] }, { steps: [] }],
+    };
+
+    expect(metricBindings(topologia({ nodes: [no], edges: [] }))).toEqual([
+      { host: 'SOFSRV001', item: 'CPU utilization' },
+      { host: 'SOFSRV001', item: 'ICMP ping' },
+    ]);
+  });
+
+  it('em modo Trigger, as métricas extras de estado também ficam de fora', () => {
+    const no = {
+      ...comMetrica('a', 'H1', 'CPU'),
+      trigger: ligado('H1'),
+      extraMetrics: [{ metric: { host: 'H1', item: 'Ping' }, steps: [] }],
+    };
+
+    expect(metricBindings(topologia({ nodes: [no], edges: [] }))).toEqual([]);
+  });
+
   /**
    * Com o vínculo de trigger ligado, o nível 1 da cadeia de cor é pulado por
    * inteiro: buscar a métrica desse elemento seria pagar por um dado que
@@ -275,6 +299,24 @@ describe('metricBindings', () => {
       { host: 'H1', item: 'traffic out' },
       { host: 'H3', item: 'uptime' },
       { host: 'H2', item: 'Disco' },
+    ]);
+  });
+
+  /**
+   * As métricas extras de "Exibir valor" — no modo Trigger, as únicas do nó.
+   * Antes ficavam fora da query, e escolher uma ali nunca trazia o dado.
+   */
+  it('colhe as métricas extras de "Exibir valor", inclusive em modo Trigger', () => {
+    const no = {
+      ...sampleTopology.nodes[0],
+      color: {},
+      trigger: ligado('H1'),
+      value: { fromState: true, fields: ['H1: Status', 'H2: CPU', ''] },
+    };
+
+    expect(metricBindings(topologia({ nodes: [no], edges: [] }))).toEqual([
+      { host: 'H1', item: 'Status' },
+      { host: 'H2', item: 'CPU' },
     ]);
   });
 
@@ -325,13 +367,24 @@ describe('metricTargets', () => {
       ds
     ) as Array<Record<string, any>>;
 
-    expect(alvos).toHaveLength(2);
-    expect(alvos[0].host.filter).toBe('/^(H1)$/');
-    expect(alvos[0].item.filter).toBe('/^(CPU|Disco)$/');
-    expect(alvos[1].host.filter).toBe('/^(H2)$/');
-    expect(alvos[0].queryType).toBe('0');
+    // Dois alvos por host: Metrics (numéricos) e Text (texto e caractere).
+    expect(alvos).toHaveLength(4);
+    const metricas = alvos.filter((alvo) => alvo.queryType === '0');
+    expect(metricas.map((alvo) => alvo.host.filter)).toEqual(['/^(H1)$/', '/^(H2)$/']);
+    expect(metricas[0].item.filter).toBe('/^(CPU|Disco)$/');
     // refIds distintos: é por eles que a resposta é reconhecida depois.
-    expect(alvos[0].refId).not.toBe(alvos[1].refId);
+    expect(new Set(alvos.map((alvo) => alvo.refId)).size).toBe(4);
+    expect(alvos.every((alvo) => alvo.refId.startsWith(METRICS_REF_PREFIX))).toBe(true);
+  });
+
+  /** O modo Metrics do datasource só devolve item numérico. */
+  it('cada host ganha também um alvo de texto, com o mesmo filtro', () => {
+    const alvos = metricTargets([{ host: 'H1', item: 'Status' }], ds) as Array<Record<string, any>>;
+    const texto = alvos.find((alvo) => alvo.queryType === '2')!;
+
+    expect(texto.host.filter).toBe('/^(H1)$/');
+    expect(texto.item.filter).toBe('/^(Status)$/');
+    expect(texto.resultFormat).toBe('time_series');
   });
 
   it('traz os campos que o datasource lê sem proteção', () => {

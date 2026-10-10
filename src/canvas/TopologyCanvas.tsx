@@ -22,16 +22,20 @@ import {
 import {
   OrderCommand,
   addElement,
+  addedElementId,
   canConnect,
   connect,
   duplicateElement,
-  findEdgeBetween,
+  findEdge as findDirectedEdge,
   findElement,
+  groupElements,
+  groupOf,
   moveElements,
   removeElements,
   resizeElement,
   reorderElement,
   reverseEdge,
+  ungroupElements,
   updateEdge,
 } from '../model/mutations';
 import { CanvasOptions, ElementKind, Topology, Waypoint } from '../model/types';
@@ -43,6 +47,7 @@ import { HoverLayerContext } from './HoverLayer';
 import { ShotResult } from './ScreenshotButton';
 import { EdgeActions, EdgeActionsContext, SelectedVertex } from './edges/EdgeActions';
 import { edgeGeometry, waypointIndexAt } from './edges/path';
+import { groupChanges, snapPoint } from './grouping';
 import { FONT_MONO, FONT_SANS, tfPalette } from '../theme/palette';
 import { TopoTime, TopoTimeContext } from './timeContext';
 import { edgeTypes } from './edges';
@@ -168,8 +173,12 @@ function CanvasInner({
   const revision = useMemo(() => JSON.stringify(topology), [topology]);
   const appliedRevision = useRef(revision);
 
-  /** Aresta recem-criada pelo modo Linkar, a selecionar na proxima montagem. */
-  const pendingEdgeSelection = useRef<string | undefined>();
+  /**
+   * Elemento a selecionar **sozinho** na proxima montagem: a aresta recem-criada
+   * pelo modo Linkar, a copia recem-duplicada, ou o que o painel de opcoes pediu
+   * para selecionar antes de ele existir no canvas.
+   */
+  const pendingSelection = useRef<string | undefined>();
 
   useEffect(() => {
     if (appliedRevision.current === revision) {
@@ -180,15 +189,19 @@ function CanvasInner({
     // A selecao e aplicada aqui, e nao logo apos o `connect`, porque este
     // efeito reconstroi as arestas do zero e apagaria qualquer selecao posta
     // antes dele.
-    const selectedId = pendingEdgeSelection.current;
-    pendingEdgeSelection.current = undefined;
+    const selectedId = pendingSelection.current;
+    pendingSelection.current = undefined;
+    const only = <T extends { id: string; selected?: boolean }>(items: T[]) =>
+      items.map((item) => ({ ...item, selected: item.id === selectedId }));
 
-    setNodes((current) => keepSelection(toFlowNodes(topology, frames, editable), current));
-    setEdges((current) =>
-      keepSelection(toFlowEdges(topology, frames, editable), current).map((edge) =>
-        edge.id === selectedId ? { ...edge, selected: true } : edge
-      )
-    );
+    setNodes((current) => {
+      const next = toFlowNodes(topology, frames, editable);
+      return selectedId ? only(next) : keepSelection(next, current);
+    });
+    setEdges((current) => {
+      const next = toFlowEdges(topology, frames, editable);
+      return selectedId ? only(next) : keepSelection(next, current);
+    });
   }, [revision, topology, frames, editable]);
 
   /**
@@ -288,9 +301,17 @@ function CanvasInner({
     [flushPending, onChange]
   );
 
+  /** Grid em uso pelo encaixe; `undefined` com o encaixe desligado. */
+  const grid = canvas.snapToGrid ? canvas.gridSize : undefined;
+
   const onNodesChange = useCallback(
     (changes: Array<NodeChange<TopoFlowNode>>) => {
-      setNodes((current) => applyNodeChanges(changes, current));
+      // O grupo e o encaixe no grid sao resolvidos aqui, e nao pelo
+      // `snapToGrid` do React Flow: ele encaixa o canto de cada no por conta
+      // propria, e o canvas precisa encaixar pelo centro e mover o grupo junto
+      // (ver `grouping.ts`).
+      const groups = groupOf(topologyRef.current);
+      setNodes((current) => applyNodeChanges(groupChanges(changes, current, groups, grid), current));
 
       // Selecao nao vai para `options`: e estado de UI.
       if (changes.some((change) => change.type === 'position')) {
@@ -311,7 +332,7 @@ function CanvasInner({
         scheduleCommit('size');
       }
     },
-    [scheduleCommit]
+    [scheduleCommit, grid]
   );
 
   /**
@@ -364,8 +385,20 @@ function CanvasInner({
   );
 
   const handleDelete = useCallback((id: string) => mutate((current) => removeElements(current, [id])), [mutate]);
-  const handleDuplicate = useCallback((id: string) => mutate((current) => duplicateElement(current, id)), [mutate]);
+  // A copia sai selecionada (e o painel de opcoes a abre): e nela que o
+  // usuario vai mexer em seguida.
+  const handleDuplicate = useCallback(
+    (id: string) =>
+      mutate((current) => {
+        const next = duplicateElement(current, id);
+        pendingSelection.current = addedElementId(current, next);
+        return next;
+      }),
+    [mutate]
+  );
   const handleReverse = useCallback((id: string) => mutate((current) => reverseEdge(current, id)), [mutate]);
+  const handleGroup = useCallback((ids: string[]) => mutate((current) => groupElements(current, ids)), [mutate]);
+  const handleUngroup = useCallback((id: string) => mutate((current) => ungroupElements(current, [id])), [mutate]);
   const handleReorder = useCallback(
     (id: string, command: OrderCommand) => mutate((current) => reorderElement(current, id, command)),
     [mutate]
@@ -394,7 +427,7 @@ function CanvasInner({
         const next = connect(current, source, targetId);
         // O id e gerado dentro de `connect`; procurar o par de volta e o que
         // permite abrir o Inspector ja na aresta criada.
-        pendingEdgeSelection.current = findEdgeBetween(next, source, targetId)?.id;
+        pendingSelection.current = findDirectedEdge(next, source, targetId)?.id;
         return next;
       });
     },
@@ -449,6 +482,12 @@ function CanvasInner({
       if (!found) {
         return;
       }
+      // "Agrupar" age sobre a selecao, e so quando o clique caiu nela: clicar
+      // com o direito fora da selecao e falar de outro elemento.
+      const selected = nodesRef.current.filter((item) => item.selected).map((item) => item.id);
+      const selection = selected.includes(node.id) ? selected : [node.id];
+      const groups = groupOf(topologyRef.current);
+      const sameGroup = new Set(selection.map((id) => groups.get(id) ?? `solo:${id}`)).size === 1;
       setMenu({
         kind: 'element',
         elementKind: found.kind,
@@ -456,6 +495,8 @@ function CanvasInner({
         y: event.clientY,
         id: node.id,
         label: node.id,
+        selection: selection.length > 1 && !sameGroup ? selection : undefined,
+        grouped: groups.has(node.id),
       });
     },
     [linking, cancelLinking]
@@ -523,7 +564,7 @@ function CanvasInner({
         return;
       }
       const at = screenToFlowPosition({ x: menu.x, y: menu.y });
-      const point = { x: Math.round(at.x), y: Math.round(at.y) };
+      const point = snapPoint({ x: Math.round(at.x), y: Math.round(at.y) }, grid);
       const box = (id: string) => {
         const node = getInternalNode(id);
         const { width = 0, height = 0 } = node?.measured ?? {};
@@ -537,12 +578,12 @@ function CanvasInner({
       setWaypoints(edgeId, list);
       setVertex({ edgeId, index });
     },
-    [menu, screenToFlowPosition, getInternalNode, setWaypoints]
+    [menu, screenToFlowPosition, getInternalNode, setWaypoints, grid]
   );
 
   const edgeActions = useMemo<EdgeActions>(
-    () => ({ setWaypoints, vertex, selectVertex: setVertex, openVertexMenu, linking: Boolean(linking) }),
-    [setWaypoints, vertex, openVertexMenu, linking]
+    () => ({ setWaypoints, vertex, selectVertex: setVertex, openVertexMenu, linking: Boolean(linking), grid }),
+    [setWaypoints, vertex, openVertexMenu, linking, grid]
   );
 
   /**
@@ -664,6 +705,12 @@ function CanvasInner({
 
   const selectFromLayer = useCallback(
     (id: string) => {
+      // Elemento que o painel de opcoes acabou de criar (Duplicar) ainda nao
+      // chegou ao canvas: a selecao espera pela proxima montagem.
+      if (!nodesRef.current.some((node) => node.id === id) && !findEdge(topologyRef.current, id)) {
+        pendingSelection.current = id;
+        return;
+      }
       setNodes((current) => current.map((node) => ({ ...node, selected: node.id === id })));
       setEdges((current) => current.map((edge) => ({ ...edge, selected: edge.id === id })));
       revealElement(id);
@@ -736,8 +783,8 @@ function CanvasInner({
               // seleciona-lo e quebra a ordem de camadas que `useFlowElements` monta.
               elevateNodesOnSelect={false}
               deleteKeyCode={editable ? ['Delete', 'Backspace'] : null}
-              snapToGrid={canvas.snapToGrid}
-              snapGrid={[canvas.gridSize, canvas.gridSize]}
+              // Encaixe feito em `onNodesChange` (pelo centro, e com o grupo).
+              snapToGrid={false}
               colorMode={theme.isDark ? 'dark' : 'light'}
               proOptions={{ hideAttribution: true }}
               fitView
@@ -812,6 +859,8 @@ function CanvasInner({
                 onDelete={handleDelete}
                 onReorder={handleReorder}
                 onReverse={handleReverse}
+                onGroup={handleGroup}
+                onUngroup={handleUngroup}
                 onAddVertex={addVertexAtMenu}
                 onRemoveVertex={removeVertex}
                 onClearPath={(id) => setWaypoints(id, undefined)}

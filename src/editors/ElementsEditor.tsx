@@ -155,6 +155,21 @@ function ElementsLayer({
     canvas?.select(id);
   };
 
+  /**
+   * Duplicar **abre a copia** e a seleciona no canvas. Antes o cartao continuava
+   * no original — e como a copia nasce por cima dele, quem seguia editando
+   * mexia no original achando que mexia na copia.
+   */
+  const duplicate = (id: string) => {
+    const next = duplicateElement(value, id);
+    onChange(next);
+    const copy = newestId(value, next);
+    if (copy) {
+      setOpenId(copy);
+      canvas?.select(copy);
+    }
+  };
+
   const remove = (id: string) => {
     if (openId === id) {
       setOpenId(undefined);
@@ -211,12 +226,7 @@ function ElementsLayer({
               </span>
             </div>
             {open.kind !== 'edge' && (
-              <button
-                type="button"
-                className={styles.headButton}
-                title="Duplicar"
-                onClick={() => onChange(duplicateElement(value, open.id))}
-              >
+              <button type="button" className={styles.headButton} title="Duplicar" onClick={() => duplicate(open.id)}>
                 Duplicar
               </button>
             )}
@@ -234,7 +244,13 @@ function ElementsLayer({
             </button>
           </div>
           <div className={styles.cardBody}>
-            <ElementForm row={open} topology={value} frames={frames} onChange={onChange} />
+            {/* `key` pelo id: trocar de elemento **recria** o formulario. Sem
+                isso o React reaproveitava a mesma instancia, e o estado local
+                dos campos (rascunho de texto, modo Campo|Host+Item, host
+                escolhido) passava de um elemento para o outro — abrir o original
+                depois de editar a copia mostrava os valores da copia, e editar
+                ali gravava esses valores no elemento errado. */}
+            <ElementForm key={open.id} row={open} topology={value} frames={frames} onChange={onChange} />
           </div>
         </div>
       )}
@@ -270,7 +286,7 @@ function ElementsLayer({
                     highlight={selectedSet.has(row.id)}
                     reveal={!bulkMode}
                     onOpen={() => openRow(row.id)}
-                    onDuplicate={row.kind === 'edge' ? undefined : () => onChange(duplicateElement(value, row.id))}
+                    onDuplicate={row.kind === 'edge' ? undefined : () => duplicate(row.id)}
                     onDelete={() => remove(row.id)}
                   />
                 ))}

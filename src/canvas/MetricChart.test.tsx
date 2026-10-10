@@ -51,18 +51,33 @@ describe('MetricChart', () => {
     expect(screen.getByText('A métrica não está nas séries deste painel.')).toBeInTheDocument();
   });
 
-  /** Uma métrica: a legenda Name / Last / Max / Mean, como no mockup. */
-  it('uma métrica: desenha a série e a legenda com último, máximo e média', () => {
+  /**
+   * Uma métrica tem o mesmo desenho de várias — nome e último valor no topo.
+   * A legenda Name / Last / Max / Mean de antes fazia o hover da Imagem (quase
+   * sempre com uma métrica) parecer outro produto ao lado do hover do Nó.
+   */
+  it('uma métrica: o mesmo desenho do Nó, com nome e último valor no topo', () => {
     const { container } = render(<MetricChart frames={[serie('cpu')]} metrics={[metric('cpu')]} />);
 
     expect(container.querySelector('polyline')).toBeInTheDocument();
-    expect(screen.getByText('Last *')).toBeInTheDocument();
     expect(screen.getByText('cpu')).toBeInTheDocument();
-    // Último 30, máximo 30 e média 20 na legenda (e os mesmos números nos ticks do eixo).
-    const legenda = container.querySelectorAll('[class*="css"] > span');
-    const textos = Array.from(legenda).map((el) => el.textContent);
-    expect(textos.filter((t) => t === '30').length).toBeGreaterThanOrEqual(2);
-    expect(textos).toContain('20');
+    expect(screen.queryByText('Last *')).not.toBeInTheDocument();
+    const textos = Array.from(container.querySelectorAll('span')).map((el) => el.textContent);
+    expect(textos).toContain('30');
+  });
+
+  it('métrica de texto: avisa que não há gráfico, em vez de culpar a coluna de tempo', () => {
+    const texto = toDataFrame({
+      fields: [
+        { name: 'time', type: FieldType.time, values: [1, 2] },
+        { name: 'status', type: FieldType.string, values: ['up', 'down'] },
+      ],
+    });
+    cacheFieldDisplayNames([texto]);
+
+    render(<MetricChart frames={[texto]} metrics={[metric('status')]} />);
+
+    expect(screen.getByText(/Métrica de texto/)).toBeInTheDocument();
   });
 
   it('as regras de threshold viram linhas tracejadas com rótulo', () => {

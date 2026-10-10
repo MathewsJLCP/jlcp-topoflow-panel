@@ -302,6 +302,7 @@ describe('NodeForm — thresholds do elemento', () => {
     });
 
     fireEvent.change(screen.getByLabelText('Valor da regra 1'), { target: { value: '95' } });
+    fireEvent.blur(screen.getByLabelText('Valor da regra 1'));
 
     expect(result()?.thresholds?.steps).toEqual([{ type: 'threshold', value: 95, color: 'red', label: 'crítico' }]);
   });

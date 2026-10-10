@@ -230,7 +230,7 @@ describe('listTriggers', () => {
 });
 
 describe('listItems', () => {
-  it('pede so item numerico e expande o nome como o datasource faz', async () => {
+  it('pede item numerico e de texto (sem binario) e expande o nome como o datasource faz', async () => {
     postResource
       .mockReturnValueOnce(responde([{ hostid: '10084', name: 'AGLIN-FW' }]))
       .mockReturnValueOnce(responde([{ itemid: '9', name: 'CPU $2 time', key_: 'system.cpu.util[,system,avg1]' }]));
@@ -238,7 +238,7 @@ describe('listItems', () => {
     const items = await listItems('zbx', 'AGLIN-FW');
 
     expect(chamada(1).method).toBe('item.get');
-    expect(chamada(1).params).toMatchObject({ hostids: ['10084'], filter: { value_type: [0, 3] } });
+    expect(chamada(1).params).toMatchObject({ hostids: ['10084'], filter: { value_type: [0, 1, 2, 3, 4] } });
     expect(items[0].name).toBe('CPU system time');
   });
 });

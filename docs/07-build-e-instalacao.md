@@ -29,16 +29,16 @@ dist/
 O zip precisa ter **uma pasta com o nome do id do plugin na raiz**:
 
 ```bash
-cd dist && zip -qr ../jlcp-topoflow-panel-1.1.0.zip . && cd ..
+mkdir -p releases && cd dist && zip -qr ../releases/jlcp-topoflow-panel-1.1.0.zip . && cd ..
 ```
 
 Se a sua versão do `zip` não criar a pasta wrapper, faça o staging explícito:
 
 ```bash
-mkdir -p /tmp/pkg/jlcp-topoflow-panel
+mkdir -p /tmp/pkg/jlcp-topoflow-panel releases
 cp -r dist/. /tmp/pkg/jlcp-topoflow-panel/
-(cd /tmp/pkg && zip -qr ~/jlcp-topoflow-panel-1.1.0.zip jlcp-topoflow-panel)
-sha1sum ~/jlcp-topoflow-panel-1.1.0.zip
+(cd /tmp/pkg && zip -qr "$OLDPWD/releases/jlcp-topoflow-panel-1.1.0.zip" jlcp-topoflow-panel)
+sha1sum releases/jlcp-topoflow-panel-1.1.0.zip
 ```
 
 O resultado tem que abrir assim:

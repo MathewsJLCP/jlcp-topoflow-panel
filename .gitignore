@@ -48,8 +48,7 @@ ci/
 .eslintcache
 
 # Pacote instalavel gerado por `npm run build` + zip
-/jlcp-topoflow-panel-*.zip
-/jlcp-topoflow-panel-*.zip.sha1
+/releases/
 
 # Arquivos locais de trabalho
 /shot-*.png

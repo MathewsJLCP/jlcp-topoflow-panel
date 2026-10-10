@@ -49,15 +49,20 @@ function setup(overrides: Partial<TopoImage> = {}) {
 
 const toggle = () => screen.getByRole('switch', { name: 'Background' });
 
+/** A Imagem nova nasce na Biblioteca; o arquivo fica a um clique. */
+const paraArquivo = () => fireEvent.click(screen.getByRole('radio', { name: 'Arquivo ou URL' }));
+
 describe('ImageForm — arquivo e texto', () => {
   it('oferece envio e URL como caminhos para a mesma coisa', () => {
     setup();
+    paraArquivo();
 
     expect(screen.getByLabelText('URL da imagem')).toBeInTheDocument();
   });
 
   it('a URL colada vira o `src` do elemento', () => {
     const { result } = setup();
+    paraArquivo();
 
     fireEvent.change(screen.getByLabelText('URL da imagem'), { target: { value: 'https://x/logo.png' } });
 
@@ -115,6 +120,19 @@ describe('ImageForm — figura da biblioteca', () => {
 
     expect(modo('Arquivo ou URL')).toBeChecked();
     expect(screen.getByLabelText('URL da imagem')).toBeInTheDocument();
+  });
+
+  it('a Imagem nova abre em Biblioteca, no Roteador', () => {
+    setup();
+
+    expect(modo('Biblioteca')).toBeChecked();
+    expect(screen.getByLabelText('Ícone')).toHaveTextContent('Roteador');
+  });
+
+  it('sem figura nenhuma, abre em Biblioteca', () => {
+    setup({ src: '' });
+
+    expect(modo('Biblioteca')).toBeChecked();
   });
 
   it('abre em Biblioteca quando o `src` é uma chave do catálogo', () => {

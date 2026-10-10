@@ -21,6 +21,11 @@ import { HoverLayerContext } from './HoverLayer';
  * No dashboard, clicar num elemento em alarme **fixa** o popover (o operador
  * pode ler com calma); Esc ou um clique fora soltam. No editor o clique
  * seleciona, e com drill-down o clique navega — nos dois casos nao ha fixar.
+ *
+ * **O grafico nao abre no editor.** Ali o ponteiro passa sobre os elementos o
+ * tempo todo para arrastar e selecionar, e um painel de 470px abrindo a cada
+ * passada cobria justamente o que se estava editando. A lista de incidentes
+ * continua: ela e pequena e e o que explica a cor do elemento.
  */
 interface ElementHoverProps {
   accent: ElementColor;
@@ -51,7 +56,7 @@ export function ElementHover({ accent, title, editable, linked, dragging, chart,
   const [pos, setPos] = useState<{ x: number; y: number } | undefined>();
 
   const problems = accent.state === 'trigger' ? accent.problems : EMPTY;
-  const kind = problems.length > 0 ? 'inc' : chart ? 'chart' : undefined;
+  const kind = problems.length > 0 ? 'inc' : chart && !editable ? 'chart' : undefined;
   const pinnable = kind === 'inc' && !editable && !linked;
 
   if (!pinnable && pinned) {

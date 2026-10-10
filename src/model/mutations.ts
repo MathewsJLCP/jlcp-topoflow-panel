@@ -1,5 +1,6 @@
 import { XYPosition } from '@xyflow/react';
 
+import { STARTER_ICON_REF } from '../icons/registry';
 import { DEFAULT_EDGE_WIDTH, DEVICE_NODE_HEIGHT, DEVICE_NODE_WIDTH, IMAGE_DEFAULT, POSTIT_DEFAULT } from './sizes';
 import {
   ELEMENT_COLLECTION,
@@ -24,13 +25,23 @@ const POSTIT_SIZE = { width: POSTIT_DEFAULT.width, height: POSTIT_DEFAULT.height
 const IMAGE_SIZE = { width: IMAGE_DEFAULT.width, height: IMAGE_DEFAULT.height };
 
 /**
- * Elemento novo nasce **sem cor**.
+ * Base com que no, point, imagem e conexao nascem: o verde de "OK" do mockup
+ * (`ok`, `rgb(34, 197, 94)`).
  *
- * `{}` percorre a cadeia do Anexo A ate o nivel 3 e renderiza neutro. O valor
- * anterior era `{ fixed: 'text' }`, e `'text'` e um nome de cor valido do
- * Grafana que resolve para `text.primary` — quase branco no dark. Um no
- * recem-arrastado nao pode parecer "OK" nem "erro" antes de ter binding.
+ * Ate a v1.4 o elemento nascia sem cor (`{}`), para nao parecer "OK" antes de
+ * ter vinculo. A decisao foi revista a pedido do cliente: a Base so vale quando
+ * nenhuma regra casa, e "sem dados" continua visivelmente diferente dela — a
+ * cadeia de cor cai em `nodata` antes de chegar a Base. Hex, e nao o nome
+ * `green`: o seletor de cor do Grafana desenharia o nome com o verde dele
+ * (`#73BF69`), e a amostra no editor discordaria do elemento no canvas.
+ *
+ * Nunca `{ fixed: 'text' }`: `'text'` resolve para `text.primary`, quase branco
+ * no dark.
  */
+export const DEFAULT_BASE_COLOR = '#22C55E';
+const BASE_COLOR = { fixed: DEFAULT_BASE_COLOR };
+
+/** O texto continua nascendo sem cor: ele tem o proprio fallback (`tx2`). */
 const NO_COLOR = {} as const;
 
 /** Ids curtos e legiveis. Nao precisam ser globalmente unicos, so unicos aqui. */
@@ -70,14 +81,15 @@ export function addElement(topology: Topology, kind: ElementKind, position: XYPo
         id,
         position,
         size: NODE_SIZE,
-        presentation: { showIcon: true, primaryText: { mode: 'fixed', fixed: id } },
-        color: NO_COLOR,
+        // O Roteador do pack Padrao: no sem icone nascia com o "desconhecido".
+        presentation: { showIcon: true, icon: STARTER_ICON_REF, primaryText: { mode: 'fixed', fixed: id } },
+        color: BASE_COLOR,
         zIndex,
       };
       return { ...topology, nodes: [...topology.nodes, node] };
     }
     case 'point': {
-      const point: TopoPoint = { id, position, color: NO_COLOR, zIndex };
+      const point: TopoPoint = { id, position, color: BASE_COLOR, zIndex };
       return { ...topology, points: [...topology.points, point] };
     }
     case 'postit': {
@@ -109,18 +121,18 @@ export function addElement(topology: Topology, kind: ElementKind, position: XYPo
       return { ...topology, texts: [...topology.texts, text] };
     }
     case 'image': {
-      // Nasce **sem** `src`: quem escolhe o arquivo e o editor, e um placeholder
-      // visivel no canvas e o que diz onde clicar para escolhe-lo. Nasce tambem
-      // sem fundo — o toggle desligado e o pedido, e uma placa por padrao
-      // esconderia a transparencia que a maioria dos PNGs de icone usa.
+      // Nasce com a Figura na **Biblioteca** (o Roteador): era o caso dominante,
+      // e um placeholder vazio obrigava a trocar de modo toda vez. Nasce sem
+      // fundo — o toggle desligado e o pedido, e uma placa por padrao
+      // esconderia a transparencia que a maioria dos icones usa.
       const image: TopoImage = {
         id,
         position,
         size: IMAGE_SIZE,
-        src: '',
+        src: STARTER_ICON_REF,
         fit: 'contain',
         fontSize: IMAGE_DEFAULT.fontSize,
-        color: NO_COLOR,
+        color: BASE_COLOR,
         zIndex,
       };
       return { ...topology, images: [...topology.images, image] };
@@ -160,8 +172,18 @@ export function duplicateElement(topology: Topology, id: string): Topology {
 
   const { kind, element } = found;
   const collection = ELEMENT_COLLECTION[kind];
+  // A copia nasce fora do grupo: entrar nele sozinha faria o original e o clone
+  // andarem juntos sem ninguem ter pedido.
+  //
+  // Copia **profunda**: o espalhamento raso deixava a copia compartilhando com o
+  // original cada objeto aninhado (vinculo, regras, metricas extras). Nenhuma
+  // escrita do plugin altera objeto no lugar, mas uma copia que aponta para os
+  // mesmos objetos e uma configuracao so com dois nomes — basta uma mutacao em
+  // qualquer ponto do caminho para editar um mexer no outro. O modelo e JSON por
+  // construcao (vive em `panel.options`), entao o ida-e-volta e exato.
+  const { groupId: _group, ...rest } = JSON.parse(JSON.stringify(element)) as typeof element;
   const copy = {
-    ...element,
+    ...rest,
     id: makeId(kind, topology),
     position: { x: element.position.x + DUPLICATE_OFFSET, y: element.position.y + DUPLICATE_OFFSET },
     zIndex: topZIndex(topology) + 1,
@@ -170,6 +192,17 @@ export function duplicateElement(topology: Topology, id: string): Topology {
   // A copia nao herda arestas: ligar o clone as mesmas pontas quase nunca e o
   // que se quer, e desfazer isso da mais trabalho do que refazer as conexoes.
   return { ...topology, [collection]: [...topology[collection], copy] } as Topology;
+}
+
+/**
+ * O id do elemento que `after` tem e `before` nao tinha — o recem-criado por
+ * `addElement` ou `duplicateElement`. Quem duplica precisa dele para selecionar
+ * a copia: deixar a selecao no original fazia o usuario editar o original
+ * achando que editava a copia, que nasce por cima dele.
+ */
+export function addedElementId(before: Topology, after: Topology): string | undefined {
+  const known = new Set(collectIds(before));
+  return collectIds(after).find((id) => !known.has(id));
 }
 
 export type PositionUpdate = { id: string; position: XYPosition };
@@ -352,7 +385,14 @@ export function canConnect(topology: Topology, source: string, target: string): 
     return false;
   }
 
-  return findEdgeBetween(topology, source, target) === undefined;
+  // So o **mesmo sentido** e repetido: A -> B e B -> A sao duas conexoes (dois
+  // enlaces, ou o caminho de ida e o de volta), e desenham como paralelas.
+  return findEdge(topology, source, target) === undefined;
+}
+
+/** Aresta que liga o par **neste sentido**, da origem ao destino. */
+export function findEdge(topology: Topology, source: string, target: string): TopoEdge | undefined {
+  return topology.edges.find((edge) => edge.source === source && edge.target === target);
 }
 
 /** Aresta que ja liga o par, em qualquer sentido. */
@@ -364,7 +404,7 @@ export function findEdgeBetween(topology: Topology, a: string, b: string): TopoE
 
 /**
  * Cria uma conexao. Devolve a topologia inalterada quando a conexao nao faz
- * sentido — auto-conexao ou par ja ligado. Rejeitar em silencio (e nao com
+ * sentido — auto-conexao ou par ja ligado no mesmo sentido. Rejeitar em silencio (e nao com
  * erro) e o que o gesto de arrastar handle pede: o usuario ja ve que nao pegou.
  */
 export function connect(topology: Topology, source: string, target: string): Topology {
@@ -379,7 +419,7 @@ export function connect(topology: Topology, source: string, target: string): Top
     style: 'solid',
     // `straight` e o padrao do projeto; `curved` e opcao no editor.
     shape: 'straight',
-    color: NO_COLOR,
+    color: BASE_COLOR,
     width: DEFAULT_EDGE_WIDTH,
     animation: 'none',
   };
@@ -486,4 +526,110 @@ export function findElement(topology: Topology, id: string): FoundElement | unde
     return { kind: 'image', element: image };
   }
   return undefined;
+}
+
+/* --- Grupos ------------------------------------------------------------------ */
+
+type Groupable = { id: string; groupId?: string };
+
+function groupables(topology: Topology): Groupable[] {
+  return [...topology.nodes, ...topology.points, ...topology.postits, ...topology.texts, ...topology.images];
+}
+
+/** O grupo de cada elemento agrupado, por id. */
+export function groupOf(topology: Topology): Map<string, string> {
+  const map = new Map<string, string>();
+  for (const item of groupables(topology)) {
+    if (item.groupId) {
+      map.set(item.id, item.groupId);
+    }
+  }
+  return map;
+}
+
+/** Ids dos elementos do grupo, na ordem da topologia. */
+export function groupMembers(topology: Topology, groupId: string): string[] {
+  return groupables(topology)
+    .filter((item) => item.groupId === groupId)
+    .map((item) => item.id);
+}
+
+function makeGroupId(topology: Topology): string {
+  const taken = new Set(groupOf(topology).values());
+  for (let i = 1; ; i++) {
+    const id = `group-${i}`;
+    if (!taken.has(id)) {
+      return id;
+    }
+  }
+}
+
+function stampGroup(topology: Topology, ids: Set<string>, groupId: string | undefined): Topology {
+  const stamp = <T extends Groupable>(items: T[]) =>
+    items.map((item) => {
+      if (!ids.has(item.id)) {
+        return item;
+      }
+      // Desagrupar **apaga** o campo, e nao grava `undefined`: ausente e o
+      // estado de quem nunca foi agrupado, e o JSON salvo continua igual ao de
+      // antes do grupo.
+      const next: T = { ...item };
+      delete next.groupId;
+      return groupId ? { ...next, groupId } : next;
+    });
+
+  return {
+    ...topology,
+    nodes: stamp(topology.nodes),
+    points: stamp(topology.points),
+    postits: stamp(topology.postits),
+    texts: stamp(topology.texts),
+    images: stamp(topology.images),
+  };
+}
+
+/**
+ * Junta os elementos num grupo novo.
+ *
+ * Quem ja estava num grupo **sai dele** para o novo, e o grupo antigo inteiro
+ * vem junto: agrupar um elemento de um grupo com outro solto e, para quem
+ * selecionou, juntar o que esta na tela — e o grupo antigo esta inteiro na tela,
+ * porque o clique seleciona o grupo todo. Conexoes nao tem grupo: elas ja andam
+ * com as pontas.
+ *
+ * Menos de dois elementos nao forma grupo, e a topologia volta inalterada.
+ */
+export function groupElements(topology: Topology, ids: string[]): Topology {
+  const groups = groupOf(topology);
+  const known = new Set(groupables(topology).map((item) => item.id));
+  const members = new Set(ids.filter((id) => known.has(id)));
+
+  for (const id of [...members]) {
+    const groupId = groups.get(id);
+    if (groupId) {
+      groupMembers(topology, groupId).forEach((member) => members.add(member));
+    }
+  }
+
+  if (members.size < 2) {
+    return topology;
+  }
+
+  return stampGroup(topology, members, makeGroupId(topology));
+}
+
+/** Desfaz o grupo inteiro de cada elemento informado. */
+export function ungroupElements(topology: Topology, ids: string[]): Topology {
+  const groups = groupOf(topology);
+  const doomed = new Set(ids.map((id) => groups.get(id)).filter((g): g is string => Boolean(g)));
+  if (doomed.size === 0) {
+    return topology;
+  }
+
+  const members = new Set<string>();
+  for (const groupId of doomed) {
+    groupMembers(topology, groupId).forEach((member) => members.add(member));
+  }
+
+  return stampGroup(topology, members, undefined);
 }

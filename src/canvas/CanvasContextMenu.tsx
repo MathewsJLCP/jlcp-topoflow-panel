@@ -15,7 +15,18 @@ import { FONT_MONO, FONT_SANS, TfPalette, tfPalette } from '../theme/palette';
  */
 export type MenuState =
   | { kind: 'pane'; x: number; y: number }
-  | { kind: 'element'; elementKind: ElementKind; x: number; y: number; id: string; label: string }
+  | {
+      kind: 'element';
+      elementKind: ElementKind;
+      x: number;
+      y: number;
+      id: string;
+      label: string;
+      /** Selecao que o "Agrupar" juntaria. Ausente = nao ha o que agrupar. */
+      selection?: string[];
+      /** O elemento ja esta num grupo: oferece "Desagrupar". */
+      grouped?: boolean;
+    }
   | { kind: 'edge'; x: number; y: number; id: string; label: string; hasWaypoints: boolean }
   | { kind: 'vertex'; x: number; y: number; id: string; label: string; index: number };
 
@@ -30,6 +41,8 @@ interface Props {
   onDelete: (id: string) => void;
   onReorder: (id: string, command: OrderCommand) => void;
   onReverse: (id: string) => void;
+  onGroup: (ids: string[]) => void;
+  onUngroup: (id: string) => void;
   onAddVertex: (id: string) => void;
   onRemoveVertex: (id: string, index: number) => void;
   onClearPath: (id: string) => void;
@@ -122,7 +135,11 @@ function menuItems(p: Props): Item[] {
       ];
     case 'element': {
       const linkable = state.elementKind === 'node' || state.elementKind === 'point' || state.elementKind === 'image';
+      const selection = state.selection;
       return [
+        ...(selection ? [{ label: `Agrupar (${selection.length})`, run: () => p.onGroup(selection) }] : []),
+        ...(state.grouped ? [{ label: 'Desagrupar', run: () => p.onUngroup(state.id) }] : []),
+        ...(selection || state.grouped ? ['sep' as const] : []),
         ...(linkable ? [{ label: 'Linkar', run: () => p.onLink(state.id) }] : []),
         ...(state.elementKind === 'postit'
           ? [

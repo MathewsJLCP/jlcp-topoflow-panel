@@ -1,6 +1,6 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { css } from '@emotion/css';
-import { GrafanaTheme2, colorManipulator } from '@grafana/data';
+import { GrafanaTheme2 } from '@grafana/data';
 import { ColorPicker, Combobox, ComboboxOption, IconButton, Input, useStyles2, useTheme2 } from '@grafana/ui';
 
 import { hasStateBinding } from '../data/dimensions';
@@ -24,7 +24,8 @@ import {
   Severity,
   SpecialMatch,
 } from '../model/types';
-import { FONT_SANS, TfPalette, resolveTfColor, tfPalette } from '../theme/palette';
+import { DEFAULT_BASE_COLOR } from '../model/mutations';
+import { FONT_SANS, TfPalette, tfPalette } from '../theme/palette';
 import { FieldLabel } from './FieldLabel';
 import { DashedButton } from './ui/Section';
 import { TfSelect } from './ui/TfSelect';
@@ -319,7 +320,11 @@ export function BaseRow({
           Limpar
         </button>
       ) : (
-        <button type="button" className={styles.baseDefine} onClick={() => onChange({ ...color, fixed: '#3B82F6' })}>
+        <button
+          type="button"
+          className={styles.baseDefine}
+          onClick={() => onChange({ ...color, fixed: DEFAULT_BASE_COLOR })}
+        >
           Definir cor
         </button>
       )}
@@ -364,12 +369,14 @@ function SeverityLadder({ info, thresholds, alert, animations, onChange }: Sever
             aria-label={`Atender ${SEVERITY_LABEL[severity]}`}
             onChange={(event) => patch(severity, { enabled: event.currentTarget.checked })}
           />
-          <ColorSwatch
-            label={`Cor de ${SEVERITY_LABEL[severity]}`}
-            color={color ?? tfPalette(theme).apa}
-            small
-            onChange={(next) => patch(severity, { color: next })}
-          />
+          {/* A mesma bolinha do Grafana das regras de metrica e da Base. */}
+          <span className={styles.sevSwatch} aria-label={`Cor de ${SEVERITY_LABEL[severity]}`}>
+            <ColorPicker
+              enableNamedColors
+              color={color ?? tfPalette(theme).apa}
+              onChange={(next) => patch(severity, { color: next })}
+            />
+          </span>
           <div className={styles.sevName}>
             <span>{SEVERITY_LABEL[severity]}</span>
             {!enabled && <span className={styles.ignored}>ignorada</span>}
@@ -387,40 +394,6 @@ function SeverityLadder({ info, thresholds, alert, animations, onChange }: Sever
   );
 }
 
-/** O quadrado de cor do mockup: um `input type=color`, com o valor salvo resolvido para hex. */
-function ColorSwatch({
-  label,
-  color,
-  small,
-  onChange,
-}: {
-  label: string;
-  color: string;
-  small?: boolean;
-  onChange: (next: string) => void;
-}) {
-  const styles = useStyles2(getStyles);
-  const theme = useTheme2();
-  const hex = toHex(resolveTfColor(color, theme));
-  return (
-    <input
-      type="color"
-      aria-label={label}
-      className={small ? styles.swatchSmall : styles.swatch}
-      value={hex}
-      onChange={(event) => onChange(event.currentTarget.value.toUpperCase())}
-    />
-  );
-}
-
-function toHex(color: string): string {
-  try {
-    return colorManipulator.asHexString(color).slice(0, 7);
-  } catch {
-    return '#000000';
-  }
-}
-
 interface RuleConditionProps {
   rule: MetricRule;
   index: number;
@@ -433,11 +406,10 @@ function RuleCondition({ rule, index, onChange }: RuleConditionProps) {
   switch (rule.type) {
     case 'threshold':
       return (
-        <Input
-          type="number"
+        <NumberDraft
           value={rule.value}
           aria-label={`Valor da regra ${position}`}
-          onChange={(event) => onChange({ value: toNumber(event.currentTarget.value, rule.value) })}
+          onCommit={(value) => onChange({ value })}
         />
       );
     case 'value':
@@ -452,19 +424,17 @@ function RuleCondition({ rule, index, onChange }: RuleConditionProps) {
     case 'range':
       return (
         <>
-          <Input
-            type="number"
+          <NumberDraft
             value={rule.from}
             placeholder="De"
             aria-label={`Início da faixa da regra ${position}`}
-            onChange={(event) => onChange({ from: toNumber(event.currentTarget.value, rule.from) })}
+            onCommit={(from) => onChange({ from })}
           />
-          <Input
-            type="number"
+          <NumberDraft
             value={rule.to}
             placeholder="Até"
             aria-label={`Fim da faixa da regra ${position}`}
-            onChange={(event) => onChange({ to: toNumber(event.currentTarget.value, rule.to) })}
+            onCommit={(to) => onChange({ to })}
           />
         </>
       );
@@ -511,19 +481,71 @@ function newRule(type: MetricRuleType, rules: ElementRule[]): MetricRule {
   }
 }
 
-function toNumber(raw: string, fallback: number): number {
-  const parsed = Number(raw);
-  return raw.trim() !== '' && Number.isFinite(parsed) ? parsed : fallback;
+function parseNumber(raw: string): number | undefined {
+  const parsed = Number(raw.replace(',', '.'));
+  return raw.trim() !== '' && Number.isFinite(parsed) ? parsed : undefined;
+}
+
+/**
+ * Campo numerico da regra que **so grava ao sair do campo** (ou no Enter).
+ *
+ * Gravar a cada tecla, como era, tinha dois defeitos que juntos tornavam o
+ * threshold quase impossivel de editar:
+ *
+ *   - a lista e reordenada a cada escrita (`sortRules`, do maior para o menor),
+ *     e a linha e chaveada pelo indice: digitar `1` para chegar a `100` numa
+ *     lista que ja tinha `50` levava a regra para baixo no meio da digitacao, e o
+ *     `0` seguinte caia na regra **vizinha**;
+ *   - campo vazio voltava ao valor anterior na hora, entao nao dava para apagar
+ *     o numero e digitar outro — nem comecar por `-` ou por `0,`.
+ *
+ * O rascunho vive aqui ate o commit; valor invalido ao sair volta ao salvo.
+ */
+function NumberDraft({
+  value,
+  placeholder,
+  onCommit,
+  'aria-label': ariaLabel,
+}: {
+  value: number;
+  placeholder?: string;
+  onCommit: (value: number) => void;
+  'aria-label': string;
+}) {
+  const [draft, setDraft] = useState<string | undefined>();
+
+  const commit = () => {
+    if (draft === undefined) {
+      return;
+    }
+    const parsed = parseNumber(draft);
+    setDraft(undefined);
+    if (parsed !== undefined && parsed !== value) {
+      onCommit(parsed);
+    }
+  };
+
+  return (
+    <Input
+      inputMode="decimal"
+      value={draft ?? String(value)}
+      placeholder={placeholder}
+      aria-label={ariaLabel}
+      onChange={(event) => setDraft(event.currentTarget.value)}
+      onBlur={commit}
+      onKeyDown={(event) => {
+        if (event.key === 'Enter') {
+          commit();
+        } else if (event.key === 'Escape') {
+          setDraft(undefined);
+        }
+      }}
+    />
+  );
 }
 
 const getStyles = (theme: GrafanaTheme2) => {
   const p: TfPalette = tfPalette(theme);
-  const swatch = {
-    padding: 0,
-    border: `1px solid ${p.borda}`,
-    background: 'none',
-    cursor: 'pointer',
-  };
   return {
     block: css({ display: 'flex', flexDirection: 'column', gap: 8 }),
     label: css({ font: `500 11.5px/1.35 ${FONT_SANS}`, color: p.rot }),
@@ -541,8 +563,7 @@ const getStyles = (theme: GrafanaTheme2) => {
       border: `1px solid ${theme.colors.border.weak}`,
       borderRadius: theme.shape.radius.default,
     }),
-    swatch: css({ ...swatch, width: 26, height: 26, borderRadius: 6 }),
-    swatchSmall: css({ ...swatch, width: 26, height: 22, borderRadius: 5 }),
+    sevSwatch: css({ display: 'flex', justifySelf: 'center' }),
     condition: css({
       flex: '1 1 88px',
       minWidth: 0,

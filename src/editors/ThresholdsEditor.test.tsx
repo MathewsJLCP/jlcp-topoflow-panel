@@ -66,6 +66,7 @@ describe('ThresholdsEditor — contrato de edição', () => {
     const { rules } = setup(withRule({ type: 'threshold', value: 90, color: 'red', label: 'crítico' }));
 
     fireEvent.change(screen.getByLabelText('Valor da regra 1'), { target: { value: '95' } });
+    fireEvent.blur(screen.getByLabelText('Valor da regra 1'));
 
     expect(rules()).toEqual([{ type: 'threshold', value: 95, color: 'red', label: 'crítico' }]);
   });
@@ -81,8 +82,50 @@ describe('ThresholdsEditor — contrato de edição', () => {
     expect(screen.queryByLabelText('Texto exibido da regra 1')).not.toBeInTheDocument();
 
     fireEvent.change(screen.getByLabelText('Valor da regra 1'), { target: { value: '95' } });
+    fireEvent.blur(screen.getByLabelText('Valor da regra 1'));
 
     expect(rules()).toEqual([{ type: 'threshold', value: 95, color: 'red', label: 'crítico' }]);
+  });
+
+  /**
+   * O bug da digitacao: gravar a cada tecla reordenava a lista (thresholds do
+   * maior para o menor) no meio da edicao, e o campo vazio voltava na hora ao
+   * valor anterior. O rascunho so vira regra ao sair do campo.
+   */
+  it('digitar não grava nem reordena; sair do campo grava', () => {
+    const { onThresholdsChange, rules } = setup({
+      steps: [
+        { type: 'threshold', value: 90, color: 'red' },
+        { type: 'threshold', value: 50, color: 'orange' },
+      ],
+    });
+    const campo = screen.getByLabelText('Valor da regra 2');
+
+    fireEvent.change(campo, { target: { value: '' } });
+    expect(campo).toHaveValue('');
+    fireEvent.change(campo, { target: { value: '1' } });
+    fireEvent.change(campo, { target: { value: '100' } });
+    expect(onThresholdsChange).not.toHaveBeenCalled();
+
+    fireEvent.blur(campo);
+    expect(rules()).toEqual([
+      { type: 'threshold', value: 100, color: 'orange' },
+      { type: 'threshold', value: 90, color: 'red' },
+    ]);
+  });
+
+  it('Enter grava; valor inválido ao sair volta ao salvo', () => {
+    const { onThresholdsChange, rules } = setup(withRule({ type: 'threshold', value: 90, color: 'red' }));
+    const campo = screen.getByLabelText('Valor da regra 1');
+
+    fireEvent.change(campo, { target: { value: 'abc' } });
+    fireEvent.blur(campo);
+    expect(onThresholdsChange).not.toHaveBeenCalled();
+    expect(campo).toHaveValue('90');
+
+    fireEvent.change(campo, { target: { value: '-2,5' } });
+    fireEvent.keyDown(campo, { key: 'Enter' });
+    expect(rules()).toEqual([{ type: 'threshold', value: -2.5, color: 'red' }]);
   });
 
   /** Zero regras e a ausencia de regra: o objeto sai do JSON e vale a Base. */
@@ -156,6 +199,7 @@ describe('ThresholdsEditor — regra de dois campos', () => {
     const { rules } = setup(withRule({ type: 'range', from: 1, to: 5, color: 'blue' }));
 
     fireEvent.change(screen.getByLabelText('Fim da faixa da regra 1'), { target: { value: '9' } });
+    fireEvent.blur(screen.getByLabelText('Fim da faixa da regra 1'));
 
     expect(rules()).toEqual([{ type: 'range', from: 1, to: 9, color: 'blue' }]);
   });

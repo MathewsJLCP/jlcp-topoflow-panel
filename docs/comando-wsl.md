@@ -1,1 +1,1 @@
-cp -r "/home/mateus_domingos/TopoFlow/jlcp-topoflow-panel/jlcp-topoflow-panel-1.0.0.zip" "/mnt/c/Users/mateu/Downloads"
+cp -r "/home/mateus_domingos/TopoFlow/jlcp-topoflow-panel/releases/jlcp-topoflow-panel-1.0.0.zip" "/mnt/c/Users/mateu/Downloads"

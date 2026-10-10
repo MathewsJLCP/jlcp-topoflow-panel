@@ -28,6 +28,17 @@ const QUERY_TYPE_PROBLEMS = '5';
 const QUERY_TYPE_METRICS = '0';
 
 /**
+ * Query Mode *Text* (`MODE_TEXT`): os itens de texto e de caractere.
+ *
+ * O modo Metrics so devolve item numerico — o datasource filtra por `value_type`
+ * antes de buscar o historico. Item de texto (status, versao, serial) so chega
+ * pelo modo Text, que roda no frontend do datasource e devolve o mesmo formato
+ * de serie, com os mesmos labels `host`/`item` — entao `nameMetricFields` o
+ * batiza igual.
+ */
+const QUERY_TYPE_TEXT = '2';
+
+/**
  * Versao do modelo de query do datasource (`DS_QUERY_SCHEMA`).
  *
  * Carimbada para que os migradores dele tratem o alvo como atual. Todos sao
@@ -98,11 +109,19 @@ export function metricBindings(topology: Topology): MetricBinding[] {
       continue;
     }
 
-    const host = element.color.metric?.host.trim();
-    const item = element.color.metric?.item.trim();
+    /*
+      A primeira metrica (`color.metric`) **e as seguintes** (`extraMetrics`, v1.4).
+      As seguintes ficavam de fora: a segunda metrica de estado nunca era pedida
+      ao Zabbix e o elemento a mostrava "sem dados", com o dado sendo coletado
+      normalmente do outro lado.
+    */
+    for (const metric of [element.color.metric, ...(element.extraMetrics ?? []).map((extra) => extra.metric)]) {
+      const host = metric?.host.trim();
+      const item = metric?.item.trim();
 
-    if (host && item) {
-      guardar({ host, item });
+      if (host && item) {
+        guardar({ host, item });
+      }
     }
   }
 
@@ -137,7 +156,7 @@ export function metricFieldName({ host, item }: MetricBinding): string {
  * Corta no **primeiro** `": "`: nome de item costuma ter dois-pontos
  * (`Interface eth3: Bits received`), nome de host nao.
  */
-function splitMetricName(nome: string): MetricBinding | undefined {
+export function splitMetricName(nome: string): MetricBinding | undefined {
   const corte = nome.indexOf(': ');
 
   if (corte <= 0) {
@@ -172,6 +191,9 @@ function referencedFieldNames(topology: Topology): string[] {
     doTexto(node.presentation.primaryText);
     doTexto(node.presentation.secondaryText);
     nomes.push(node.value?.field);
+    // As metricas extras de "Exibir valor" — no modo Trigger, as unicas que o no
+    // tem. Ficavam de fora, e uma metrica escolhida ali nunca era buscada.
+    nomes.push(...(node.value?.fields ?? []));
   }
 
   for (const edge of topology.edges) {
@@ -208,17 +230,35 @@ export function metricTargets(bindings: MetricBinding[], datasource: { uid: stri
     porHost.set(host, [...(porHost.get(host) ?? []), item]);
   }
 
-  return [...porHost.entries()].map(([host, items], indice) => ({
-    ...baseTarget(datasource),
-    refId: `${METRICS_REF_PREFIX}${indice}`,
-    queryType: QUERY_TYPE_METRICS,
-    host: { filter: filterRegex([host]) },
-    item: { filter: filterRegex(items) },
-    // O backend le `functions` e `options` do alvo; sem a lista, a resposta vem
-    // sem processamento nenhum, que e exatamente o que queremos.
-    functions: [],
-    resultFormat: 'time_series',
-  })) as DataQuery[];
+  /*
+    Dois alvos por host — Metrics e Text — com o mesmo filtro de item. O painel
+    nao sabe o tipo de cada item (o vinculo guarda so o nome), e cada modo
+    devolve so o seu: o item numerico vem pelo primeiro, o de texto pelo segundo,
+    e nenhum chega duas vezes. O alvo de Text sem item de texto custa um
+    `item.get` (cacheado pelo datasource) e nenhum `history.get`.
+  */
+  return [...porHost.entries()].flatMap(([host, items], indice) => [
+    {
+      ...baseTarget(datasource),
+      refId: `${METRICS_REF_PREFIX}${indice}`,
+      queryType: QUERY_TYPE_METRICS,
+      host: { filter: filterRegex([host]) },
+      item: { filter: filterRegex(items) },
+      // O backend le `functions` e `options` do alvo; sem a lista, a resposta vem
+      // sem processamento nenhum, que e exatamente o que queremos.
+      functions: [],
+      resultFormat: 'time_series',
+    },
+    {
+      ...baseTarget(datasource),
+      refId: `${METRICS_REF_PREFIX}text-${indice}`,
+      queryType: QUERY_TYPE_TEXT,
+      host: { filter: filterRegex([host]) },
+      item: { filter: filterRegex(items) },
+      functions: [],
+      resultFormat: 'time_series',
+    },
+  ]) as DataQuery[];
 }
 
 /**

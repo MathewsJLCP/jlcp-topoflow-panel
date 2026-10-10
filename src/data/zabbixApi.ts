@@ -363,12 +363,14 @@ export async function listTriggers(uid: string, host: string): Promise<ZabbixTri
 }
 
 /**
- * Itens **numericos** do host — `value_type` 0 (float) e 3 (unsigned).
+ * Itens do host: numericos (`value_type` 0 float, 3 unsigned) **e de texto** (1
+ * caractere, 2 log, 4 texto).
  *
- * So numerico porque e o que o modo Metrica consegue ler: estado e "Exibir
- * valor" leem grandeza, e `isNumericField` em `./dimensions.ts` ja descarta o
- * resto. Oferecer um item de texto no combo seria oferecer uma escolha que o
- * painel nao honra.
+ * Ate a v1.4 o combo so trazia numerico, porque a query do painel so buscava o
+ * modo Metrics. Ela passou a buscar tambem o modo Text (ver `metricTargets`), e
+ * um item de texto — status, versao, serial — e exibivel em "Exibir valor", em
+ * `${...}` de rotulo e avaliavel pelas regras de Valor e Regex. Fica de fora so
+ * o binario (5), que nao vira texto nenhum.
  */
 export async function listItems(uid: string, host: string): Promise<ZabbixItemOption[]> {
   const id = await hostId(uid, host);
@@ -381,7 +383,7 @@ export async function listItems(uid: string, host: string): Promise<ZabbixItemOp
     hostids: [id],
     output: ['itemid', 'name', 'key_', 'units'],
     webitems: true,
-    filter: { value_type: [0, 3] },
+    filter: { value_type: [0, 1, 2, 3, 4] },
     sortfield: 'name',
     limit: LIMIT,
   });

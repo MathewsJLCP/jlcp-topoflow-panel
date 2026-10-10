@@ -229,12 +229,12 @@ describe('ElementHover — gráfico da métrica', () => {
     expect(screen.queryByTestId('grafico')).not.toBeInTheDocument();
   });
 
-  /** No editor o hover continua valendo: é onde o gráfico é configurado. */
-  it('o gráfico aparece também no modo de edição', () => {
+  /** No editor o ponteiro passa o tempo todo: o gráfico cobriria o que se edita. */
+  it('o gráfico não aparece no modo de edição', () => {
     montar({ state: 'neutral' }, { chart: GRAFICO, editable: true });
 
     fireEvent.focus(card());
 
-    expect(screen.getByTestId('grafico')).toBeInTheDocument();
+    expect(screen.queryByTestId('grafico')).not.toBeInTheDocument();
   });
 });

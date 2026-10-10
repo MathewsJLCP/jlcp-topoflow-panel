@@ -14,9 +14,14 @@ import { useTopoTime } from './timeContext';
  *
  * Uma serie por metrica de estado, na janela de tempo do dashboard: area com
  * gradiente no violeta de acento, linha de 1.6px, as regras de threshold da
- * metrica em linhas tracejadas com o rotulo `>= valor`. Com uma metrica, a
- * legenda embaixo (Name, Last, Max, Mean); com varias, um grafico mais baixo
- * por metrica, cada um com o nome e o ultimo valor no topo.
+ * metrica em linhas tracejadas com o rotulo `>= valor`. Um bloco por metrica,
+ * cada um com o nome e o ultimo valor no topo.
+ *
+ * **O mesmo desenho com uma metrica ou com varias.** Ate a v1.4 uma metrica so
+ * ganhava outro layout — grafico alto e a legenda Name / Last / Max / Mean
+ * embaixo —, e como a Imagem e o Point quase sempre tem uma metrica so, o hover
+ * deles parecia de outro produto ao lado do hover do No. O do No (o do mockup,
+ * com varias metricas) virou a referencia para todos.
  *
  * Os valores passam pelo `field.display` do Grafana: unidade, casas e value
  * mappings do painel valem aqui tambem.
@@ -52,8 +57,11 @@ function seriesOf(frames: DataFrame[], metric: StateMetric, theme: GrafanaTheme2
   if (!hit) {
     return { name, thresholds, message: 'A métrica não está nas séries deste painel.' };
   }
+  if (hit.field.type !== FieldType.number) {
+    return { name, field: hit.field, thresholds, message: 'Métrica de texto: não há gráfico para desenhar.' };
+  }
   const time = hit.frame.fields.find((f) => f.type === FieldType.time);
-  if (!time || hit.field.type !== FieldType.number) {
+  if (!time) {
     return {
       name,
       field: hit.field,
@@ -94,54 +102,19 @@ export function MetricChart({ frames, metrics }: MetricChartProps) {
     );
   }
 
-  const multi = series.length > 1;
   const fmt = (s: Series, v: number) => (s.field?.display ? formatDisplayValue(s.field.display(v)) : String(v));
 
   return (
     <div className={styles.wrap}>
       {series.map((s) => (
         <div key={s.name} className={styles.block}>
-          {multi && (
-            <div className={styles.head}>
-              <span className={styles.headName}>{s.name}</span>
-              <span className={styles.headLast}>{s.values ? fmt(s, s.values[s.values.length - 1]) : '—'}</span>
-            </div>
-          )}
-          {s.message ? (
-            <div className={styles.messageSmall}>{s.message}</div>
-          ) : (
-            <Plot series={s} multi={multi} fmt={fmt} />
-          )}
+          <div className={styles.head}>
+            <span className={styles.headName}>{s.name}</span>
+            <span className={styles.headLast}>{s.values ? fmt(s, s.values[s.values.length - 1]) : '—'}</span>
+          </div>
+          {s.message ? <div className={styles.messageSmall}>{s.message}</div> : <Plot series={s} fmt={fmt} />}
         </div>
       ))}
-
-      {!multi && (
-        <div className={styles.legend}>
-          <span className={styles.lh}>Name</span>
-          <span className={styles.lhr}>Last *</span>
-          <span className={styles.lhr}>Max</span>
-          <span className={styles.lhr}>Mean</span>
-          <span className={styles.lname}>
-            <span className={styles.swatch} />
-            <span className={styles.ellipsis}>{series[0].name}</span>
-          </span>
-          {series[0].values ? (
-            <>
-              <span className={styles.lv}>{fmt(series[0], series[0].values[series[0].values.length - 1])}</span>
-              <span className={styles.lv}>{fmt(series[0], Math.max(...series[0].values))}</span>
-              <span className={styles.lv}>
-                {fmt(series[0], series[0].values.reduce((a, b) => a + b, 0) / series[0].values.length)}
-              </span>
-            </>
-          ) : (
-            <>
-              <span className={styles.lv}>—</span>
-              <span className={styles.lv}>—</span>
-              <span className={styles.lv}>—</span>
-            </>
-          )}
-        </div>
-      )}
     </div>
   );
 }
@@ -169,20 +142,20 @@ function stackLabels<T extends { y: number }>(lines: T[]): Array<T & { ly: numbe
 
 const TIME_STEPS = [60, 120, 300, 600, 900, 1800, 3600, 7200, 10800, 21600, 43200, 86400].map((s) => s * 1000);
 
-function Plot({ series, multi, fmt }: { series: Series; multi: boolean; fmt: (s: Series, v: number) => string }) {
+function Plot({ series, fmt }: { series: Series; fmt: (s: Series, v: number) => string }) {
   const styles = useStyles2(getStyles);
   const theme = useTheme2();
   const p = tfPalette(theme);
   const gid = useId().replace(/:/g, '');
   const { timeRange, timeZone } = useTopoTime();
 
-  const H = multi ? 100 : 172;
-  const B = multi ? 78 : 150;
+  const H = 100;
+  const B = 78;
   const values = series.values!;
   const times = series.times!;
 
   const raw = Math.max(...values, ...series.thresholds.map((t) => t.value)) * 1.08 || 1;
-  const st0 = raw / (multi ? 3 : 4);
+  const st0 = raw / 3;
   const mag = Math.pow(10, Math.floor(Math.log10(st0)));
   const step = [1, 2, 2.5, 5, 10].map((m) => m * mag).find((m) => m >= st0) ?? mag * 10;
   const max = Math.ceil(raw / step) * step;
@@ -318,23 +291,5 @@ const getStyles = (theme: GrafanaTheme2) => {
       padding: '0 4px',
       whiteSpace: 'nowrap',
     }),
-    legend: css({
-      display: 'grid',
-      gridTemplateColumns: 'minmax(0,1fr) 72px 72px 72px',
-      columnGap: 8,
-      font: `12.5px ${FONT_SANS}`,
-    }),
-    lh: css({ padding: '4px 0 6px', fontWeight: 500, color: p['ac-t'], borderBottom: `1px solid ${p.linha}` }),
-    lhr: css({
-      padding: '4px 0 6px',
-      fontWeight: 500,
-      color: p['ac-t'],
-      textAlign: 'right',
-      borderBottom: `1px solid ${p.linha}`,
-    }),
-    lname: css({ display: 'flex', alignItems: 'center', gap: 8, padding: '6px 0', minWidth: 0, color: p.tx }),
-    swatch: css({ flex: 'none', width: 14, height: 3, borderRadius: 2, background: p.ac }),
-    ellipsis: css(ellipsis),
-    lv: css({ padding: '6px 0', textAlign: 'right', color: p.tx }),
   };
 };

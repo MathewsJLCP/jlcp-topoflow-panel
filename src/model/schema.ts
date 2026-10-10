@@ -425,6 +425,18 @@ export const drilldownSchema = z.object({
   targetBlank: z.boolean().optional(),
 });
 
+/**
+ * Grupo do elemento (v1.4). Elementos com o mesmo `groupId` andam juntos: o
+ * clique seleciona o grupo inteiro e arrastar um arrasta todos.
+ *
+ * **Ausente significa sem grupo**, como os demais opcionais do modelo — e por
+ * isso nao ha migrador. E um rotulo, e nao uma colecao `groups` na topologia:
+ * o grupo nao tem atributo nenhum alem de quem pertence a ele, e uma lista
+ * separada seria uma segunda fonte da verdade livre para discordar dos
+ * proprios elementos (um grupo apontando para um id que ja foi apagado).
+ */
+export const groupIdSchema = z.string().min(1).optional();
+
 export const topoNodeSchema = z.object({
   id: z.string().min(1),
   position: z.object({
@@ -492,6 +504,7 @@ export const topoNodeSchema = z.object({
    * tem dono: a lista de triggers em PROBLEM (ver `ElementHover`).
    */
   chart: z.boolean().optional(),
+  groupId: groupIdSchema,
   zIndex: z.number().int(),
 });
 
@@ -543,6 +556,7 @@ export const topoPointSchema = z.object({
   alert: elementAlertSchema.optional(),
   /** Grafico da metrica no hover. Ver `chart` em `topoNodeSchema`. */
   chart: z.boolean().optional(),
+  groupId: groupIdSchema,
   zIndex: z.number().int(),
 });
 
@@ -582,6 +596,7 @@ export const topoPostitSchema = z.object({
    * em que o traco se sustenta sobre o fundo do canvas nos dois temas.
    */
   borderWidth: z.number().min(0).max(10).default(2),
+  groupId: groupIdSchema,
   zIndex: z.number().int(),
 });
 
@@ -629,6 +644,7 @@ export const topoTextSchema = z.object({
   fontSize: z.number().min(8).max(72),
   /** Ausente = clicar no texto nao leva a lugar nenhum. */
   drilldown: drilldownSchema.optional(),
+  groupId: groupIdSchema,
   zIndex: z.number().int(),
 });
 
@@ -726,6 +742,7 @@ export const topoImageSchema = z.object({
   drilldown: drilldownSchema.optional(),
   /** Grafico da metrica no hover. Ver `chart` em `topoNodeSchema`. */
   chart: z.boolean().optional(),
+  groupId: groupIdSchema,
   zIndex: z.number().int(),
 });
 

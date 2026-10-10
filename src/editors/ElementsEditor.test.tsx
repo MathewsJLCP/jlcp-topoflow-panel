@@ -307,3 +307,25 @@ describe('ElementsEditor — edição em massa', () => {
     expect(select).toHaveBeenCalledWith('edge-router');
   });
 });
+
+/**
+ * O bug relatado: duplicar e seguir editando mexia no original. A cópia nasce
+ * por cima dele e o cartão continuava aberto no original — quem editava achava
+ * que editava a cópia.
+ */
+describe('ElementsEditor — Duplicar', () => {
+  const [node] = sampleTopology.nodes;
+
+  it('seleciona a cópia no canvas, e não o original', () => {
+    const onChange = jest.fn();
+    const editorProps = props(sampleTopology, onChange, [node.id]);
+
+    render(<ElementsEditor {...editorProps} />);
+    fireEvent.click(screen.getAllByRole('button', { name: 'Duplicar' })[0]);
+
+    const next: Topology = onChange.mock.calls[0][0];
+    const copy = next.nodes.at(-1)!;
+    expect(copy.id).not.toBe(node.id);
+    expect(editorProps.context.instanceState!.select).toHaveBeenCalledWith(copy.id);
+  });
+});

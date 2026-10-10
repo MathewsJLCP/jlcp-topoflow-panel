@@ -36,13 +36,13 @@ export function addTopoFlowOptions(builder: PanelOptionsEditorBuilder<TopoFlowOp
       description:
         'Desligado, o painel usa apenas as queries do dashboard — o comportamento padrão. Ligado, o editor sugere hosts e triggers do Zabbix e o painel busca os próprios dados.',
       defaultValue: false,
-      category: ['Zabbix'],
+      category: ['Zabbix API'],
     })
     .addCustomEditor({
       id: 'zabbix-datasource',
       path: 'zabbix.datasource',
       name: 'Datasource do Zabbix',
-      category: ['Zabbix'],
+      category: ['Zabbix API'],
       editor: ZabbixSourceField,
       defaultValue: undefined,
       showIf: (options) => options.zabbix?.enabled === true,

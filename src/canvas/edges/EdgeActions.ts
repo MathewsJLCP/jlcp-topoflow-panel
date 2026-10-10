@@ -22,6 +22,8 @@ export interface EdgeActions {
   selectVertex: (vertex: SelectedVertex | undefined) => void;
   openVertexMenu: (event: React.MouseEvent, vertex: SelectedVertex) => void;
   linking: boolean;
+  /** Grid do encaixe, para os vertices; `undefined` com o encaixe desligado. */
+  grid?: number;
 }
 
 export const EdgeActionsContext = React.createContext<EdgeActions | undefined>(undefined);

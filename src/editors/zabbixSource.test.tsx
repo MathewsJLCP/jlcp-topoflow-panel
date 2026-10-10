@@ -2,7 +2,7 @@ import React from 'react';
 import { ComboboxOption } from '@grafana/ui';
 import { act, renderHook } from '@testing-library/react';
 
-import { ZabbixSourceProvider, useZabbixCatalog } from './zabbixSource';
+import { ZabbixSourceProvider, encurtar, useZabbixCatalog } from './zabbixSource';
 
 /**
  * O que este modulo decide e **de que lista o combo escolhe**. Testar isso pelo
@@ -118,5 +118,22 @@ describe('com catalogo do Zabbix', () => {
     });
 
     expect(result.current.error).toBe('403 sem permissão');
+  });
+});
+
+/** O menu do Combobox toma a largura da opção mais longa: a chave não pode esticá-lo. */
+describe('encurtar', () => {
+  it('texto curto fica como está', () => {
+    expect(encurtar('system.cpu.util')).toBe('system.cpu.util');
+  });
+
+  it('chave longa encurta pelo meio, mantendo o começo e o fim', () => {
+    const chave = 'perf_counter_en["\PhysicalDisk(0 C:)\Avg. Disk Write Queue Length",60]';
+    const curta = encurtar(chave);
+
+    expect(curta).toHaveLength(40);
+    expect(curta.startsWith('perf_counter_en')).toBe(true);
+    expect(curta.endsWith('Queue Length",60]')).toBe(true);
+    expect(curta).toContain('…');
   });
 });
