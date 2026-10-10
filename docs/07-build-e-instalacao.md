@@ -29,22 +29,22 @@ dist/
 O zip precisa ter **uma pasta com o nome do id do plugin na raiz**:
 
 ```bash
-mkdir -p releases && cd dist && zip -qr ../releases/jlcp-topoflow-panel-1.1.0.zip . && cd ..
+mkdir -p releases && cd dist && zip -qr ../releases/mdomingos-topoflow-panel-1.1.0.zip . && cd ..
 ```
 
 Se a sua versão do `zip` não criar a pasta wrapper, faça o staging explícito:
 
 ```bash
-mkdir -p /tmp/pkg/jlcp-topoflow-panel releases
-cp -r dist/. /tmp/pkg/jlcp-topoflow-panel/
-(cd /tmp/pkg && zip -qr "$OLDPWD/releases/jlcp-topoflow-panel-1.1.0.zip" jlcp-topoflow-panel)
-sha1sum releases/jlcp-topoflow-panel-1.1.0.zip
+mkdir -p /tmp/pkg/mdomingos-topoflow-panel releases
+cp -r dist/. /tmp/pkg/mdomingos-topoflow-panel/
+(cd /tmp/pkg && zip -qr "$OLDPWD/releases/mdomingos-topoflow-panel-1.1.0.zip" mdomingos-topoflow-panel)
+sha1sum releases/mdomingos-topoflow-panel-1.1.0.zip
 ```
 
 O resultado tem que abrir assim:
 
 ```
-jlcp-topoflow-panel/
+mdomingos-topoflow-panel/
 ├── module.js
 ├── plugin.json
 └── …
@@ -81,8 +81,8 @@ O caminho depende de como o Grafana foi instalado (`plugins` em
 | macOS (Homebrew) | `/opt/homebrew/var/lib/grafana/plugins` |
 
 ```bash
-sudo unzip jlcp-topoflow-panel-1.1.0.zip -d /var/lib/grafana/plugins/
-sudo chown -R grafana:grafana /var/lib/grafana/plugins/jlcp-topoflow-panel
+sudo unzip mdomingos-topoflow-panel-1.1.0.zip -d /var/lib/grafana/plugins/
+sudo chown -R grafana:grafana /var/lib/grafana/plugins/mdomingos-topoflow-panel
 ```
 
 ### 2. Liberar o carregamento sem assinatura
@@ -91,13 +91,13 @@ Em `grafana.ini` (ou `custom.ini`):
 
 ```ini
 [plugins]
-allow_loading_unsigned_plugins = jlcp-topoflow-panel
+allow_loading_unsigned_plugins = mdomingos-topoflow-panel
 ```
 
 Por variável de ambiente (Docker, systemd):
 
 ```
-GF_PLUGINS_ALLOW_LOADING_UNSIGNED_PLUGINS=jlcp-topoflow-panel
+GF_PLUGINS_ALLOW_LOADING_UNSIGNED_PLUGINS=mdomingos-topoflow-panel
 ```
 
 > Liste **apenas os ids necessários**. Um valor curinga desliga a verificação
@@ -114,7 +114,7 @@ Reiniciar é obrigatório: o `plugin.json` só é lido na inicialização.
 ### 4. Conferir
 
 ```bash
-curl -s http://localhost:3000/api/plugins?embedded=0 | grep -o 'jlcp-topoflow-panel'
+curl -s http://localhost:3000/api/plugins?embedded=0 | grep -o 'mdomingos-topoflow-panel'
 ```
 
 Ou pela interface: **Administration → Plugins**, filtrando por *Panel*. Deve
@@ -143,9 +143,9 @@ services:
     image: grafana/grafana-enterprise:13.1.0
     ports: ['3000:3000']
     volumes:
-      - ./jlcp-topoflow-panel:/var/lib/grafana/plugins/jlcp-topoflow-panel
+      - ./mdomingos-topoflow-panel:/var/lib/grafana/plugins/mdomingos-topoflow-panel
     environment:
-      GF_PLUGINS_ALLOW_LOADING_UNSIGNED_PLUGINS: jlcp-topoflow-panel
+      GF_PLUGINS_ALLOW_LOADING_UNSIGNED_PLUGINS: mdomingos-topoflow-panel
 ```
 
 É o que o `docker-compose.yaml` do repositório já faz, montando o `dist/`
@@ -153,7 +153,7 @@ diretamente — o ambiente de desenvolvimento não precisa de zip nem de cópia.
 
 ## Atualizar uma instalação existente
 
-1. Substitua o **conteúdo** da pasta `jlcp-topoflow-panel/` (não crie uma
+1. Substitua o **conteúdo** da pasta `mdomingos-topoflow-panel/` (não crie uma
    segunda pasta com outro nome — o id é o que importa).
 2. Reinicie o Grafana.
 3. Limpe o cache do navegador se o painel não mudar: o `module.js` é servido com

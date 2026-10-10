@@ -2,7 +2,7 @@
 
 ## O que é
 
-**TopoFlow** (`jlcp-topoflow-panel`) é um plugin de **painel** do Grafana que
+**TopoFlow** (`mdomingos-topoflow-panel`) é um plugin de **painel** do Grafana que
 desenha mapas de topologia editáveis dentro do dashboard: nós de equipamento,
 conexões, âncoras de roteamento, retângulos de agrupamento, textos e imagens.
 Cada elemento pode se vincular a um dado do painel — uma **métrica** ou uma

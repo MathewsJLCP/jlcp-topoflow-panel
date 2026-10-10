@@ -18,7 +18,7 @@
         "type": "grafana-testdata-datasource",
         "uid": "trlxrdZVk"
       },
-      "type": "jlcp-topoflow-panel",
+      "type": "mdomingos-topoflow-panel",
       "title": "Rede corporativa · Matriz",
       "gridPos": {
         "h": 26,

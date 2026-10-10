@@ -5,7 +5,7 @@ description: Receituário para desenvolver plugins de painel do Grafana em React
 
 # Plugin de painel do Grafana: o que fazer e o que evita retrabalho
 
-Destilado da construção do **TopoFlow** (`jlcp-topoflow-panel`), um painel de
+Destilado da construção do **TopoFlow** (`mdomingos-topoflow-panel`), um painel de
 topologia editável com ~730 testes. Cada regra aqui corrigiu um bug real.
 
 > **Sua memória sobre a API do Grafana está desatualizada.** Busque a

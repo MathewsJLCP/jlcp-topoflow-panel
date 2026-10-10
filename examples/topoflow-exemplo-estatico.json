@@ -8,7 +8,7 @@
   "links": [],
   "panels": [
     {
-      "type": "jlcp-topoflow-panel",
+      "type": "mdomingos-topoflow-panel",
       "title": "Topologia SITE-A",
       "id": 1,
       "gridPos": {
@@ -1087,7 +1087,7 @@
     },
     {
       "type": "panel",
-      "id": "jlcp-topoflow-panel",
+      "id": "mdomingos-topoflow-panel",
       "name": "TopoFlow",
       "version": "1.0.0"
     }

@@ -1,6 +1,6 @@
 # TopoFlow — painel de topologia para Grafana
 
-`jlcp-topoflow-panel` · plugin de **painel**, frontend puro, sem backend.
+`mdomingos-topoflow-panel` · plugin de **painel**, frontend puro, sem backend.
 
 Mapas de topologia editáveis dentro do dashboard: nós, conexões, âncoras,
 agrupamentos, textos e imagens, cada um podendo se vincular a uma métrica ou a
@@ -75,10 +75,10 @@ Ver [07 — Build e instalação](docs/07-build-e-instalacao.md). Resumo:
 
 ```bash
 npm ci && npm run build
-mkdir -p releases && cd dist && zip -r ../releases/jlcp-topoflow-panel-1.1.0.zip . && cd ..
+mkdir -p releases && cd dist && zip -r ../releases/mdomingos-topoflow-panel-1.1.0.zip . && cd ..
 ```
 
-Descompacte numa pasta `jlcp-topoflow-panel/` dentro do diretório de plugins do
+Descompacte numa pasta `mdomingos-topoflow-panel/` dentro do diretório de plugins do
 Grafana, libere o carregamento sem assinatura para esse id e reinicie o serviço.
 
 ## Licença

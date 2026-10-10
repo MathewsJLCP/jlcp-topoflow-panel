@@ -35,19 +35,21 @@ Não há prazo de revisão: a Grafana não estima nem agenda data de publicaçã
 | # | Requisito | Por quê |
 | --- | --- | --- |
 | 1 | **Repositório público no GitHub** | Plugins Community "must already exist in a public Git repository". O campo *Source code URL* e o link do zip na release precisam abrir sem login. |
-| 2 | **Organização `jlcp` existir no grafana.com**, com você como **Admin** | O ID `jlcp-topoflow-panel` tem prefixo `jlcp`. O validador (`org`) confere se essa org existe, e a assinatura sai em nome dela (`signedByOrg`). Só admin da org vê **My Plugins**. |
+| 2 | **Prefixo do ID = slug da org que envia**, com você como **Admin** dela | O ID `mdomingos-topoflow-panel` tem prefixo `mdomingos`, o slug da org usada no grafana.com. O envio exige que os dois batam. O validador (`org`) confere se a org existe, e a assinatura sai em nome dela (`signedByOrg`). Só admin da org vê **My Plugins**. |
 | 3 | Licença compatível | Apache-2.0, MIT, BSD, GPL-3.0, LGPL-3.0 ou AGPL-3.0. O TopoFlow é Apache-2.0. |
 | 4 | `plugin-validator` sem erros | A Grafana roda o mesmo validador na entrada; o `release.yml` também roda. |
 | 5 | Ambiente de teste provisionado | Opcional, mas reduz muito o tempo de revisão. Já existe: `docker-compose.yaml` + `provisioning/` com TestData e dashboards. |
 
-> **O ID do plugin não muda.** Se a org `jlcp` não puder ser criada (slug
-> tomado), o ID teria que mudar, e isso quebra todo dashboard salvo com
-> `"type": "jlcp-topoflow-panel"`. Resolva a org **antes** de qualquer outra coisa.
+> **Depois de publicado, o ID não muda mais.** Trocar o ID quebra todo dashboard
+> salvo com o `"type"` antigo. Isso já aconteceu uma vez: o plugin nasceu como
+> `jlcp-topoflow-panel`, mas a org `jlcp` no grafana.com já existia e não
+> pôde ser usada. Na v1.4.0, antes da primeira publicação, o ID virou
+> `mdomingos-topoflow-panel`. A migração está no `CHANGELOG.md`. Em plugin novo,
+> confira o slug da org **antes** de escolher o ID.
 
 ### Classificação: Community ou Commercial
 
-O formulário pergunta sobre a natureza do plugin para definir o nível de
-assinatura:
+O nível de assinatura sai das respostas do formulário:
 
 - **Community** (grátis): open source, "not commercial in nature and not
   affiliated with any commercial endeavor".
@@ -55,8 +57,8 @@ assinatura:
   commercial offering, commercial dependencies or offered by a for-profit
   business".
 
-O autor no `plugin.json` cita a Jlcp. Responda o formulário com a verdade. Se o
-plugin for oferecido pela empresa, a Grafana pode classificá-lo como Commercial.
+O formulário atual faz duas perguntas: afiliação com o produto integrado e
+integração com produto comercial. Ver o passo 5.
 
 ## Passo a passo
 
@@ -67,12 +69,16 @@ do Windows, porque o git do WSL trava esperando credencial.
 
 1. Entre em <https://grafana.com/auth/sign-in>. Se não tiver conta, crie uma; o
    plano Free do Grafana Cloud basta.
-2. Garanta uma organização com slug **`jlcp`**. Na criação da conta, o nome da
-   org/stack define o slug. Já tendo conta, crie uma org nova pelo menu de
-   organizações. Confira com
-   `curl -s https://grafana.com/api/orgs/jlcp`: tem que responder com JSON da
-   org, e não `Org not found`.
-3. Você precisa ser **Admin** dessa org.
+2. Descubra o **slug** da sua org: é o que aparece na URL
+   `https://grafana.com/orgs/<slug>/...`, e não o nome de exibição. O do TopoFlow
+   é **`mdomingos`**. **Não confie** em `curl https://grafana.com/api/orgs/<slug>`:
+   sem login ele responde "Org not found" até para org existente.
+3. O ID do plugin precisa começar com esse slug (`<slug>-<nome>-panel`). Se não
+   começar, há três saídas:
+   - entrar como Admin na org do prefixo, por convite de quem a administra;
+   - pedir ao suporte (*Support → Get Support*) a troca do slug;
+   - trocar o ID, que foi o que fizemos.
+4. Você precisa ser **Admin** dessa org.
 
 ### 2. Tornar o repositório público
 
@@ -89,8 +95,8 @@ versionados.
 
 ```bash
 npm run build
-# zip com a pasta jlcp-topoflow-panel/ na raiz — ver docs/07
-npx @grafana/plugin-validator@latest -sourceCodeUri file://. releases/jlcp-topoflow-panel-X.Y.Z.zip
+# zip com a pasta mdomingos-topoflow-panel/ na raiz — ver docs/07
+npx @grafana/plugin-validator@latest -sourceCodeUri file://. releases/mdomingos-topoflow-panel-X.Y.Z.zip
 ```
 
 O validador também roda o **osv-scanner** sobre o `package-lock.json` inteiro,
@@ -137,8 +143,8 @@ git -c safe.directory=* push origin v1.4.0
 O `release.yml` (`grafana/plugin-actions/build-plugin`) compila, roda o
 validador e cria uma **draft release** com:
 
-- `jlcp-topoflow-panel-1.4.0.zip`
-- `jlcp-topoflow-panel-1.4.0.zip.sha1`
+- `mdomingos-topoflow-panel-1.4.0.zip`
+- `mdomingos-topoflow-panel-1.4.0.zip.sha1`
 
 Abra **Actions** → *Release* e confira o passo *Validate plugin*. Depois vá em
 **Releases**, edite o draft (cole a seção da versão do `CHANGELOG.md`) e clique
@@ -150,18 +156,28 @@ em **Publish release**. Enquanto a release for draft, os links de download dão
 
 ### 5. Formulário de submissão
 
-grafana.com → menu da esquerda → *Org Settings* → **My Plugins** → **Submit
-New Plugin**. No caso de uma atualização, o botão é **Submit Update**, ao lado do plugin.
+`https://grafana.com/orgs/<slug-da-org>/plugins` → **Submit New Plugin**. No caso
+de uma atualização, o botão é **Submit Update**, ao lado do plugin.
 
-| Campo | Valor |
+> **O slug da org que envia tem que ser o prefixo do ID** (`mdomingos`). O slug aparece
+> na URL (`/orgs/<slug>/...`) e é diferente do nome de exibição. Enviar pela org
+> `mdomingos` um plugin `jlcp-...` dá "Org not found" (foi o que levou à troca do ID).
+
+A tela em outubro de 2026 (*Create Plugin Submission*) difere da documentação:
+não há "OS & Architecture" e as perguntas de classificação são outras.
+
+| Campo da tela | Valor |
 | --- | --- |
-| OS & Architecture | **Single** (plugin só frontend, sem binário) |
-| URL | `https://github.com/MathewsJLCP/jlcp-topoflow-panel/releases/download/v1.4.0/jlcp-topoflow-panel-1.4.0.zip` |
-| Source code URL | `https://github.com/MathewsJLCP/jlcp-topoflow-panel/tree/v1.4.0` (sempre a **tag**, não a branch) |
-| SHA1 | conteúdo do `.zip.sha1` da release (só o hash de 40 caracteres) |
+| How do you want to list your plugin? | **Public (free)** |
+| Plugin (zip file) → *Paste a URL* | `https://github.com/MathewsJLCP/jlcp-topoflow-panel/releases/download/v1.4.0/mdomingos-topoflow-panel-1.4.0.zip` |
+| MD5 or SHA1 (URL also accepted) | `https://github.com/MathewsJLCP/jlcp-topoflow-panel/releases/download/v1.4.0/mdomingos-topoflow-panel-1.4.0.zip.sha1`. A URL elimina o risco de colar o hash errado. |
+| Source code → *Paste a URL* | `https://github.com/MathewsJLCP/jlcp-topoflow-panel/tree/v1.4.0` (sempre a **tag**, não a branch) |
 | Testing guidance | texto abaixo |
-| Provisioning provided | **marcar** |
-| Demais perguntas | definem Community × Commercial; ver acima |
+| Provisioning provided for test environment | **Yes** |
+| Are you affiliated with the project/product the plugin integrates with? | **No**: nem você nem a JLCP fazem parte da Zabbix LLC |
+| Does the plugin integrate with a commercial product? | **No**: integra com o Zabbix (open source) e com o datasource Zabbix da comunidade |
+
+Com as duas últimas respostas em **No**, o plugin entra como **Community**.
 
 #### Testing guidance (colar no formulário)
 
@@ -221,8 +237,8 @@ create-plugin scaffold (.config). It is not part of the plugin bundle.
 2. Dispare a release com tag `vX.Y.Z` (passo 4).
 3. **A partir da segunda submissão, o zip precisa vir assinado.** Só a primeira
    submissão é isenta. Configure uma vez:
-   - grafana.com → org `jlcp` → **Access Policies** → criar token com realm
-     `jlcp` (all-stacks) e escopo **`plugins:write`**.
+   - grafana.com → org `mdomingos` → **Access Policies** → criar token com realm
+     `mdomingos` (all-stacks) e escopo **`plugins:write`**.
    - GitHub → *Settings* → *Secrets and variables* → *Actions* → novo secret
      `GRAFANA_ACCESS_POLICY_TOKEN`.
    - No `.github/workflows/release.yml`, descomentar
@@ -254,11 +270,12 @@ resolvidos.
 | Data | Evento | Resultado / observação |
 | --- | --- | --- |
 | 2026-10-10 | v1.4.0 fechada em `master` (`4efcea8`) | plugin-validator: 0 erros |
-| 2026-10-10 | Checagem de pré-requisitos | Repo **privado** (GitHub 404 sem login); org **`jlcp` não existe** no grafana.com (`Org not found`); sem segredos no repo nem no histórico; provisioning OK |
+| 2026-10-10 | Checagem de pré-requisitos | Repo **privado** (GitHub 404 sem login); org **`jlcp`** não encontrada pela API pública (depois se viu que a checagem não vale: ela existe, mas não pôde ser usada); sem segredos no repo nem no histórico; provisioning OK |
 | 2026-10-10 | Repositório tornado público | GitHub 200, issues habilitadas |
 | 2026-10-10 | `src/plugin.json`: autor corrigido (`Matheus Domingos - Jlcp`) e com URL do LinkedIn; `links` com Issues e LinkedIn | validador: aviso "999" do LinkedIn (anti-robô), ignorável |
 | 2026-10-10 | Validador passou a reprovar por CVEs novos no lockfile | `npm audit fix` + override do `basic-ftp`; resta só `braces` (sem correção, ver acima). typecheck, 893 testes e build OK |
-| | Org `jlcp` criada no grafana.com | |
+| 2026-10-10 | Tentativa de criar a org `jlcp` | A conta já existia com a org de slug **`mdomingos`**, e o slug não pôde ser escolhido. O formulário de submissão foi aberto em `grafana.com/orgs/mdomingos/plugins`, mas **não foi enviado**, porque o prefixo do ID (`jlcp`) não bate com o slug. A API pública `/api/orgs/<slug>` responde "Org not found" até para org existente, então não serve de prova. |
+| 2026-10-10 | Org `jlcp` existe, mas não pôde ser usada | **ID trocado para `mdomingos-topoflow-panel`** (src/plugin.json, provisioning, examples, docs, CI; `docker-compose.yaml` sobrescreve o ID antigo que `.config/` ainda traz). Versão mantida em 1.4.0, nunca publicada; migração no CHANGELOG |
 | | Tag `v1.4.0` publicada; release publicada | SHA-1: |
 | | Submissão enviada em My Plugins | |
 | | Resposta da revisão | |

@@ -16,7 +16,7 @@ precisar de clique ou hover. Foi feito para telão de NOC.
 | | |
 | --- | --- |
 | Tipo | Panel plugin (frontend, sem backend) |
-| ID | `jlcp-topoflow-panel` |
+| ID | `mdomingos-topoflow-panel` |
 | Versão atual | 1.1.0 |
 | Requer | Grafana 12.3.0 ou superior |
 | Assinatura | não assinado (precisa de liberação no `.ini`) |
@@ -57,7 +57,7 @@ e o plugin apenas lê o resultado.
 
 ## Deploy
 
-Procedimento completo. O arquivo é o `jlcp-topoflow-panel-1.1.0.zip`.
+Procedimento completo. O arquivo é o `mdomingos-topoflow-panel-1.1.0.zip`.
 
 **1. Subir o zip por SFTP**
 
@@ -67,13 +67,13 @@ Envie o arquivo para qualquer pasta temporária do servidor, por exemplo `/tmp`.
 
 ```bash
 cd /var/lib/grafana/plugins
-sudo mv /tmp/jlcp-topoflow-panel-1.1.0.zip /var/lib/grafana/plugins/
-sudo unzip jlcp-topoflow-panel-1.1.0.zip -d /var/lib/grafana/plugins/
-sudo chown -R grafana:grafana /var/lib/grafana/plugins/jlcp-topoflow-panel
+sudo mv /tmp/mdomingos-topoflow-panel-1.1.0.zip /var/lib/grafana/plugins/
+sudo unzip mdomingos-topoflow-panel-1.1.0.zip -d /var/lib/grafana/plugins/
+sudo chown -R grafana:grafana /var/lib/grafana/plugins/mdomingos-topoflow-panel
 ```
 
-O zip já traz a pasta `jlcp-topoflow-panel/` dentro dele, então o resultado tem
-que ser `/var/lib/grafana/plugins/jlcp-topoflow-panel/module.js`. Se os arquivos
+O zip já traz a pasta `mdomingos-topoflow-panel/` dentro dele, então o resultado tem
+que ser `/var/lib/grafana/plugins/mdomingos-topoflow-panel/module.js`. Se os arquivos
 ficarem soltos direto em `plugins/`, o Grafana não acha o plugin.
 
 **3. Ajustar o `.ini`**
@@ -82,7 +82,7 @@ Em `/etc/grafana/grafana.ini`, libere o plugin (ele não é assinado):
 
 ```ini
 [plugins]
-allow_loading_unsigned_plugins = jlcp-topoflow-panel
+allow_loading_unsigned_plugins = mdomingos-topoflow-panel
 ```
 
 Se a linha já existir com outros plugins, acrescente separando por vírgula.

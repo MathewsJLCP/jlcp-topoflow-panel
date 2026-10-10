@@ -2,7 +2,7 @@
   "$schema": "https://raw.githubusercontent.com/grafana/grafana/main/docs/sources/developers/plugins/plugin.schema.json",
   "type": "panel",
   "name": "TopoFlow",
-  "id": "jlcp-topoflow-panel",
+  "id": "mdomingos-topoflow-panel",
   "info": {
     "keywords": ["panel", "topology", "network", "map", "zabbix", "noc", "diagram"],
     "description": "Mapas de topologia editáveis: desenhe a rede no dashboard e vincule cada elemento a uma métrica ou a uma trigger do Zabbix.",

@@ -2,10 +2,29 @@
 
 ## 1.4.0 — 2026-10-09
 
+### ⚠️ Mudança de ID do plugin
+
+O ID passou de `jlcp-topoflow-panel` para **`mdomingos-topoflow-panel`**. O
+catálogo do Grafana exige que o prefixo do ID seja o slug da organização que
+publica o plugin.
+
+Quem instalou uma versão anterior (1.0 a 1.3) manualmente precisa fazer três
+coisas:
+
+1. Remover a pasta `jlcp-topoflow-panel/` do diretório de plugins e instalar a
+   nova.
+2. Trocar `jlcp-topoflow-panel` por `mdomingos-topoflow-panel` em
+   `allow_loading_unsigned_plugins`, se usar o plugin sem assinatura.
+3. Em cada dashboard que usa o TopoFlow, abrir *Settings → JSON Model*, trocar
+   `"type": "jlcp-topoflow-panel"` por `"type": "mdomingos-topoflow-panel"` e
+   salvar. As opções do painel (o mapa inteiro) são preservadas. Antes disso, o
+   painel aparece como "plugin não encontrado".
+
 ### Layout novo, inteiro
 
 O painel foi redesenhado a partir do mockup feito no Claude Design. Mudou a cara
-de **todos** os elementos, do canvas e do editor; nada salvo precisa ser editado.
+de **todos** os elementos, do canvas e do editor. Fora a troca do ID (acima),
+nada salvo precisa ser editado.
 
 - **Paleta e tipografia próprias.** Escuro e claro do mockup, escolhidos pelo
   tema do Grafana, e **IBM Plex Sans/Mono embutidas no plugin** — funcionam em
