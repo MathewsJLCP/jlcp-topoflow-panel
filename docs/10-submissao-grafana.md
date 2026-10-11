@@ -82,7 +82,7 @@ do Windows, porque o git do WSL trava esperando credencial.
 
 ### 2. Tornar o repositório público
 
-GitHub → `MathewsJLCP/jlcp-topoflow-panel` → **Settings** → **General** →
+GitHub → `MathewsJLCP/mdomingos-topoflow-panel` → **Settings** → **General** →
 *Danger Zone* → **Change repository visibility** → **Public**.
 
 Antes de abrir, verifique se há segredos. Em 2026-10-10 foram verificados os
@@ -169,9 +169,9 @@ não há "OS & Architecture" e as perguntas de classificação são outras.
 | Campo da tela | Valor |
 | --- | --- |
 | How do you want to list your plugin? | **Public (free)** |
-| Plugin (zip file) → *Paste a URL* | `https://github.com/MathewsJLCP/jlcp-topoflow-panel/releases/download/v1.4.0/mdomingos-topoflow-panel-1.4.0.zip` |
-| MD5 or SHA1 (URL also accepted) | `https://github.com/MathewsJLCP/jlcp-topoflow-panel/releases/download/v1.4.0/mdomingos-topoflow-panel-1.4.0.zip.sha1`. A URL elimina o risco de colar o hash errado. |
-| Source code → *Paste a URL* | `https://github.com/MathewsJLCP/jlcp-topoflow-panel/tree/v1.4.0` (sempre a **tag**, não a branch) |
+| Plugin (zip file) → *Paste a URL* | `https://github.com/MathewsJLCP/mdomingos-topoflow-panel/releases/download/v1.4.0/mdomingos-topoflow-panel-1.4.0.zip` |
+| MD5 or SHA1 (URL also accepted) | `https://github.com/MathewsJLCP/mdomingos-topoflow-panel/releases/download/v1.4.0/mdomingos-topoflow-panel-1.4.0.zip.sha1`. A URL elimina o risco de colar o hash errado. |
+| Source code → *Paste a URL* | `https://github.com/MathewsJLCP/mdomingos-topoflow-panel/tree/v1.4.0` (sempre a **tag**, não a branch) |
 | Testing guidance | texto abaixo |
 | Provisioning provided for test environment | **Yes** |
 | Are you affiliated with the project/product the plugin integrates with? | **No**: nem você nem a JLCP fazem parte da Zabbix LLC |
@@ -185,7 +185,7 @@ Com as duas últimas respostas em **No**, o plugin entra como **Community**.
 TopoFlow is a frontend-only panel plugin (no backend, no data source of its own).
 
 Quick start with the provisioned environment:
-  git clone https://github.com/MathewsJLCP/jlcp-topoflow-panel && cd jlcp-topoflow-panel
+  git clone https://github.com/MathewsJLCP/mdomingos-topoflow-panel && cd mdomingos-topoflow-panel
   git checkout v1.4.0
   npm ci && npm run build
   docker compose up --build
@@ -248,6 +248,11 @@ create-plugin scaffold (.config). It is not part of the plugin bundle.
 
 ## Armadilhas
 
+- **GitHub Actions desligado.** A tag sobe, mas nenhuma release aparece. Confira
+  em *Settings → Actions → General* se está **Allow all actions and reusable
+  workflows**: o `release.yml` usa actions de terceiros (`grafana/plugin-actions`).
+  Depois de habilitar, reenvie a tag para disparar o workflow:
+  `git push origin :refs/tags/vX.Y.Z` e então `git push origin vX.Y.Z`.
 - **SHA-1 de outro zip.** Rebuild local ≠ zip da release. Copie o hash do
   `.zip.sha1` publicado.
 - **Release ainda em draft.** O link do zip dá 404 para o validador da Grafana.
@@ -276,6 +281,10 @@ resolvidos.
 | 2026-10-10 | Validador passou a reprovar por CVEs novos no lockfile | `npm audit fix` + override do `basic-ftp`; resta só `braces` (sem correção, ver acima). typecheck, 893 testes e build OK |
 | 2026-10-10 | Tentativa de criar a org `jlcp` | A conta já existia com a org de slug **`mdomingos`**, e o slug não pôde ser escolhido. O formulário de submissão foi aberto em `grafana.com/orgs/mdomingos/plugins`, mas **não foi enviado**, porque o prefixo do ID (`jlcp`) não bate com o slug. A API pública `/api/orgs/<slug>` responde "Org not found" até para org existente, então não serve de prova. |
 | 2026-10-10 | Org `jlcp` existe, mas não pôde ser usada | **ID trocado para `mdomingos-topoflow-panel`** (src/plugin.json, provisioning, examples, docs, CI; `docker-compose.yaml` sobrescreve o ID antigo que `.config/` ainda traz). Versão mantida em 1.4.0, nunca publicada; migração no CHANGELOG |
-| | Tag `v1.4.0` publicada; release publicada | SHA-1: |
+| 2026-10-10 | Grafana local recriado com o ID novo | plugin carrega (`/api/plugins/mdomingos-topoflow-panel`), sem erros de plugin; os dois dashboards provisionados renderizam; validador 0 erros novos (só `braces`) |
+| 2026-10-10 | Tag `v1.4.0` (commit `00512ff`) enviada ao GitHub | **Nenhum workflow rodou**: a aba Actions mostra "There are no workflow runs yet", e o CI nunca rodou neste repo. O Actions está desativado no repositório. |
+| 2026-10-10 | Conferência do Actions | *Settings → Actions → General* já estava em **Allow all actions and reusable workflows**; githubstatus sem incidente; a API lista só o `ci.yml` como workflow e 0 execuções. Causa ainda não identificada; o teste é reenviar a tag. |
+| 2026-10-10 | Repositório renomeado no GitHub: `jlcp-topoflow-panel` → **`mdomingos-topoflow-panel`** (feito pelo usuário em *Settings → General*) | URLs do `plugin.json` (Issues) e deste documento atualizadas; o GitHub redireciona as antigas. A pasta local continua `~/TopoFlow/jlcp-topoflow-panel`. Tag `v1.4.0` movida para o commit com as URLs novas (ela nunca gerou release). |
+| | Tag reenviada; release publicada | SHA-1: |
 | | Submissão enviada em My Plugins | |
 | | Resposta da revisão | |
