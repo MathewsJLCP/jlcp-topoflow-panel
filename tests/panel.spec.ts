@@ -70,11 +70,11 @@ test('a secao Zabbix e um interruptor que revela o datasource', async ({
 
   const toggle = page.getByRole('switch', { name: /Consultar o Zabbix/ });
   await expect(toggle).not.toBeChecked();
-  await expect(page.getByText('Datasource do Zabbix')).toBeHidden();
+  await expect(page.getByText('Datasource do Zabbix', { exact: true })).toBeHidden();
 
   await toggle.click({ force: true });
 
-  await expect(page.getByText('Datasource do Zabbix')).toBeVisible();
+  await expect(page.getByText('Datasource do Zabbix', { exact: true })).toBeVisible();
   await expect(page.getByRole('combobox', { name: 'Select a data source' })).toBeVisible();
 });
 
