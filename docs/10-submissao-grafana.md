@@ -285,6 +285,9 @@ resolvidos.
 | 2026-10-10 | Tag `v1.4.0` (commit `00512ff`) enviada ao GitHub | **Nenhum workflow rodou**: a aba Actions mostra "There are no workflow runs yet", e o CI nunca rodou neste repo. O Actions está desativado no repositório. |
 | 2026-10-10 | Conferência do Actions | *Settings → Actions → General* já estava em **Allow all actions and reusable workflows**; githubstatus sem incidente; a API lista só o `ci.yml` como workflow e 0 execuções. Causa ainda não identificada; o teste é reenviar a tag. |
 | 2026-10-10 | Repositório renomeado no GitHub: `jlcp-topoflow-panel` → **`mdomingos-topoflow-panel`** (feito pelo usuário em *Settings → General*) | URLs do `plugin.json` (Issues) e deste documento atualizadas; o GitHub redireciona as antigas. A pasta local continua `~/TopoFlow/jlcp-topoflow-panel`. Tag `v1.4.0` movida para o commit com as URLs novas (ela nunca gerou release). |
-| | Tag reenviada; release publicada | SHA-1: |
+| 2026-10-10 | Push de `e5860c3` no master (repo já renomeado) | CI **de novo não disparou** (0 execuções após 90 s). O bloqueio é de conta ou de Actions, não do repositório. |
+| 2026-10-10 | Plano B: zip gerado localmente a partir de `e5860c3` | `releases/mdomingos-topoflow-panel-1.4.0.zip`, SHA-1 `32a7f7921a5f5c4ff99337ee6e75697e6c3e4ec1`, 30 arquivos com a pasta do ID na raiz. Validador: só o `braces`. |
+| 2026-10-10 | Tag `v1.4.0` recriada em `e5860c3` (o usuário apagou a antiga) | O Actions **ainda não dispara**, nem na tag. A criação da release pela API foi barrada pelo controle de permissões do Claude Code. |
+| 2026-10-10 | Release `v1.4.0` publicada pelo usuário na interface web, com o zip e o `.sha1` gerados localmente | Download conferido: HTTP 200, 1.895.466 bytes, SHA-1 `32a7f7921a5f5c4ff99337ee6e75697e6c3e4ec1` bate; `plugin.json` do zip com `mdomingos-topoflow-panel` 1.4.0 |
 | | Submissão enviada em My Plugins | |
 | | Resposta da revisão | |
