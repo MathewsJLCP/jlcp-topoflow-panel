@@ -54,8 +54,7 @@ import { edgeTypes } from './edges';
 import { LinkRole, TopoFlowEdge, TopoFlowNode } from './flowTypes';
 import { nodeTypes } from './nodes';
 import { toFlowEdges, toFlowNodes } from './useFlowElements';
-
-import '@xyflow/react/dist/style.css';
+import { REACT_FLOW_CSS } from './reactFlowCss.generated';
 
 /**
  * Escrita em `panel.options` so depois que o gesto de arraste esfria.
@@ -1025,7 +1024,9 @@ const getStyles = (theme: GrafanaTheme2) => {
       },
     }),
 
-    wrapper: css({
+    // O CSS do React Flow vem escopado ao wrapper (ver scripts/gen-react-flow-css.js):
+    // o catalogo do Grafana nao aceita importar arquivo CSS direto.
+    wrapper: css(REACT_FLOW_CSS, {
       // O React Flow mede o container; `100%` dentro de um painel redimensionavel
       // rende zero na primeira medicao (risco listado no §10 do PRD).
       position: 'relative',

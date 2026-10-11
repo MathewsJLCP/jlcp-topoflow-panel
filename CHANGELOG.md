@@ -1,5 +1,22 @@
 # Changelog
 
+## 1.4.1 — 2026-10-10
+
+Ajustes pedidos pela validação automática do catálogo do Grafana. **Nada muda
+para quem usa o painel**: mesmo visual, mesmas opções, dashboards salvos
+intactos.
+
+- O CSS do React Flow deixou de ser importado como folha global. Agora é
+  aplicado só dentro do canvas, com a mesma especificidade de antes, pela regra
+  `no-direct-css-imports` do validador. Gerado por
+  `scripts/gen-react-flow-css.js`.
+- Ferramentas de teste e build: Jest 29 → 30, e o `eslint-webpack-plugin` saiu do
+  webpack, que não fazia nada no build de produção. Os dois traziam o pacote
+  `braces`, que tem um CVE sem correção (CVE-2026-93687). Segue a migração que o
+  `create-plugin` vai lançar (grafana/plugin-tools#2945).
+- `src/model/types.ts` sem `as const satisfies`, sintaxe que o Semgrep do
+  validador não sabia ler.
+
 ## 1.4.0 — 2026-10-09
 
 ### ⚠️ Mudança de ID do plugin

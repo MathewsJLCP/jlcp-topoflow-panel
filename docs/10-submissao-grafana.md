@@ -111,8 +111,28 @@ Para corrigir, nesta ordem:
    `package.json`.
 2. O que sobrar e tiver versão corrigida, mas preso por faixa de um pacote
    intermediário: `"overrides"` no `package.json`.
-3. O que não tiver versão corrigida: documentar e explicar ao revisor (ver
-   *Testing guidance*).
+3. O que não tiver versão corrigida **bloqueia mesmo assim**: a Grafana não
+   aceitou explicação no *Testing guidance* (v1.4.0). É preciso tirar o pacote
+   do lockfile, trocando ou removendo quem o traz.
+
+**O validador local não roda o Semgrep** (as regras `code-rules` e o
+`scan-incomplete`), a menos que o `semgrep` esteja instalado. O da Grafana roda.
+Para reproduzir localmente com Docker e as mesmas regras:
+
+```bash
+curl -s https://raw.githubusercontent.com/grafana/plugin-validator/main/pkg/analysis/passes/coderules/semgrep-rules.yaml -o /tmp/semgrep-rules.yaml
+docker run --rm -v "$PWD":/src -v /tmp/semgrep-rules.yaml:/rules.yaml -w /src \
+  semgrep/semgrep semgrep --metrics=off --config /rules.yaml src
+```
+
+Rode a partir da raiz do repositório e passe `src` como alvo: as regras filtram
+por `src/**`. Duas pegadinhas:
+
+- A regra `no-direct-css-imports` é uma **regex**. Ela pega até um comentário
+  que contenha o texto de um import de `.css`.
+- O Semgrep da Grafana é **mais antigo** que o da imagem atual. Sintaxe nova de
+  TypeScript (`as const satisfies`) aborta a varredura do arquivo inteiro, e o
+  erro (`scan-incomplete`) só aparece lá.
 
 Avisos que podem ser ignorados:
 
@@ -121,13 +141,15 @@ Avisos que podem ser ignorados:
 - link do LinkedIn "possibly broken (999)": o LinkedIn bloqueia robôs, e o link
   funciona no navegador.
 
-#### Estado do validador na v1.4.0 (2026-10-10)
+#### Achados do validador e tratamento (v1.4.0 → v1.4.1)
 
 | Achado | Origem | Tratamento |
 | --- | --- | --- |
 | 6 pacotes com CVE alto (`fast-uri`, `js-yaml`, `nanoid`, `source-map-js`...) | lockfile defasado | `npm audit fix` |
 | `basic-ftp` ≤ 6.2.0 (CVE-2026-102990) | `@grafana/sign-plugin` → `proxy-agent` → `get-uri`, que fixa `^5` | `"overrides": { "basic-ftp": "^6.2.3" }`. O FTP nunca é usado pelo `sign-plugin`. |
-| **`braces` ≤ 3.0.3 (CVE-2026-93687)** | `micromatch` ← `eslint-webpack-plugin` (webpack de `.config/`) e `jest` 29 | **Sem correção**: não existe versão corrigida. O próprio modelo do `create-plugin` traz essas dependências. É só de dev e não entra no zip. Explicado ao revisor. Quando sair o `braces` 3.0.4+, rodar `npm audit fix` e remover esta linha. |
+| **`braces` ≤ 3.0.3 (CVE-2026-93687)** | `micromatch` ← `eslint-webpack-plugin` (webpack de `.config/`) e `jest` 29 | Sem versão corrigida, e **a Grafana bloqueou** mesmo sendo só de dev. Na **1.4.1** o `braces` saiu do lockfile: Jest 30, que usa `picomatch`, e remoção do `eslint-webpack-plugin` do `.config/webpack`. É a migração oficial que o `create-plugin` vai lançar (grafana/plugin-tools#2945). Quando ela for lançada, o `create-plugin update` deve deixar o `.config` igual ao nosso. |
+| CSS global do React Flow (`import '@xyflow/react/dist/style.css'`) | regra `no-direct-css-imports` (Semgrep) | Na 1.4.1 o CSS virou string escopada no wrapper do canvas, com `:where(&)` para manter a especificidade, gerada por `scripts/gen-react-flow-css.js`. **Rodar de novo ao atualizar o `@xyflow/react`.** |
+| `as const satisfies` em `src/model/types.ts` | `scan-incomplete` (Semgrep antigo da Grafana) | Na 1.4.1 virou `as const` mais um tipo de checagem (`AssertCollection`). |
 
 ### 4. Tag e release pelo GitHub Actions
 
@@ -169,9 +191,9 @@ não há "OS & Architecture" e as perguntas de classificação são outras.
 | Campo da tela | Valor |
 | --- | --- |
 | How do you want to list your plugin? | **Public (free)** |
-| Plugin (zip file) → *Paste a URL* | `https://github.com/MathewsJLCP/mdomingos-topoflow-panel/releases/download/v1.4.0/mdomingos-topoflow-panel-1.4.0.zip` |
-| MD5 or SHA1 (URL also accepted) | `https://github.com/MathewsJLCP/mdomingos-topoflow-panel/releases/download/v1.4.0/mdomingos-topoflow-panel-1.4.0.zip.sha1`. A URL elimina o risco de colar o hash errado. |
-| Source code → *Paste a URL* | `https://github.com/MathewsJLCP/mdomingos-topoflow-panel/tree/v1.4.0` (sempre a **tag**, não a branch) |
+| Plugin (zip file) → *Paste a URL* | `https://github.com/MathewsJLCP/mdomingos-topoflow-panel/releases/download/v1.4.1/mdomingos-topoflow-panel-1.4.1.zip` |
+| MD5 or SHA1 (URL also accepted) | `https://github.com/MathewsJLCP/mdomingos-topoflow-panel/releases/download/v1.4.1/mdomingos-topoflow-panel-1.4.1.zip.sha1`. A URL elimina o risco de colar o hash errado. |
+| Source code → *Paste a URL* | `https://github.com/MathewsJLCP/mdomingos-topoflow-panel/tree/v1.4.1` (sempre a **tag**, não a branch) |
 | Testing guidance | texto abaixo |
 | Provisioning provided for test environment | **Yes** |
 | Are you affiliated with the project/product the plugin integrates with? | **No**: nem você nem a JLCP fazem parte da Zabbix LLC |
@@ -186,7 +208,7 @@ TopoFlow is a frontend-only panel plugin (no backend, no data source of its own)
 
 Quick start with the provisioned environment:
   git clone https://github.com/MathewsJLCP/mdomingos-topoflow-panel && cd mdomingos-topoflow-panel
-  git checkout v1.4.0
+  git checkout v1.4.1
   npm ci && npm run build
   docker compose up --build
   open http://localhost:3000  (anonymous admin enabled)
@@ -209,11 +231,6 @@ Zabbix trigger binding is optional and needs the Zabbix data source
 (alexanderzobnin-zabbix-app); everything else works with TestData only.
 More example dashboards: examples/ in the repository.
 Requires Grafana >= 12.3.0.
-
-Note on the plugin validator: osv-scanner reports braces <= 3.0.3
-(CVE-2026-93687). It has no patched release yet; it is a dev-only dependency
-pulled by micromatch from eslint-webpack-plugin and jest 29, both part of the
-create-plugin scaffold (.config). It is not part of the plugin bundle.
 ```
 
 > Antes de colar, confira se os nomes dos dashboards provisionados ainda batem
@@ -289,5 +306,7 @@ resolvidos.
 | 2026-10-10 | Plano B: zip gerado localmente a partir de `e5860c3` | `releases/mdomingos-topoflow-panel-1.4.0.zip`, SHA-1 `32a7f7921a5f5c4ff99337ee6e75697e6c3e4ec1`, 30 arquivos com a pasta do ID na raiz. Validador: só o `braces`. |
 | 2026-10-10 | Tag `v1.4.0` recriada em `e5860c3` (o usuário apagou a antiga) | O Actions **ainda não dispara**, nem na tag. A criação da release pela API foi barrada pelo controle de permissões do Claude Code. |
 | 2026-10-10 | Release `v1.4.0` publicada pelo usuário na interface web, com o zip e o `.sha1` gerados localmente | Download conferido: HTTP 200, 1.895.466 bytes, SHA-1 `32a7f7921a5f5c4ff99337ee6e75697e6c3e4ec1` bate; `plugin.json` do zip com `mdomingos-topoflow-panel` 1.4.0 |
-| | Submissão enviada em My Plugins | |
-| | Resposta da revisão | |
+| 2026-10-10 | **Submissão v1.4.0 enviada** em `grafana.com/orgs/mdomingos/plugins` | Status **Failed** na validação automática, minutos depois. A revisão fica bloqueada até corrigir. |
+| 2026-10-10 | Relatório da validação | **Erros (bloqueiam):** (1) e (2) `osv-scanner-high-severity` por causa do `braces`, que a explicação no texto **não** evitou; (3) `scan-incomplete`, porque o Semgrep não leu `as const satisfies` em `src/model/types.ts:74`; (4) `code-rules-no-direct-css-imports` em `src/canvas/TopologyCanvas.tsx:58` (`import '@xyflow/react/dist/style.css'`). **Avisos:** link do LinkedIn (999) ×2, unsigned, `react-19-dep-jsxRuntimeImport` em `@xyflow/react` (o próprio relatório diz "may be a false positive"). |
+| 2026-10-10 | Correções → **v1.4.1** | CSS do React Flow escopado (`:where(&)`); `types.ts` sem `satisfies`; Jest 30 e `eslint-webpack-plugin` removido (o `braces` sumiu do lockfile). Local: validador **0 erros**, Semgrep com as regras da Grafana **0 achados**, typecheck, 893 testes e build OK. Visual idêntico ao anterior, conferido por screenshot no modo de visualização e no de edição. |
+| | Tag `v1.4.1`, release e *Submit Update* | SHA-1: |

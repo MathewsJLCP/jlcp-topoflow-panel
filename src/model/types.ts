@@ -71,7 +71,12 @@ export const ELEMENT_COLLECTION = {
   postit: 'postits',
   text: 'texts',
   image: 'images',
-} as const satisfies Record<ElementKind, keyof Topology>;
+} as const;
+
+// Equivale a `as const satisfies Record<...>`, que o Semgrep do plugin-validator
+// ainda nao sabe ler (a varredura do arquivo inteiro e abortada).
+type AssertCollection<T extends Record<ElementKind, keyof Topology>> = T;
+export type ElementCollection = AssertCollection<typeof ELEMENT_COLLECTION>;
 
 export type CanvasOptions = z.infer<typeof canvasSchema>;
 export type TopoFlowOptions = z.infer<typeof topoFlowOptionsSchema>;
