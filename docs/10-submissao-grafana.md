@@ -270,6 +270,12 @@ Requires Grafana >= 12.3.0.
   workflows**: o `release.yml` usa actions de terceiros (`grafana/plugin-actions`).
   Depois de habilitar, reenvie a tag para disparar o workflow:
   `git push origin :refs/tags/vX.Y.Z` e então `git push origin vX.Y.Z`.
+  Se mesmo assim não houver execução e `GET /repos/{repo}/commits/master/check-suites`
+  não listar `github-actions`, o bloqueio é da conta. Veja o aviso na aba
+  Actions logado e *Settings → Billing*, ou abra um chamado em support.github.com.
+  Enquanto isso, a release pode ser montada à mão: zip local, assinado com
+  `GRAFANA_ACCESS_POLICY_TOKEN=... npx @grafana/sign-plugin` antes de zipar, e
+  publicado pela interface web.
 - **SHA-1 de outro zip.** Rebuild local ≠ zip da release. Copie o hash do
   `.zip.sha1` publicado.
 - **Release ainda em draft.** O link do zip dá 404 para o validador da Grafana.
@@ -311,4 +317,5 @@ resolvidos.
 | 2026-10-10 | Correções → **v1.4.1** | CSS do React Flow escopado (`:where(&)`); `types.ts` sem `satisfies`; Jest 30 e `eslint-webpack-plugin` removido (o `braces` sumiu do lockfile). Local: validador **0 erros**, Semgrep com as regras da Grafana **0 achados**, typecheck, 893 testes e build OK. Visual idêntico ao anterior, conferido por screenshot no modo de visualização e no de edição. |
 | 2026-10-10 | Tag `v1.4.1` (`7251066`) enviada; release publicada pelo usuário na web; submissão atualizada | Download conferido: HTTP 200, 1.883.704 bytes, SHA-1 `3ae36cae4875ce22ef349fc9fdf1f63bb9ed6567` bate. |
 | 2026-10-10 | Nova validação automática | **Passou**: só avisos (LinkedIn 999 ×2, unsigned, `react-19-dep-jsxRuntimeImport` em `@xyflow/react`) e nenhum erro. Status **"Aguardando análise"**: está na fila da revisão manual, que leva até 2 semanas. |
+| 2026-10-10 | Diagnóstico do Actions pela API autenticada | Repositório OK: `enabled: true`, `allowed_actions: all`, os 5 YAML válidos. Mas o GitHub só registrou o `ci.yml` (às 23:37 UTC) e o `release.yml` dá 404. São 0 execuções, e o commit do master **não tem check suite do `github-actions`**: o Actions nem processa os pushes. Causa provável no nível da **conta** (restrição ou cobrança), não do repositório. A resolver antes da próxima versão. |
 | | Resposta da revisão manual | |
