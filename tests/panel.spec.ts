@@ -65,7 +65,7 @@ test('a secao Zabbix e um interruptor que revela o datasource', async ({
   const dashboard = await readProvisionedDashboard({ fileName: 'dashboard.json' });
   const panelEditPage = await gotoPanelEditPage({ dashboard, id: '1', ...nav });
 
-  const zabbix = panelEditPage.getCustomOptions('Zabbix');
+  const zabbix = panelEditPage.getCustomOptions('Zabbix API');
   await zabbix.expand();
 
   const toggle = page.getByRole('switch', { name: /Consultar o Zabbix/ });
@@ -84,8 +84,9 @@ test('renderiza a topologia com os quatro nos', async ({ gotoPanelEditPage, read
 
   await expect(page.locator('.react-flow__node')).toHaveCount(4);
   // Escopado ao no: o nome tambem aparece na lista do Layer, e um `getByText`
-  // solto passou a casar com os dois.
-  await expect(page.getByTestId('rf__node-app').getByText('srv-app-01')).toBeVisible();
+  // solto passou a casar com os dois. Exato porque, desde a v1.4, o rotulo da
+  // metrica dentro do no tambem contem o nome do host.
+  await expect(page.getByTestId('rf__node-app').getByText('srv-app-01', { exact: true })).toBeVisible();
 });
 
 /**
